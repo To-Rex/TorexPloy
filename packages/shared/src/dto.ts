@@ -24,6 +24,7 @@ import type {
   ServiceStatus,
   ServiceType,
   SourceType,
+  StoragePermission,
   TeamRole,
   TemplateCategory,
   Theme,
@@ -552,7 +553,10 @@ export interface ContainerDto {
 
 export interface DomainDto {
   id: string;
-  applicationId: string;
+  /** The application served, or null for a domain on a service (file store). */
+  applicationId: string | null;
+  /** The service served (file store S3 endpoint), or null for an application domain. */
+  serviceId: string | null;
   host: string;
   /** Path prefix ('/' for the whole host). */
   path: string;
@@ -657,6 +661,77 @@ export interface ServiceDto {
   linkedApplications: { id: string; name: string }[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// File store (S3-compatible object storage)
+// ---------------------------------------------------------------------------
+
+export interface StorageBucketDto {
+  name: string;
+  /** Anyone may read objects (the bucket is served without credentials). */
+  public: boolean;
+  /** Counts are from the engine's statistics and may lag a few seconds. */
+  objects: number | null;
+  bytes: number | null;
+  createdAt: string | null;
+}
+
+export interface StorageObjectDto {
+  /** Full key, e.g. `avatars/2026/01.png`. */
+  key: string;
+  /** Last path segment, for display. */
+  name: string;
+  size: number;
+  lastModified: string;
+  etag: string | null;
+  contentType: string | null;
+}
+
+/** One page of a bucket listing: folders (common prefixes) first, then objects. */
+export interface StorageListingDto {
+  bucket: string;
+  prefix: string;
+  folders: string[];
+  objects: StorageObjectDto[];
+  nextCursor: string | null;
+}
+
+export interface StorageKeyDto {
+  id: string;
+  name: string;
+  accessKeyId: string;
+  /** Buckets the key may use; null means every bucket, now and later. */
+  buckets: string[] | null;
+  permission: StoragePermission;
+  /** Keys the panel made for its own use (backup destinations) cannot be edited, only revoked with their destination. */
+  managedBy: 'user' | 'backups';
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+/** `POST /api/services/:id/storage/keys` answers with the secret, once. */
+export interface StorageKeyCreatedDto extends StorageKeyDto {
+  secretAccessKey: string;
+}
+
+/** How to reach the file store from outside and inside, for the connection guide. */
+export interface StorageOverviewDto {
+  /** `https://files.example.uz` when a domain is set, else the public port, else null. */
+  endpoint: string | null;
+  /** Reachable only from applications in the same project. */
+  internalEndpoint: string;
+  region: string;
+  /** Always path-style (`endpoint/bucket/key`). */
+  forcePathStyle: true;
+  /** Root credentials are shown on request through `GET /api/services/:id/credentials`, as for databases. */
+  rootAccessKeyId: string;
+  buckets: number;
+  keys: number;
+  /** The S3 backup destination that writes into this store, if one was set up. */
+  backupDestinationId: string | null;
+  /** Totals from the engine, when it reports them. */
+  usage: { objects: number; bytes: number } | null;
 }
 
 export interface ServiceCredentialsDto {

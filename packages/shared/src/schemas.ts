@@ -10,6 +10,9 @@ import {
   APP_KINDS,
   BRANCH_RE,
   APT_PACKAGE_RE,
+  BUCKET_RE,
+  OBJECT_KEY_RE,
+  STORAGE_PERMISSIONS,
   BUILD_TYPES,
   DEPLOY_STRATEGIES,
   DEPLOYMENT_STATUS_FILTERS,
@@ -450,6 +453,52 @@ export const createServiceSchema = z.object({
   serverId: z.string().min(1).max(64),
 });
 export type CreateServiceInput = z.infer<typeof createServiceSchema>;
+
+// ---------------------------------------------------------------------------
+// File store
+// ---------------------------------------------------------------------------
+
+export const bucketNameSchema = z.string().trim().min(3).max(63).regex(BUCKET_RE);
+export const objectKeySchema = z.string().regex(OBJECT_KEY_RE);
+/** A folder prefix: empty for the root, otherwise segments ending with `/`. */
+export const objectPrefixSchema = z.string().max(1024).regex(/^(?:[^\x00-\x1f\x7f/]+\/)*$/);
+
+export const createBucketSchema = z.object({
+  name: bucketNameSchema,
+  public: z.boolean().default(false),
+});
+export type CreateBucketInput = z.input<typeof createBucketSchema>;
+
+export const updateBucketSchema = z.object({ public: z.boolean() });
+
+export const listObjectsQuerySchema = z.object({
+  prefix: objectPrefixSchema.default(''),
+  cursor: z.string().max(2048).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).default(200),
+});
+
+export const deleteObjectsSchema = z.object({
+  /** Object keys and/or folder prefixes (ending with `/`, every object below is removed). */
+  keys: z.array(z.string().max(1024)).min(1).max(1000),
+});
+
+export const createFolderSchema = z.object({ prefix: objectPrefixSchema.min(2) });
+
+/** A temporary link to download (`get`) or upload (`put`) one object without credentials. */
+export const presignSchema = z.object({
+  key: objectKeySchema,
+  method: z.enum(['get', 'put']).default('get'),
+  /** Seconds the link stays valid. */
+  expiresIn: z.int().min(60).max(7 * 24 * 3600).default(3600),
+});
+
+export const createStorageKeySchema = z.object({
+  name: nameSchema,
+  /** null: every bucket, including ones created later. */
+  buckets: z.array(bucketNameSchema).min(1).max(100).nullable().default(null),
+  permission: z.enum(STORAGE_PERMISSIONS).default('readwrite'),
+});
+export type CreateStorageKeyInput = z.input<typeof createStorageKeySchema>;
 
 export const updateServiceSchema = z
   .object({

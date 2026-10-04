@@ -571,6 +571,108 @@ CREATE INDEX idx_applications_repo ON applications(repository, branch) WHERE sou
 CREATE UNIQUE INDEX idx_applications_preview ON applications(parent_application_id, preview_pr_number) WHERE parent_application_id IS NOT NULL;
 `;
 
+/**
+ * The file store: `files` joins the service types (a CHECK, so the table is
+ * rebuilt), domains may belong to a service instead of an application (another
+ * rebuild), and access keys, bucket metadata and store-backed backup
+ * destinations get their rows.
+ */
+const FILE_STORE_V9 = /* sql */ `
+CREATE TABLE services_v9 (
+  id                    TEXT PRIMARY KEY,
+  project_id            TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  team_id               TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  server_id             TEXT NOT NULL REFERENCES servers(id) ON DELETE RESTRICT,
+  name                  TEXT NOT NULL,
+  slug                  TEXT NOT NULL,
+  type                  TEXT NOT NULL CHECK (type IN ('postgres','mysql','mariadb','mongo','redis','rabbitmq','minio','clickhouse','files')),
+  version               TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'provisioning' CHECK (status IN ('provisioning','running','stopped','failed','restarting')),
+  status_message        TEXT,
+  status_reason         TEXT,
+  credentials           TEXT NOT NULL,
+  internal_port         INTEGER NOT NULL,
+  public_port           INTEGER,
+  cpu_limit             REAL,
+  memory_limit_mb       INTEGER,
+  backup_schedule       TEXT,
+  backup_retention      INTEGER NOT NULL DEFAULT 7,
+  container_name        TEXT NOT NULL UNIQUE,
+  volume_name           TEXT NOT NULL UNIQUE,
+  created_at            TEXT NOT NULL,
+  updated_at            TEXT NOT NULL,
+  backup_destination_id TEXT REFERENCES s3_destinations(id) ON DELETE SET NULL,
+  UNIQUE (project_id, slug)
+);
+INSERT INTO services_v9 (id, project_id, team_id, server_id, name, slug, type, version, status, status_message, status_reason, credentials, internal_port, public_port, cpu_limit, memory_limit_mb, backup_schedule, backup_retention, container_name, volume_name, created_at, updated_at, backup_destination_id) SELECT id, project_id, team_id, server_id, name, slug, type, version, status, status_message, status_reason, credentials, internal_port, public_port, cpu_limit, memory_limit_mb, backup_schedule, backup_retention, container_name, volume_name, created_at, updated_at, backup_destination_id FROM services;
+DROP TABLE services;
+ALTER TABLE services_v9 RENAME TO services;
+CREATE INDEX idx_services_team ON services(team_id);
+CREATE INDEX idx_services_server ON services(server_id);
+
+-- A domain serves an application or a service (the file store's S3 endpoint), never both.
+CREATE TABLE domains_v9 (
+  id             TEXT PRIMARY KEY,
+  application_id TEXT REFERENCES applications(id) ON DELETE CASCADE,
+  service_id     TEXT REFERENCES services(id) ON DELETE CASCADE,
+  team_id        TEXT NOT NULL,
+  host           TEXT NOT NULL COLLATE NOCASE,
+  path           TEXT NOT NULL DEFAULT '/',
+  strip_path     INTEGER NOT NULL DEFAULT 0 CHECK (strip_path IN (0,1)),
+  https          INTEGER NOT NULL DEFAULT 1 CHECK (https IN (0,1)),
+  port           INTEGER,
+  service_name   TEXT,
+  redirect_to    TEXT,
+  is_generated   INTEGER NOT NULL DEFAULT 0 CHECK (is_generated IN (0,1)),
+  dns_status     TEXT NOT NULL DEFAULT 'pending' CHECK (dns_status IN ('pending','ok','mismatch','error')),
+  dns_records    TEXT NOT NULL DEFAULT '[]',
+  dns_checked_at TEXT,
+  tls_status     TEXT NOT NULL DEFAULT 'pending' CHECK (tls_status IN ('pending','active','error','disabled')),
+  tls_issuer     TEXT,
+  tls_expires_at TEXT,
+  tls_message    TEXT,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL,
+  CHECK ((application_id IS NULL) <> (service_id IS NULL))
+);
+INSERT INTO domains_v9 (id, application_id, team_id, host, path, strip_path, https, port, service_name, redirect_to, is_generated, dns_status, dns_records, dns_checked_at, tls_status, tls_issuer, tls_expires_at, tls_message, created_at, updated_at) SELECT id, application_id, team_id, host, path, strip_path, https, port, service_name, redirect_to, is_generated, dns_status, dns_records, dns_checked_at, tls_status, tls_issuer, tls_expires_at, tls_message, created_at, updated_at FROM domains;
+DROP TABLE domains;
+ALTER TABLE domains_v9 RENAME TO domains;
+CREATE INDEX idx_domains_app ON domains(application_id);
+CREATE INDEX idx_domains_service ON domains(service_id);
+CREATE UNIQUE INDEX idx_domains_route ON domains(host COLLATE NOCASE, path);
+
+-- Access keys of a file store. The secret is sealed; SeaweedFS holds the live identity.
+CREATE TABLE storage_keys (
+  id            TEXT PRIMARY KEY,
+  service_id    TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  access_key_id TEXT NOT NULL UNIQUE,
+  secret_sealed TEXT NOT NULL,
+  -- JSON array of bucket names; NULL means every bucket, including ones created later.
+  buckets       TEXT,
+  permission    TEXT NOT NULL CHECK (permission IN ('read','readwrite')),
+  -- 'backups': made by the panel for a backup destination; revoked with it.
+  managed_by    TEXT NOT NULL DEFAULT 'user' CHECK (managed_by IN ('user','backups')),
+  created_at    TEXT NOT NULL,
+  last_used_at  TEXT
+);
+CREATE INDEX idx_storage_keys_service ON storage_keys(service_id);
+
+-- What the panel knows about a bucket beyond the engine's list: whether it is public, and when it was made.
+CREATE TABLE storage_buckets (
+  service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  public     INTEGER NOT NULL DEFAULT 0 CHECK (public IN (0,1)),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (service_id, name)
+);
+
+-- A destination inside one of the team's own file stores goes away with the store.
+ALTER TABLE s3_destinations ADD COLUMN service_id TEXT REFERENCES services(id) ON DELETE CASCADE;
+CREATE INDEX idx_s3_destinations_service ON s3_destinations(service_id);
+`;
+
 /** Append-only. Never edit a released migration; add a new one. */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'initial', sql: INITIAL },
@@ -663,6 +765,7 @@ CREATE UNIQUE INDEX idx_applications_preview ON applications(parent_application_
 `,
   },
   { version: 8, name: 'build-types', sql: BUILD_TYPES_V8, rebuildsTables: true },
+  { version: 9, name: 'file-store', sql: FILE_STORE_V9, rebuildsTables: true },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

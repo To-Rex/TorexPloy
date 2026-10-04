@@ -76,7 +76,7 @@ export function NewServiceDialog({ projectId, open, onClose }: { projectId: stri
         <div className="field">
           <span className="field__label">{m.services.type}</span>
           <div className="choices" role="radiogroup" aria-label={m.services.type}>
-            {(catalog.data ?? []).map((candidate) => (
+            {(catalog.data ?? []).filter((candidate) => candidate.type !== 'files').map((candidate) => (
               <button key={candidate.type} type="button" role="radio" className="choice" aria-checked={candidate.type === type} onClick={() => setType(candidate.type)}>
                 <span className="choice__title">
                   <Database aria-hidden="true" />

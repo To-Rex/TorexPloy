@@ -26,6 +26,7 @@ import { EventBus } from './realtime/bus.ts';
 import { ConnectionManager } from './servers/connections.ts';
 import { ServerManager } from './servers/manager.ts';
 import { ServiceManager } from './services/manager.ts';
+import { StorageManager } from './storage/manager.ts';
 import { createStores } from './store/index.ts';
 import { TerminalGateway } from './terminal/gateway.ts';
 import { UpdateChecker } from './updates/checker.ts';
@@ -53,6 +54,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   ctx.compose = new ComposeEngine(ctx);
   ctx.reconciler = new Reconciler(ctx);
   ctx.services = new ServiceManager(ctx);
+  ctx.storage = new StorageManager(ctx);
   ctx.github = new GithubApp(ctx);
   ctx.metrics = new MetricsCollector(ctx);
   ctx.domains = new DomainChecker(ctx);

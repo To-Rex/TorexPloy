@@ -60,7 +60,16 @@ export class ProxyManager {
     const networks = new Set<string>();
 
     for (const domain of this.stores.domains.listForServer(serverId)) {
-      const app = this.stores.applications.get(domain.applicationId);
+      if (domain.serviceId !== null) {
+        // A service domain (file store): its S3 gateway, by container name, while the service runs.
+        const service = this.stores.services.get(domain.serviceId);
+        if (service === undefined) continue;
+        networks.add(projectNetwork(service.projectId));
+        const upstreams = service.status === 'running' ? [`${service.containerName}:${service.internalPort}`] : [];
+        routes.push({ host: domain.host, path: domain.path, stripPath: domain.stripPath, https: domain.https, label: service.name, upstreams, stream: true });
+        continue;
+      }
+      const app = domain.applicationId === null ? undefined : this.stores.applications.get(domain.applicationId);
       if (app === undefined) continue;
       networks.add(projectNetwork(app.projectId));
       const base = { host: domain.host, path: domain.path, stripPath: domain.stripPath, https: domain.https, label: app.name };

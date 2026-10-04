@@ -82,14 +82,14 @@ export class DomainChecker {
     const { stores } = this.ctx;
     const domain = stores.domains.get(domainId);
     if (domain === undefined) return undefined;
-    const app = stores.applications.get(domain.applicationId);
-    const server = app === undefined ? undefined : stores.servers.get(app.serverId);
+    const owner = domain.applicationId !== null ? stores.applications.get(domain.applicationId) : domain.serviceId === null ? undefined : stores.services.get(domain.serviceId);
+    const server = owner === undefined ? undefined : stores.servers.get(owner.serverId);
     try {
       // `*.localhost` never leaves the machine: browsers resolve it to loopback, so there is no DNS to check.
       if (domain.host.endsWith('.localhost')) {
         stores.domains.setDns(domain.id, 'ok', ['127.0.0.1']);
         if (!domain.https) stores.domains.setTls(domain.id, 'disabled', {});
-        emit(this.ctx, domain.teamId, { type: 'domain.updated', id: domain.id, applicationId: domain.applicationId });
+        emit(this.ctx, domain.teamId, { type: 'domain.updated', id: domain.id, applicationId: domain.applicationId, serviceId: domain.serviceId });
         return stores.domains.get(domain.id);
       }
       const dns = await checkDns(domain.host, server?.publicIp ?? null);
@@ -103,7 +103,7 @@ export class DomainChecker {
     } catch (error) {
       this.ctx.logger.debug('Domain check failed', { domainId, error: errorMessage(error) });
     }
-    emit(this.ctx, domain.teamId, { type: 'domain.updated', id: domain.id, applicationId: domain.applicationId });
+    emit(this.ctx, domain.teamId, { type: 'domain.updated', id: domain.id, applicationId: domain.applicationId, serviceId: domain.serviceId });
     return stores.domains.get(domain.id);
   }
 

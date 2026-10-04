@@ -22,7 +22,7 @@ import { idPart, LABEL_MANAGED, LABEL_PROJECT, LABEL_ROLE, LABEL_SERVICE, LABEL_
 import { AppError, errorMessage, reasonOf } from '../lib/errors.ts';
 import { newId } from '../lib/ids.ts';
 import { S3Client } from '../lib/s3.ts';
-import { tarSingleFile } from '../lib/tar.ts';
+import { createTar, tarSingleFile, type TarEntry } from '../lib/tar.ts';
 import type { BackupRecord, ProjectRecord, ServiceRecord } from '../store/index.ts';
 import { APP_CAPABILITIES } from '../deploy/deployer.ts';
 import { catalogEntry } from './catalog.ts';
@@ -40,6 +40,8 @@ export class ServiceManager {
   private setStatus(service: ServiceRecord, status: ServiceRecord['status'], message: string | null = null, reason: string | null = null): void {
     this.ctx.stores.services.setStatus(service.id, status, message, reason);
     emit(this.ctx, service.teamId, { type: 'service.updated', id: service.id, projectId: service.projectId, status });
+    // A service with domains (a file store) is routed only while it runs: keep the proxy in step.
+    if (this.ctx.stores.domains.listForService(service.id).length > 0) void this.ctx.proxy.requestSync(service.serverId).catch(() => undefined);
   }
 
   create(project: ProjectRecord, input: CreateServiceInput): ServiceRecord {
@@ -92,9 +94,10 @@ export class ServiceManager {
       await docker.removeContainer(service.containerName, { force: true });
 
       const portKey = `${service.internalPort}/tcp`;
-      await docker.createContainer(service.containerName, {
+      const containerId = await docker.createContainer(service.containerName, {
         Image: template.image,
         Env: Object.entries(template.env).map(([key, value]) => `${key}=${value}`),
+        ...(template.entrypoint === undefined ? {} : { Entrypoint: template.entrypoint }),
         ...(template.cmd === undefined ? {} : { Cmd: template.cmd }),
         Labels: {
           [LABEL_MANAGED]: 'true',
@@ -122,6 +125,10 @@ export class ServiceManager {
         },
         NetworkingConfig: { EndpointsConfig: { [network]: { Aliases: [service.slug] } } },
       });
+      // Configuration the engine reads from disk (the file store's identities) goes in before the first start.
+      const seeds = new Map<string, TarEntry[]>();
+      for (const file of template.files ?? []) seeds.set(file.dir, [...(seeds.get(file.dir) ?? []), { name: file.name, content: file.content, ...(file.mode === undefined ? {} : { mode: file.mode }) }]);
+      for (const [dir, entries] of seeds) await docker.putArchive(containerId, dir, createTar(entries));
       await docker.startContainer(service.containerName);
       await this.waitHealthy(service);
       service = stores.services.get(serviceId);
@@ -271,7 +278,8 @@ export class ServiceManager {
     if (destination === undefined) return;
     const key = [destination.pathPrefix, `${service.slug}-${idPart(service.id, 6)}`, fileName].filter((part) => part.length > 0).join('/');
     try {
-      await new S3Client(destination).put(key, createReadStream(path), size);
+      // A destination inside one of the team's file stores is reached by whatever path exists right now.
+      await new S3Client(await this.ctx.storage.destinationTarget(destination)).put(key, createReadStream(path), size);
       this.ctx.stores.backups.setRemote(backupId, destination.id, key);
     } catch (error) {
       const message = `Stored on the server, but the upload to ${destination.name} failed: ${errorMessage(error)}`;
@@ -285,7 +293,10 @@ export class ServiceManager {
     if (backup.remoteDestinationId === null || backup.remoteKey === null) return;
     const destination = this.ctx.stores.s3.get(backup.remoteDestinationId);
     if (destination === undefined) return;
-    await new S3Client(destination).delete(backup.remoteKey).catch((error: unknown) => this.ctx.logger.warn('Could not delete remote backup', { backupId: backup.id, error: errorMessage(error) }));
+    await this.ctx.storage
+      .destinationTarget(destination)
+      .then((target) => new S3Client(target).delete(backup.remoteKey!))
+      .catch((error: unknown) => this.ctx.logger.warn('Could not delete remote backup', { backupId: backup.id, error: errorMessage(error) }));
   }
 
   private async pruneBackups(service: ServiceRecord): Promise<void> {
@@ -313,7 +324,7 @@ export class ServiceManager {
     if (backup.remoteDestinationId === null || backup.remoteKey === null) return null;
     const destination = this.ctx.stores.s3.get(backup.remoteDestinationId);
     if (destination === undefined) return null;
-    const response = await new S3Client(destination).get(backup.remoteKey);
+    const response = await new S3Client(await this.ctx.storage.destinationTarget(destination)).get(backup.remoteKey);
     const length = Number(response.headers['content-length']);
     return { stream: response, size: Number.isFinite(length) ? length : null };
   }

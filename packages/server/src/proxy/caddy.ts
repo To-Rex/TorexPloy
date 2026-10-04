@@ -27,6 +27,8 @@ export interface ProxyRoute {
   label: string;
   /** Redirect-only route: answer 308 to this origin, keeping path and query. */
   redirectTo?: string | null;
+  /** Pass bytes through as they arrive (object storage: large uploads and downloads, `Expect: 100-continue`). */
+  stream?: boolean;
 }
 
 const prefixOf = (route: ProxyRoute): string => route.path ?? '/';
@@ -68,10 +70,12 @@ function routeMatch(route: ProxyRoute): Json[] {
   return prefix === '/' ? hostMatch([route.host]) : [{ host: [route.host], path: [prefix, `${prefix}/*`] }];
 }
 
-function proxyHandler(upstreams: string[]): Json {
+function proxyHandler(upstreams: string[], stream = false): Json {
   return {
     handler: 'reverse_proxy',
     upstreams: upstreams.map((dial) => ({ dial })),
+    // Request bodies are never buffered; streamed routes also flush every response chunk at once.
+    ...(stream ? { flush_interval: -1 } : {}),
     load_balancing: {
       selection_policy: { policy: 'round_robin' },
       // During a replica swap a request may land on a container that just
@@ -109,7 +113,7 @@ function routeFor(route: ProxyRoute): Json {
     handle: [
       ...hsts,
       ...(route.stripPath === true && prefix !== '/' && route.upstreams.length > 0 ? [{ handler: 'rewrite', strip_path_prefix: prefix }] : []),
-      route.upstreams.length > 0 ? proxyHandler(route.upstreams) : unavailableHandler(route.label),
+      route.upstreams.length > 0 ? proxyHandler(route.upstreams, route.stream === true) : unavailableHandler(route.label),
     ],
     terminal: true,
   };

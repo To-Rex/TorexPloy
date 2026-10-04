@@ -86,14 +86,16 @@ teams ─ team_members(owner|admin|developer|viewer) · invitations
       ├ servers(local|ssh) ─ ssh kalit (shifrlangan), host key fingerprint
       ├ notification_channels(telegram|discord|slack|webhook) ─ manzil va tokenlar shifrlangan
       ├ git_sources(github_app) ─ github_installations
-      ├ s3_destinations ─ zaxira nusxalar uchun S3 (secret shifrlangan)
+      ├ s3_destinations ─ zaxira nusxalar uchun S3 (secret shifrlangan; service_id — jamoaning oʻz fayl ombori ichida)
       ├ registries ─ xususiy registr loginlari (parol shifrlangan; jamoada bitta host — bitta login)
       └ projects ─┬ applications(web|worker|compose; source github|git|image|raw) ─┬ deployments (per-deploy log fayl)
                   │               ├ applications (PR preview: parent_application_id, preview_pr_*)
                   │               ├ env_vars (AES-256-GCM) · domains · volumes
                   │               ├ service_links (DB → env inject)
                   │               └ cron_jobs ─ cron_runs
-                  ├ services(DB, backup_destination_id) ─ backups(remote_key)
+                  ├ services(DB yoki fayl ombori; backup_destination_id) ─┬ backups(remote_key)
+                  │                                                          ├ domains (fayl ombori: S3 endpoint; application_id XOR service_id)
+                  │                                                          └ storage_keys (secret shifrlangan) · storage_buckets (public bayrogʻi)
                   └ env_vars (loyiha darajasidagi umumiy o'zgaruvchilar)
 jobs · metrics_host · metrics_app · audit_log · settings
 ```
@@ -154,7 +156,8 @@ o'zgaruvchilar, domenlar, loglar va terminal umumiy. Fayl panelda saqlanadi (`ra
 
 Domen = host + yo'l prefiksi (`/`, `/api`), ixtiyoriy prefiksni olib tashlash, compose uchun servis va port, yoki
 faqat yo'naltirish (308, yo'l va so'rov saqlanadi). Bitta host bir nechta yo'lga bo'linishi mumkin, lekin faqat bitta
-jamoaga tegishli bo'ladi. Caddy'da aniqroq prefiks oldin turadi; sertifikat host uchun bitta.
+jamoaga tegishli bo'ladi. Caddy'da aniqroq prefiks oldin turadi; sertifikat host uchun bitta. Domen ilovaga yoki
+servisga (fayl omborining S3 endpoint'i, 5.9) tegishli — `application_id` yoki `service_id`, ikkalasidan bittasi.
 
 ### 5.4 Shablonlar
 
@@ -320,6 +323,80 @@ yangilovchining oʻzi `updater.ts` (alohida kirish nuqtasi, `cli.ts` kabi).
 - **Ikki manba.** `install.sh` manbadan qursa `PLOY_UPDATE_REPO`/`PLOY_UPDATE_BRANCH` ni (GitHub URL yoki
   checkout'ning `origin`idan), `TORXPLOY_IMAGE` bilan esa `PLOY_UPDATE_IMAGE` ni beradi. `.github/workflows/image.yml`
   har `main` push va `v*` tegda `ghcr.io/<owner>/torexploy:main` (+`:sha-<short>`, `:X.Y.Z`) ni amd64/arm64 uchun quradi.
+
+### 5.9 Fayl ombori
+
+`files` turidagi servis — SeaweedFS (`chrislusf/seaweedfs:4.48`) bitta konteynerda: master, volume server, filer va
+S3 shlyuz (`weed server -filer -s3`). Servis mexanizmi (konteyner, volume, slug bilan tarmoq alias'i, start/stop/
+recreate, loglar, terminal, metrikalar, oʻchirish) oʻzgarishsiz; `backup: null` — ma'lumotlar volume'da, boshqa
+servislarning nusxalari esa shu omborga yoziladi. Kod: `services/catalog.ts` (`files`), `storage/manager.ts`,
+`storage/reach.ts`, `http/routes/storage.ts`, `store/storage.ts`, `lib/s3.ts`.
+
+- **Jarayon va portlar.** Image'ning `entrypoint.sh` oʻz flaglarini qoʻshadi (`-master.volumePreallocate`), shuning
+  uchun `/usr/bin/weed` toʻgʻridan-toʻgʻri chaqiriladi: `server -dir=/data -ip=127.0.0.1 -ip.bind=127.0.0.1
+  -s3.ip.bind=0.0.0.0 -master.volumeSizeLimitMB=1024 -volume.max=0 -filer -s3 -s3.port=8333 -s3.port.iceberg=0
+  -s3.port.lance=0 -s3.allowDeleteBucketNotEmpty=false -s3.autoCreateBucket=false -s3.config=/data/s3.json
+  -metricsPort=9327` (boʻsh boʻlmagan bucket'ni dvigatel oʻzi oʻchirmaydi, yuklashda bucket oʻzi yaratilmaydi). Loyiha
+  tarmogʻiga faqat S3 porti (8333) ochiq; master (9333), filer (8888) va volume server konteyner loopback'ida —
+  healthcheck (`wget -qO- http://127.0.0.1:9333/cluster/status`), `weed shell` va statistika shu yerdan ishlaydi,
+  tarmoqdagi boshqa konteyner filer'ga kira olmaydi. `-ip=127.0.0.1` konteyner IP'si qayta yaratishda oʻzgarsa ham
+  raft va volume roʻyxatini barqaror qiladi. Har bir bucket alohida collection; `/etc/seaweedfs/master.toml`
+  (`copy_1 = 1`) bir vaqtda bitta 1 GB volume oʻsishini beradi (default 7 ta — bir nechta bucket kichik diskni
+  darhol band qilardi). Ikkala fayl (`s3.json` → `/data`, 0600; `master.toml` → `/etc/seaweedfs`) konteyner
+  yaratilgach, ishga tushishdan oldin `putArchive` bilan yoziladi (Caddy konfiguratsiyasi kabi); volume saqlanadi,
+  konteyner har `provision`da qayta yoziladi.
+- **Identity'lar.** Root identity statik `s3.json`da (`Admin,Read,Write,List,Tagging`; access key =
+  `credentials.username`, secret = `credentials.password` — servis sirlari kabi shifrlangan). Kalitlar va ochiq
+  bucket'lar dinamik: `docker exec` ichida `weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888`ga stdin'dan
+  buyruq beriladi, buyruq matni exec muhit oʻzgaruvchisida (`PLOY_WEED_COMMANDS`) — host `ps`da koʻrinmaydi.
+  Kalit: `s3.configure -user=<sk_id> -access_key=… -secret_key=… [-buckets=a,b] -actions=Read,List[,Write,Tagging]
+  -apply`; bekor qilish `s3.configure -user=<sk_id> -delete -apply`; ochiq bucket `s3.configure -user=anonymous
+  -buckets=<b> -actions=Read,List -apply`, yopish — xuddi shu buyruq `-delete` bilan (faqat shu bucket amallari
+  oʻchadi, boshqa ochiq bucket'lar qoladi). `-buckets`siz kalit barcha (keyin yaratiladiganlar ham) bucket'larda
+  ishlaydi, lekin bucket yarata olmaydi (bu `Admin`). SeaweedFS filer'dagi `/etc/iam/identity.json`ni statik fayl
+  bilan birlashtiradi: root (`isStatic`) va dinamik identity'lar birga ishlaydi, konteyner qayta yaratilsa ham
+  volume'da qoladi. Panel faqat dvigatel saqlamagan narsani tutadi: `storage_keys` (secret `storage` maqsadi bilan
+  shifrlangan, bucket roʻyxati, ruxsat, `managed_by`), `storage_buckets` (public bayrogʻi, yaratilgan vaqt); bucket
+  roʻyxati har soʻrovda `ListBuckets` bilan muvofiqlashtiriladi (yangi — yopiq, yoʻqolgan — oʻchadi). Identity nomi
+  — kalit satrining id'si (`sk_…`): yagona, foydalanuvchi tanlagan belgilarsiz.
+- **Statistika.** Bitta `weed shell` sessiyasida har bucket uchun `fs.tree /buckets/<b>` (oxirgi satr —
+  `N directories, M files`, aniq obyekt soni; papka markerlari kataloglar) va `fs.du /buckets/<b>` (mantiqiy hajm);
+  chiqish konteyner ichida `grep` bilan filtrlanadi, 20 soniya keshlanadi, oʻzgartirishda bekor qilinadi.
+- **Yetib borish (`storage/reach.ts`).** Ilovalar omborga loyiha tarmogʻida `http://<slug>:8333` orqali boradi.
+  Panel `ploy` tarmogʻida, shuning uchun manzil har safar qayta hisoblanadi: faol sertifikatli HTTPS domen →
+  `https://<domen>`; lokal server va panel Docker'da (`updates/self.ts`) → panel konteyneri loyiha tarmogʻiga ulanadi
+  (`connectNetwork`, idempotent) va `http://<slug>:8333`; dev mashinada → `http://127.0.0.1:<umumiy port>`;
+  masofaviy SSH server → oddiy domen yoki `http://<public ip>:<port>`; aks holda `422 validation_failed`
+  (`store_unreachable`). Zaxira manzili (`s3_destinations.service_id`) yaratilganda manzil yoziladi, lekin yuklovchi
+  (`uploadBackup`), yuklab olish, oʻchirish va "Tekshirish" har safar `destinationTarget` bilan qayta hal qiladi.
+- **API (`/api/services/:id/storage`).** Overview (`endpoint` — domen yoki umumiy port, `internalEndpoint`,
+  `usage`), bucket'lar (`POST`/`PATCH public`/`DELETE?force`), obyektlar (`GET` roʻyxat — papkalar oldin, `cursor`
+  = S3 continuation token; `PUT …/objects/*key` — xom body, `Content-Length` majburiy, `LIMITS.storageUploadMax`,
+  diskka tushmasdan S3'ga oqim; `GET …/objects/*key` — `Range` va `?download=1`), `delete` (kalitlar va `prefix/`
+  papkalar, 1000 talik sahifalar, 50 sahifadan soʻng `409 too_many_objects`), `folders` (nol baytli `prefix/`
+  obyekt), `presign` (SigV4 query-string: `X-Amz-Algorithm/Credential/Date/Expires/SignedHeaders=host/Signature`,
+  omborning umumiy manzili bilan; manzil boʻlmasa `422 no_public_endpoint`; `?download=1` →
+  `response-content-disposition`), `keys` (`LIMITS.storageKeysMax`, secret bir marta), `backup-destination`
+  (idempotent: `backups` bucket'i, `managed_by='backups'` kalit, `<nom> (fayl ombori)` manzili — kalit yozishi
+  tekshirilgach saqlanadi) va `/api/services/:id/domains` (`host` yoki `generate`, `domains/generate.ts` bilan).
+  Xato kodlari: `storage_unavailable` (503 — ishlamayapti, yetib boʻlmadi, root rad etildi), `bucket_not_empty`
+  (409). Audit: `storage.bucket_created/updated/deleted`, `storage.objects_deleted`, `storage.key_created/revoked`,
+  `storage.backup_destination_created`. `lib/s3.ts` endi `listBuckets`, `listObjects` (ListObjectsV2 XML),
+  `headObject`, `deleteObjects`, `deleteBucket`, `get` (Range) va `presign`ni biladi; boʻsh query qiymati
+  (`?delete`) kanonik `delete=` boʻlib imzolanadi.
+- **Domen va proksi.** Servis domeni `domains.service_id` orqali (`application_id` bilan `CHECK` — faqat bittasi);
+  Caddy'da upstream `<konteyner nomi>:8333`, faqat servis `running` boʻlganda (holat oʻzgarganda proksi qayta
+  sinxronlanadi), `flush_interval: -1` — javob oqimda, soʻrov tanasi buferlanmaydi, `Expect: 100-continue` ishlaydi.
+  DNS/TLS tekshiruvi, `PATCH/DELETE /api/domains/:id`, `verify` va `domain.updated` hodisasi
+  (`applicationId | serviceId`) ikkalasiga ham ishlaydi.
+- **Xavfsizlik.** Sirlar buyruq qatoriga tushmaydi: root — faqat `s3.json` (0600, volume'da), dinamik — exec
+  muhiti va stdin. Bucket nomlari (`BUCKET_RE`) va kalitlar (`OBJECT_KEY_RE`, `..` segmentlarsiz) tekshiriladi,
+  shuning uchun ularni shell buyrugʻiga qoʻyish xavfsiz. Presigned havola root access key id'sini oshkor qiladi
+  (secret emas) — AWS/MinIO'dagi kabi. Rollar: viewer oʻqiydi va roʻyxatlarni koʻradi, developer yozadi va domen
+  qoʻshadi, admin kalit va zaxira manzilini boshqaradi; zaxira kaliti faqat `backups` bucket'iga va manzil turganda
+  bekor qilinmaydi (`409 managed_key`), manzil oʻchirilganda u ham ketadi; ombor oʻchirilganda manzil, kalitlar,
+  bucket satrlari va domenlar `ON DELETE CASCADE` bilan yoʻqoladi, boshqa servislar `backup_destination_id`ni
+  yoʻqotadi (`SET NULL`).
 
 ## 6. Xavfsizlik
 

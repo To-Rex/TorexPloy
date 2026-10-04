@@ -117,9 +117,7 @@ export function ServiceLayout() {
               </div>
               {data !== undefined && (
                 <div className="resource__meta">
-                  <span>
-                    {m.project.databaseLabel[data.type]} {data.version}
-                  </span>
+                  <span>{data.type === 'files' ? m.project.databaseLabel.files : `${m.project.databaseLabel[data.type]} ${data.version}`}</span>
                   <code>
                     {data.internalHost}:{data.internalPort}
                   </code>
@@ -164,13 +162,25 @@ export function ServiceLayout() {
           <div className="resource__tabs">
             <RouteTabs
               label={data?.name ?? ''}
-              items={[
-                { to: `${base}/general`, label: m.services.tabs.general },
-                { to: `${base}/logs`, label: m.services.tabs.logs },
-                { to: `${base}/monitoring`, label: m.services.tabs.monitoring },
-                { to: `${base}/backups`, label: m.services.tabs.backups },
-                { to: `${base}/advanced`, label: m.services.tabs.advanced },
-              ]}
+              items={
+                data?.type === 'files'
+                  ? [
+                      { to: `${base}/general`, label: m.fileStore.tabs.general },
+                      { to: `${base}/files`, label: m.fileStore.tabs.files },
+                      { to: `${base}/keys`, label: m.fileStore.tabs.keys },
+                      { to: `${base}/domains`, label: m.fileStore.tabs.domains },
+                      { to: `${base}/logs`, label: m.services.tabs.logs },
+                      { to: `${base}/monitoring`, label: m.services.tabs.monitoring },
+                      { to: `${base}/advanced`, label: m.services.tabs.advanced },
+                    ]
+                  : [
+                      { to: `${base}/general`, label: m.services.tabs.general },
+                      { to: `${base}/logs`, label: m.services.tabs.logs },
+                      { to: `${base}/monitoring`, label: m.services.tabs.monitoring },
+                      { to: `${base}/backups`, label: m.services.tabs.backups },
+                      { to: `${base}/advanced`, label: m.services.tabs.advanced },
+                    ]
+              }
             />
           </div>
           <div className="resource__body">{data === undefined ? <Skeleton height={240} /> : <Outlet context={{ service: data, openTerminal: () => setTerminal(true) } satisfies ServiceOutlet} />}</div>

@@ -10,6 +10,7 @@ import { NotificationStore } from './notifications.ts';
 import { RegistryStore } from './registries.ts';
 import { S3DestinationStore } from './s3.ts';
 import { ServerStore } from './servers.ts';
+import { StorageBucketStore, StorageKeyStore } from './storage.ts';
 import { AuditStore, SettingsStore, TeamStore } from './teams.ts';
 
 export interface Stores {
@@ -36,6 +37,8 @@ export interface Stores {
   notifications: NotificationStore;
   s3: S3DestinationStore;
   registries: RegistryStore;
+  storageKeys: StorageKeyStore;
+  storageBuckets: StorageBucketStore;
 }
 
 export function createStores(db: Database, secrets: Secrets): Stores {
@@ -63,6 +66,8 @@ export function createStores(db: Database, secrets: Secrets): Stores {
     notifications: new NotificationStore(db, secrets),
     s3: new S3DestinationStore(db, secrets),
     registries: new RegistryStore(db, secrets),
+    storageKeys: new StorageKeyStore(db, secrets),
+    storageBuckets: new StorageBucketStore(db),
   };
 }
 
@@ -73,4 +78,5 @@ export type * from './registries.ts';
 export type * from './s3.ts';
 export type * from './resources.ts';
 export type * from './servers.ts';
+export type * from './storage.ts';
 export type * from './teams.ts';

@@ -8,6 +8,7 @@ Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy 
 - **Ishlash:** uzilishsiz (rolling) yoki recreate strategiyasi, health-check, replikalar, avtomatik qayta ishga tushirish, bir bosishda rollback, self-heal.
 - **Tarmoq:** Caddy orqali avtomatik HTTPS (Let’s Encrypt), DNS va sertifikat holatini real tekshirish, avtomatik domenlar.
 - **Servislar:** PostgreSQL, MySQL, MariaDB, MongoDB, Redis, RabbitMQ, MinIO, ClickHouse. Ilovaga ulash, zaxira nusxa va tiklash.
+- **Fayl ombori:** S3-mos obyekt ombori (SeaweedFS) bir bosishda: bucket’lar va fayl brauzeri, vaqtinchalik (presigned) havolalar, cheklangan kirish kalitlari, ochiq bucket’lar, domen orqali HTTPS bilan tashqi kirish; boshqa servislarning zaxira nusxalari shu omborga yoziladi.
 - **Kuzatuv:** real vaqtdagi build va runtime loglar (qidiruv, daraja boʻyicha filtr, replika va vaqt oraligʻi tanlovi, pauza, nusxalash, yuklab olish, toʻliq ekran), CPU/RAM/disk/tarmoq metrikalari, audit jurnali.
 - **Jamoa:** rollar (egasi/admin/dasturchi/kuzatuvchi), taklifnomalar, 2FA (TOTP), API tokenlar, GitHub orqali kirish.
 - **Bir nechta server:** SSH orqali qoʻshiladi. Masofaviy serverga faqat Docker kerak, agent oʻrnatilmaydi.
@@ -91,6 +92,43 @@ docker exec ploy-control node packages/server/src/cli.ts info
 - host kaliti saqlanadi (keyingi ulanishlarda qatʼiy tekshiriladi);
 - Docker tekshiriladi (yoʻq boʻlsa, bir bosishda oʻrnatish mumkin);
 - serverda platforma tarmogʻi va Caddy proxy ishga tushiriladi.
+
+## Fayl ombori
+
+**Loyiha → Yaratish → Fayl ombori** — SeaweedFS asosidagi S3-mos obyekt ombori, bir bosishda ishga tushadi. Fayllar servisning diskida (Docker volume) saqlanadi, S3 porti (8333) faqat loyiha tarmogʻida ochiq; root kalitlar boshqa servislardagi kabi “Ulanish ma’lumotlari” boʻlimida.
+
+- **Ilovadan ulanish.** Ilovaning “Oʻzgaruvchilar” tabida omborni ulang: `S3_ENDPOINT` (`http://<slug>:8333`), `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` (`us-east-1`), `S3_FORCE_PATH_STYLE=true`, `S3_BUCKET` va `AWS_ENDPOINT_URL`/`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_REGION` kiritiladi. Manzil har doim path-style: `endpoint/bucket/kalit`.
+- **Bucket va fayllar.** Panelda bucket yaratish, papkalar, yuklash (5 GB gacha) va yuklab olish, bir nechta faylni yoki butun papkani oʻchirish. Boʻsh boʻlmagan bucket faqat “majburan” oʻchiriladi.
+- **Tashqi kirish.** Ombor sahifasida domen biriktiring (`files.example.uz`, avtomatik HTTPS; yoki “Manzil yaratish”) yoki umumiy port oching. Shundan keyin vaqtinchalik havolalar (presigned URL) ishlaydi: brauzer faylni panelsiz, toʻgʻridan-toʻgʻri omborga yuklaydi yoki undan yuklab oladi.
+- **Ochiq bucket.** “Ochiq” belgisi qoʻyilgan bucket’dagi fayllar kalitsiz oʻqiladi (`https://files.example.uz/site/logo.png`) — statik fayllar va rasmlar uchun. Yozish baribir kalit talab qiladi.
+- **Kalitlar.** Admin har bir ilova yoki hamkor uchun alohida kalit yaratadi: faqat oʻqish yoki oʻqish+yozish, barcha bucket’lar yoki tanlanganlari. Maxfiy kalit faqat yaratilganda bir marta koʻrsatiladi; kalit bekor qilinganda darhol ishlamay qoladi.
+- **Zaxira nusxalar shu omborga.** Ombor sahifasida “Zaxira manzilini yaratish”: `backups` bucket’i, faqat unga ruxsatli kalit va S3 manzil yaratiladi. Soʻng baza sozlamalarida shu manzilni tanlang — nusxalar serverdan tashqari omborga ham tushadi. Manzil oʻchirilganda kalit ham bekor qilinadi.
+
+Mijozlar (kalitlarni panelning “Kalitlar” boʻlimidan oling):
+
+```sh
+# AWS CLI
+AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=… AWS_REGION=us-east-1 aws --endpoint-url https://files.example.uz s3 cp rasm.png s3://photos/avatars/rasm.png
+# rclone
+rclone config create ombor s3 provider=Other endpoint=https://files.example.uz access_key_id=… secret_access_key=… force_path_style=true
+rclone sync ./public ombor:site
+```
+
+```python
+import os, boto3  # kalitlar AWS_* oʻzgaruvchilardan olinadi
+s3 = boto3.client("s3", endpoint_url=os.environ["S3_ENDPOINT"], region_name="us-east-1")
+s3.upload_file("rasm.png", "photos", "avatars/rasm.png")
+url = s3.generate_presigned_url("get_object", Params={"Bucket": "photos", "Key": "avatars/rasm.png"}, ExpiresIn=3600)
+```
+
+```js
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+const s3 = new S3Client({ endpoint: process.env.S3_ENDPOINT, region: 'us-east-1', forcePathStyle: true,
+  credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY } });
+await s3.send(new PutObjectCommand({ Bucket: 'photos', Key: 'avatars/rasm.png', Body: data, ContentType: 'image/png' }));
+```
+
+Laravel: `config/filesystems.php` dagi `s3` diski uchun `AWS_ENDPOINT=${S3_ENDPOINT}`, `AWS_USE_PATH_STYLE_ENDPOINT=true`, `AWS_BUCKET=photos`, `AWS_DEFAULT_REGION=us-east-1` — kalitlar bogʻlanganda `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` sifatida oʻzi keladi. Ilova ichidan presigned havola yaratish uchun `S3_ENDPOINT` oʻrniga omborning umumiy manzilini (`https://files.example.uz`) bering — ichki manzil brauzerdan ochilmaydi.
 
 ## Xavfsizlik
 

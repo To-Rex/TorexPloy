@@ -91,11 +91,21 @@ export type DeploymentStatusFilter = (typeof DEPLOYMENT_STATUS_FILTERS)[number];
 export const DEPLOYMENT_TRIGGERS = ['manual', 'push', 'rollback', 'redeploy', 'api', 'restart'] as const;
 export type DeploymentTrigger = (typeof DEPLOYMENT_TRIGGERS)[number];
 
-export const SERVICE_TYPES = ['postgres', 'mysql', 'mariadb', 'mongo', 'redis', 'rabbitmq', 'minio', 'clickhouse'] as const;
+/** `files` is the file store (S3-compatible object storage, SeaweedFS); the rest are databases and queues. */
+export const SERVICE_TYPES = ['postgres', 'mysql', 'mariadb', 'mongo', 'redis', 'rabbitmq', 'minio', 'clickhouse', 'files'] as const;
 export type ServiceType = (typeof SERVICE_TYPES)[number];
 
 export const SERVICE_STATUSES = ['provisioning', 'running', 'stopped', 'failed', 'restarting'] as const;
 export type ServiceStatus = (typeof SERVICE_STATUSES)[number];
+
+/** What an access key of the file store may do with its buckets. */
+export const STORAGE_PERMISSIONS = ['read', 'readwrite'] as const;
+export type StoragePermission = (typeof STORAGE_PERMISSIONS)[number];
+
+/** S3 bucket names: 3–63 lowercase letters, digits, dots and dashes, starting and ending alphanumeric. */
+export const BUCKET_RE = /^(?!\d+\.\d+\.\d+\.\d+$)[a-z0-9](?:[a-z0-9.-]{1,61}[a-z0-9])$/;
+/** Object keys: slash-separated path segments without `..` or control characters. */
+export const OBJECT_KEY_RE = /^(?!.*(?:^|\/)\.\.(?:\/|$))[^\x00-\x1f\x7f]{1,1024}$/;
 
 export const DNS_STATUSES = ['pending', 'ok', 'mismatch', 'error'] as const;
 export type DnsStatus = (typeof DNS_STATUSES)[number];
@@ -176,6 +186,8 @@ export const LIMITS = {
   /** Preview variables, as `.env` text. */
   previewEnvMax: 32 * 1024,
   systemPackagesMax: 50,
+  storageKeysMax: 50,
+  storageUploadMax: 5 * 1024 * 1024 * 1024,
 } as const;
 
 // ---------------------------------------------------------------------------

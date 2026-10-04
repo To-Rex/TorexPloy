@@ -439,3 +439,89 @@ test('registry passwords are sealed at rest, one per host per team, matched to i
   stores.teams.delete(team.id);
   assert.equal(db.scalar('SELECT COUNT(*) FROM registries'), 1, 'deleting a team removes its registries');
 });
+
+test('the file-store migration admits the files type, moves domains onto services, and cascades store-backed destinations', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ploy-migrate9-'));
+  const path = join(dir, 'v8.db');
+  try {
+    // A database as release 8 left it: an application with a domain, a database with a backup destination.
+    const raw = new DatabaseSync(path);
+    raw.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)');
+    for (const migration of MIGRATIONS.slice(0, 8)) {
+      raw.exec(`PRAGMA foreign_keys = ${migration.rebuildsTables === true ? 'OFF' : 'ON'}`);
+      raw.exec(migration.sql);
+      raw.prepare('INSERT INTO schema_migrations VALUES (?, ?, ?)').run(migration.version, migration.name, '2026-01-01T00:00:00.000Z');
+    }
+    raw.exec('PRAGMA foreign_keys = ON');
+    const t = '2026-01-01T00:00:00.000Z';
+    raw.exec(`INSERT INTO teams VALUES ('team_a', 'A', 'a', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO projects VALUES ('prj_a', 'team_a', 'P', 'p', NULL, '${t}', '${t}')`);
+    raw.exec(`INSERT INTO servers (id, team_id, name, kind, status, created_at, updated_at) VALUES ('srv_a', NULL, 'local', 'local', 'ready', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO applications (id, project_id, team_id, server_id, name, slug, source_type, image, config_updated_at, created_at, updated_at)
+              VALUES ('app_a', 'prj_a', 'team_a', 'srv_a', 'Web', 'web', 'image', 'nginx', '${t}', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO domains (id, application_id, team_id, host, path, created_at, updated_at) VALUES ('dom_a', 'app_a', 'team_a', 'web.example.uz', '/', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO domains (id, application_id, team_id, host, path, strip_path, created_at, updated_at) VALUES ('dom_b', 'app_a', 'team_a', 'web.example.uz', '/api', 1, '${t}', '${t}')`);
+    raw.exec(`INSERT INTO s3_destinations (id, team_id, name, endpoint, region, bucket, access_key_id, secret_access_key, created_at, updated_at)
+              VALUES ('s3d_a', 'team_a', 'Offsite', 'https://s3.example.uz', 'auto', 'b', 'k', 'sealed', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO services (id, project_id, team_id, server_id, name, slug, type, version, credentials, internal_port, container_name, volume_name, backup_destination_id, created_at, updated_at)
+              VALUES ('svc_a', 'prj_a', 'team_a', 'srv_a', 'db', 'db', 'postgres', '17', 'sealed', 5432, 'ploy-db-db', 'ploy-data-db', 's3d_a', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO service_links (id, application_id, service_id, created_at) VALUES ('lnk_a', 'app_a', 'svc_a', '${t}')`);
+    raw.exec(`INSERT INTO backups (id, service_id, status, trigger, started_at) VALUES ('bak_a', 'svc_a', 'succeeded', 'manual', '${t}')`);
+    assert.throws(() => raw.exec(`INSERT INTO services (id, project_id, team_id, server_id, name, slug, type, version, credentials, internal_port, container_name, volume_name, created_at, updated_at) VALUES ('svc_f', 'prj_a', 'team_a', 'srv_a', 'f', 'f', 'files', '4.48', 'x', 8333, 'c', 'v', '${t}', '${t}')`), /CHECK/, 'release 8 did not know the files type');
+    raw.close();
+
+    const db = openDatabase(path);
+    assert.equal(db.schemaVersion, LATEST_SCHEMA_VERSION);
+    assert.ok(LATEST_SCHEMA_VERSION >= 9);
+    assert.equal(db.get('PRAGMA foreign_keys')!.foreign_keys, 1, 'foreign keys are back on');
+    assert.deepEqual(db.all('PRAGMA foreign_key_check'), []);
+    const secrets = new Secrets('k'.repeat(48));
+    const stores = createStores(db, secrets);
+
+    // Every row survived the rebuilds, with the indexes the proxy and the route lookups rely on.
+    assert.deepEqual(stores.domains.listForApplication('app_a').map((domain) => [domain.host, domain.path, domain.stripPath, domain.applicationId, domain.serviceId]), [['web.example.uz', '/', false, 'app_a', null], ['web.example.uz', '/api', true, 'app_a', null]]);
+    assert.deepEqual({ ...db.get('SELECT type, backup_destination_id FROM services WHERE id = ?', 'svc_a') }, { type: 'postgres', backup_destination_id: 's3d_a' });
+    assert.equal(db.scalar('SELECT COUNT(*) FROM service_links'), 1);
+    assert.equal(db.scalar('SELECT COUNT(*) FROM backups'), 1);
+    assert.equal(db.scalar('SELECT service_id FROM s3_destinations WHERE id = ?', 's3d_a'), null);
+    const indexes = (table: string) => db.all("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND name LIKE 'idx_%'", table).map((row) => String(row.name)).sort();
+    assert.deepEqual(indexes('domains'), ['idx_domains_app', 'idx_domains_route', 'idx_domains_service']);
+    assert.deepEqual(indexes('services'), ['idx_services_server', 'idx_services_team']);
+    assert.throws(() => db.run("INSERT INTO domains (id, application_id, team_id, host, path, created_at, updated_at) VALUES ('dom_x', 'app_a', 'team_a', 'WEB.example.uz', '/', ?, ?)", t, t), /UNIQUE/, 'host and path stay unique, case-insensitively');
+
+    // A file store, with a domain of its own, keys, bucket rows and a destination inside it.
+    const store = stores.services.create({ id: 'svc_f', projectId: 'prj_a', teamId: 'team_a', serverId: 'srv_a', name: 'Files', slug: 'files', type: 'files', version: '4.48', credentials: { username: 'ployroot', password: 's'.repeat(40), database: null }, internalPort: 8333, containerName: 'ploy-db-files', volumeName: 'ploy-data-files', memoryLimitMb: 512 });
+    const domain = stores.domains.create({ serviceId: store.id, teamId: 'team_a', host: 'files.example.uz', https: true, port: null, isGenerated: false });
+    assert.deepEqual([domain.applicationId, domain.serviceId], [null, store.id]);
+    assert.throws(() => db.run("INSERT INTO domains (id, team_id, host, path, created_at, updated_at) VALUES ('dom_y', 'team_a', 'nobody.example.uz', '/', ?, ?)", t, t), /CHECK/, 'a domain needs exactly one owner');
+    assert.throws(() => db.run("INSERT INTO domains (id, application_id, service_id, team_id, host, path, created_at, updated_at) VALUES ('dom_z', 'app_a', 'svc_f', 'team_a', 'both.example.uz', '/', ?, ?)", t, t), /CHECK/);
+    assert.deepEqual(stores.domains.listForServer('srv_a').map((item) => item.host), ['files.example.uz', 'web.example.uz', 'web.example.uz'], 'the proxy sees application and service domains alike');
+    assert.equal(stores.domains.primaryServiceUrl(store.id), 'https://files.example.uz');
+
+    const key = stores.storageKeys.create({ serviceId: store.id, name: 'backups', accessKeyId: 'ployabc', secretAccessKey: 'very-secret', buckets: ['backups'], permission: 'readwrite', managedBy: 'backups' });
+    assert.equal(stores.storageKeys.get(key.id)!.secretAccessKey, 'very-secret');
+    assert.ok(!String(db.scalar('SELECT secret_sealed FROM storage_keys WHERE id = ?', key.id)).includes('very-secret'), 'the secret is sealed at rest');
+    assert.deepEqual(stores.storageKeys.backupsKey(store.id)?.buckets, ['backups']);
+    assert.throws(() => stores.storageKeys.create({ serviceId: store.id, name: 'dup', accessKeyId: 'ployabc', secretAccessKey: 'x', buckets: null, permission: 'read', managedBy: 'user' }), /UNIQUE/, 'access key ids are unique');
+    stores.storageBuckets.ensure(store.id, 'photos', { public: true });
+    stores.storageBuckets.ensure(store.id, 'photos', { public: false });
+    assert.equal(stores.storageBuckets.get(store.id, 'photos')!.public, true, 'ensure keeps an existing row');
+    assert.deepEqual(stores.storageBuckets.reconcile(store.id, [{ name: 'backups', createdAt: null }, { name: 'photos', createdAt: null }]).map((bucket) => [bucket.name, bucket.public]), [['backups', false], ['photos', true]]);
+    assert.deepEqual(stores.storageBuckets.reconcile(store.id, [{ name: 'photos', createdAt: null }]).map((bucket) => bucket.name), ['photos'], 'a bucket the engine no longer has is dropped');
+    const destination = stores.s3.create('team_a', { name: 'Files (fayl ombori)', endpoint: 'http://files:8333', region: 'us-east-1', bucket: 'backups', pathPrefix: '', accessKeyId: 'ployabc', secretAccessKey: 'very-secret', forcePathStyle: true }, store.id);
+    assert.equal(stores.s3.findForService(store.id)?.id, destination.id);
+    db.run('UPDATE services SET backup_destination_id = ? WHERE id = ?', destination.id, 'svc_a');
+
+    // Destroying the store takes its domain, keys, buckets and destination; the database merely loses its destination.
+    stores.services.delete(store.id);
+    assert.equal(stores.domains.get(domain.id), undefined);
+    assert.equal(stores.storageKeys.get(key.id), undefined);
+    assert.deepEqual(stores.storageBuckets.listForService(store.id), []);
+    assert.equal(stores.s3.get(destination.id), undefined);
+    assert.equal(db.scalar('SELECT backup_destination_id FROM services WHERE id = ?', 'svc_a'), null);
+    assert.equal(db.scalar('SELECT name FROM s3_destinations WHERE id = ?', 's3d_a'), 'Offsite', 'ordinary destinations are untouched');
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

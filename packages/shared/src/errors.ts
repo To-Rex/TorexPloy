@@ -36,6 +36,8 @@ export const ERROR_CODES = [
   'registry_auth_failed',
   'update_unsupported',
   'update_in_progress',
+  'storage_unavailable',
+  'bucket_not_empty',
   'internal_error',
 ] as const;
 

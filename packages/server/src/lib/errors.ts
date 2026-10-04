@@ -38,6 +38,8 @@ const STATUS: Record<ErrorCode, number> = {
   registry_auth_failed: 422,
   update_unsupported: 422,
   update_in_progress: 409,
+  storage_unavailable: 503,
+  bucket_not_empty: 409,
   internal_error: 500,
 };
 

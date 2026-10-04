@@ -22,12 +22,24 @@ export interface Credentials {
   rootPassword?: string;
 }
 
+/** A file written into the container before its first start (configuration the engine reads from disk). */
+export interface SeedFile {
+  /** Directory inside the container; created when missing. */
+  dir: string;
+  name: string;
+  content: string;
+  mode?: number;
+}
+
 export interface ContainerTemplate {
   image: string;
   env: Record<string, string>;
+  /** Replaces the image's entrypoint when its wrapper script would add flags of its own. */
+  entrypoint?: string[];
   cmd?: string[];
   mountPath: string;
   healthcheck: string[];
+  files?: SeedFile[];
 }
 
 export interface BackupSpec {
@@ -56,7 +68,25 @@ export interface CatalogEntry {
 }
 
 const password = (): string => generateToken(24).replace(/[-_]/g, 'x');
+/** 40 characters, the length of an AWS secret access key. */
+const secretKey = (): string => generateToken(30).replace(/[-_]/g, 'x');
 const encode = encodeURIComponent;
+
+/** Actions SeaweedFS grants the root identity of a file store (everything, on every bucket). */
+export const STORAGE_ROOT_ACTIONS = ['Admin', 'Read', 'Write', 'List', 'Tagging'];
+
+/** The static identity file the S3 gateway starts with; dynamic identities (keys, public buckets) are merged in by `weed shell`. */
+export function storageIdentityFile(credentials: Credentials): string {
+  return JSON.stringify({ identities: [{ name: 'root', credentials: [{ accessKey: credentials.username, secretKey: credentials.password }], actions: STORAGE_ROOT_ACTIONS }] });
+}
+
+/**
+ * SeaweedFS gives every bucket its own collection and, by default, grows a
+ * collection by seven volumes at a time; with 1 GB volumes a handful of
+ * buckets would reserve the whole disk. One volume at a time keeps a bucket's
+ * footprint proportional to its contents.
+ */
+const STORAGE_MASTER_TOML = ['[master.volume_growth]', 'copy_1 = 1', 'copy_2 = 1', 'copy_3 = 1', 'copy_other = 1', ''].join('\n');
 
 /** Run a command through `sh -c` so it can read credentials from the container's environment. */
 const sh = (script: string): string[] => ['sh', '-c', script];
@@ -278,6 +308,69 @@ export const CATALOG: Record<ServiceType, CatalogEntry> = {
       const url = `http://${encode(c.username!)}:${encode(c.password)}@${host}:${port}/${encode(c.database!)}`;
       return { url, env: { CLICKHOUSE_URL: url, CLICKHOUSE_HOST: host, CLICKHOUSE_USER: c.username!, CLICKHOUSE_PASSWORD: c.password, CLICKHOUSE_DATABASE: c.database! } };
     },
+    backup: null,
+  },
+
+  files: {
+    type: 'files',
+    label: 'File store (S3)',
+    versions: ['4.48'],
+    defaultVersion: '4.48',
+    port: 8333,
+    memoryMb: 512,
+    credentials: () => ({ username: `ploy${randomId(12)}`, password: secretKey(), database: null }),
+    container: (version, c) => ({
+      // SeaweedFS: master, volume server, filer and S3 gateway in one process. Only the S3 port is reachable
+      // from the project network; master, filer and volume server listen on the container's loopback, where
+      // the health check, `weed shell` (identities) and usage queries find them.
+      image: `chrislusf/seaweedfs:${version}`,
+      env: {},
+      // The image's entrypoint appends flags of its own (volume preallocation among them); call the binary directly.
+      entrypoint: ['/usr/bin/weed'],
+      cmd: [
+        'server',
+        '-dir=/data',
+        '-ip=127.0.0.1',
+        '-ip.bind=127.0.0.1',
+        '-s3.ip.bind=0.0.0.0',
+        '-master.volumeSizeLimitMB=1024',
+        '-volume.max=0',
+        '-filer',
+        '-s3',
+        '-s3.port=8333',
+        '-s3.port.iceberg=0',
+        '-s3.port.lance=0',
+        '-s3.allowDeleteBucketNotEmpty=false',
+        '-s3.autoCreateBucket=false',
+        '-s3.config=/data/s3.json',
+        '-metricsPort=9327',
+      ],
+      mountPath: '/data',
+      healthcheck: sh('wget -qO- http://127.0.0.1:9333/cluster/status'),
+      files: [
+        { dir: '/data', name: 's3.json', content: storageIdentityFile(c), mode: 0o600 },
+        { dir: '/etc/seaweedfs', name: 'master.toml', content: STORAGE_MASTER_TOML },
+      ],
+    }),
+    connection: (c, host, port) => {
+      const url = `http://${host}:${port}`;
+      return {
+        url,
+        env: {
+          S3_ENDPOINT: url,
+          S3_ACCESS_KEY_ID: c.username!,
+          S3_SECRET_ACCESS_KEY: c.password,
+          S3_REGION: 'us-east-1',
+          S3_FORCE_PATH_STYLE: 'true',
+          S3_BUCKET: '',
+          AWS_ENDPOINT_URL: url,
+          AWS_ACCESS_KEY_ID: c.username!,
+          AWS_SECRET_ACCESS_KEY: c.password,
+          AWS_REGION: 'us-east-1',
+        },
+      };
+    },
+    // The engine's data lives on its volume; backups of other services can be written into the store instead.
     backup: null,
   },
 };

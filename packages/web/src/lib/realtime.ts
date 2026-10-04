@@ -50,8 +50,15 @@ export function applyEvent(client: QueryClient, event: PlatformEvent): void {
       invalidate(keys.overview);
       break;
     case 'domain.updated':
-      invalidate(keys.appPart(event.applicationId, 'domains'));
-      invalidate(keys.app(event.applicationId));
+      if (event.applicationId !== null) {
+        invalidate(keys.appPart(event.applicationId, 'domains'));
+        invalidate(keys.app(event.applicationId));
+      }
+      if (event.serviceId !== null) {
+        invalidate(keys.servicePart(event.serviceId, 'domains'));
+        invalidate(keys.servicePart(event.serviceId, 'storage'));
+        invalidate(keys.service(event.serviceId));
+      }
       break;
     case 'project.updated':
     case 'project.deleted':

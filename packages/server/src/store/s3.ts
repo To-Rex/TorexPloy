@@ -5,13 +5,15 @@ import type { Database } from '../db/database.ts';
 import { newId, nowIso } from '../lib/ids.ts';
 import type { S3Target } from '../lib/s3.ts';
 import type { Secrets } from '../lib/secrets.ts';
-import { bool, int01, str, type Row } from './util.ts';
+import { bool, int01, str, strOrNull, type Row } from './util.ts';
 
 export interface S3DestinationRecord extends S3Target {
   id: string;
   teamId: string;
   name: string;
   pathPrefix: string;
+  /** The team's own file store this destination writes into; its endpoint is resolved again at use time. */
+  serviceId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,17 +50,18 @@ export class S3DestinationStore {
       accessKeyId: str(row.access_key_id),
       secretAccessKey: this.secrets.open(str(row.secret_access_key), 's3'),
       forcePathStyle: bool(row.force_path_style),
+      serviceId: strOrNull(row.service_id),
       createdAt: str(row.created_at),
       updatedAt: str(row.updated_at),
     };
   }
 
-  create(teamId: string, input: S3DestinationInput): S3DestinationRecord {
+  create(teamId: string, input: S3DestinationInput, serviceId: string | null = null): S3DestinationRecord {
     const id = newId('s3d');
     const now = nowIso();
     this.db.run(
-      `INSERT INTO s3_destinations (id, team_id, name, endpoint, region, bucket, path_prefix, access_key_id, secret_access_key, force_path_style, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO s3_destinations (id, team_id, name, endpoint, region, bucket, path_prefix, access_key_id, secret_access_key, force_path_style, service_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       teamId,
       input.name,
@@ -69,10 +72,17 @@ export class S3DestinationStore {
       input.accessKeyId,
       this.secrets.seal(input.secretAccessKey, 's3'),
       int01(input.forcePathStyle),
+      serviceId,
       now,
       now,
     );
     return this.get(id)!;
+  }
+
+  /** The destination that writes into a file store, if one was set up. */
+  findForService(serviceId: string): S3DestinationRecord | undefined {
+    const row = this.db.get('SELECT * FROM s3_destinations WHERE service_id = ? LIMIT 1', serviceId);
+    return row === undefined ? undefined : this.map(row);
   }
 
   get(id: string): S3DestinationRecord | undefined {

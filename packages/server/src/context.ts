@@ -24,6 +24,7 @@ import type { EventBus } from './realtime/bus.ts';
 import type { ConnectionManager } from './servers/connections.ts';
 import type { ServerManager } from './servers/manager.ts';
 import type { ServiceManager } from './services/manager.ts';
+import type { StorageManager } from './storage/manager.ts';
 import type { Stores } from './store/index.ts';
 import type { UpdateChecker } from './updates/checker.ts';
 
@@ -40,6 +41,7 @@ export interface Context {
   compose: ComposeEngine;
   reconciler: Reconciler;
   services: ServiceManager;
+  storage: StorageManager;
   github: GithubApp;
   metrics: MetricsCollector;
   domains: DomainChecker;

@@ -2,31 +2,18 @@
  * S3 destinations for off-server backup copies (admin only: they hold storage credentials).
  */
 import type { Hono } from 'hono';
-import { createS3DestinationSchema, updateS3DestinationSchema, type S3DestinationDto } from '@ploy/shared';
+import { createS3DestinationSchema, updateS3DestinationSchema } from '@ploy/shared';
 import type { Context } from '../../context.ts';
 import { AppError, errorMessage, notFound } from '../../lib/errors.ts';
 import { S3Client } from '../../lib/s3.ts';
 import type { S3DestinationRecord } from '../../store/index.ts';
 import { audit, body, limit, RateLimiter, requireTeam, type Ctx, type Env } from '../core.ts';
+import { s3DestinationDto } from '../dto.ts';
 
 export function registerS3Routes(app: Hono<Env>, ctx: Context): void {
   const { stores } = ctx;
   const testLimiter = new RateLimiter(10, 10);
-
-  const dto = (destination: S3DestinationRecord): S3DestinationDto => ({
-    id: destination.id,
-    name: destination.name,
-    endpoint: destination.endpoint,
-    region: destination.region,
-    bucket: destination.bucket,
-    pathPrefix: destination.pathPrefix,
-    accessKeyId: destination.accessKeyId,
-    forcePathStyle: destination.forcePathStyle,
-    services: stores.db
-      .all('SELECT id, name FROM services WHERE backup_destination_id = ? ORDER BY name', destination.id)
-      .map((row) => ({ id: String(row.id), name: String(row.name) })),
-    createdAt: destination.createdAt,
-  });
+  const dto = (destination: S3DestinationRecord) => s3DestinationDto(ctx, destination);
 
   const load = (c: Ctx): S3DestinationRecord => {
     const auth = requireTeam(c, 'admin');
@@ -63,9 +50,14 @@ export function registerS3Routes(app: Hono<Env>, ctx: Context): void {
 
   app.patch('/api/s3-destinations/:id', async (c) => {
     const destination = load(c);
-    const input = await body(c, updateS3DestinationSchema);
-    const merged = { ...destination, ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) } as S3DestinationRecord;
-    const connectionChanged = ['endpoint', 'region', 'bucket', 'accessKeyId', 'secretAccessKey', 'forcePathStyle', 'pathPrefix'].some((key) => (input as Record<string, unknown>)[key] !== undefined);
+    const parsed = await body(c, updateS3DestinationSchema);
+    // `.partial()` keeps the schema's defaults (`pathPrefix`, `forcePathStyle`): only fields the client sent are changes.
+    const sent = new Set(Object.keys((await c.req.json().catch(() => ({}))) as Record<string, unknown>));
+    const input = Object.fromEntries(Object.entries(parsed).filter(([key, value]) => sent.has(key) && value !== undefined)) as typeof parsed;
+    const merged = { ...destination, ...input } as S3DestinationRecord;
+    const connectionChanged = ['endpoint', 'region', 'bucket', 'accessKeyId', 'secretAccessKey', 'forcePathStyle', 'pathPrefix'].some((key) => key in input);
+    // A destination inside a file store is wired by the panel: only its name is the user's to change.
+    if (connectionChanged && destination.serviceId !== null) throw new AppError('conflict', 'This destination belongs to a file store; remove it there', { params: { reason: 'managed_destination' } });
     if (connectionChanged) {
       limit(testLimiter, c, 's3-test');
       const failure = await probe(merged);
@@ -79,13 +71,15 @@ export function registerS3Routes(app: Hono<Env>, ctx: Context): void {
   app.post('/api/s3-destinations/:id/test', async (c) => {
     const destination = load(c);
     limit(testLimiter, c, 's3-test');
-    const failure = await probe(destination);
+    const failure = await probe(await ctx.storage.destinationTarget(destination));
     return c.json({ ok: failure === null, error: failure });
   });
 
-  app.delete('/api/s3-destinations/:id', (c) => {
+  app.delete('/api/s3-destinations/:id', async (c) => {
     const destination = load(c);
     // Services fall back to server-only backups (ON DELETE SET NULL); uploaded copies stay in the bucket.
+    // A destination inside a file store takes the access key the panel made for it along.
+    await ctx.storage.revokeDestinationKey(destination);
     stores.s3.delete(destination.id);
     audit(ctx, c, 's3.deleted', { type: 's3', id: destination.id, name: destination.name });
     return c.json({ ok: true });

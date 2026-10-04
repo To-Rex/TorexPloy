@@ -22,9 +22,14 @@ import {
   type PreviewDto,
   type ProjectDto,
   type RegistryDto,
+  type S3DestinationDto,
   type ServerDto,
   type ServiceDto,
   type SourceDto,
+  type StorageBucketDto,
+  type StorageKeyDto,
+  type StorageListingDto,
+  type StorageObjectDto,
   type TeamCronJobDto,
   type TeamDeploymentDto,
   type TeamDto,
@@ -33,7 +38,9 @@ import {
 } from '@ploy/shared';
 import type { Context } from '../context.ts';
 import { publicBaseUrl } from '../github/app.ts';
+import type { S3Listing } from '../lib/s3.ts';
 import { catalogEntry, linkEnv } from '../services/catalog.ts';
+import type { BucketStats } from '../storage/manager.ts';
 import type {
   ApiTokenRecord,
   ApplicationRecord,
@@ -50,8 +57,11 @@ import type {
   ProjectRecord,
   ProjectWithStats,
   RegistryRecord,
+  S3DestinationRecord,
   ServerRecord,
   ServiceRecord,
+  StorageBucketRecord,
+  StorageKeyRecord,
   TeamCronJobRecord,
   UserRecord,
   VolumeRecord,
@@ -306,11 +316,12 @@ export function previewDto(ctx: Context, preview: ApplicationRecord): PreviewDto
 }
 
 export function domainDto(ctx: Context, domain: DomainRecord): DomainDto {
-  const app = ctx.stores.applications.get(domain.applicationId);
-  const server = app === undefined ? undefined : ctx.stores.servers.get(app.serverId);
+  const owner = domain.applicationId !== null ? ctx.stores.applications.get(domain.applicationId) : domain.serviceId === null ? undefined : ctx.stores.services.get(domain.serviceId);
+  const server = owner === undefined ? undefined : ctx.stores.servers.get(owner.serverId);
   return {
     id: domain.id,
     applicationId: domain.applicationId,
+    serviceId: domain.serviceId,
     host: domain.host,
     path: domain.path,
     stripPath: domain.stripPath,
@@ -420,6 +431,67 @@ export function serviceDto(ctx: Context, service: ServiceRecord): ServiceDto {
     linkedApplications: linked,
     createdAt: service.createdAt,
     updatedAt: service.updatedAt,
+  };
+}
+
+/** The secret key never leaves the server. */
+export function s3DestinationDto(ctx: Context, destination: S3DestinationRecord): S3DestinationDto {
+  return {
+    id: destination.id,
+    name: destination.name,
+    endpoint: destination.endpoint,
+    region: destination.region,
+    bucket: destination.bucket,
+    pathPrefix: destination.pathPrefix,
+    accessKeyId: destination.accessKeyId,
+    forcePathStyle: destination.forcePathStyle,
+    services: ctx.stores.db
+      .all('SELECT id, name FROM services WHERE backup_destination_id = ? ORDER BY name', destination.id)
+      .map((row) => ({ id: String(row.id), name: String(row.name) })),
+    createdAt: destination.createdAt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// File store
+// ---------------------------------------------------------------------------
+
+export function storageBucketDto(bucket: StorageBucketRecord, stats: BucketStats | undefined): StorageBucketDto {
+  return { name: bucket.name, public: bucket.public, objects: stats?.objects ?? null, bytes: stats?.bytes ?? null, createdAt: bucket.createdAt };
+}
+
+export function storageObjectDto(key: string, object: { size: number; lastModified: string | null; etag: string | null; contentType?: string | null }): StorageObjectDto {
+  return {
+    key,
+    name: key.replace(/\/+$/, '').split('/').pop() ?? key,
+    size: object.size,
+    lastModified: object.lastModified ?? '',
+    etag: object.etag,
+    contentType: object.contentType ?? null,
+  };
+}
+
+/** Folders (common prefixes) first, then the objects of one page. */
+export function storageListingDto(bucket: string, prefix: string, listing: S3Listing): StorageListingDto {
+  return {
+    bucket,
+    prefix,
+    folders: listing.prefixes,
+    objects: listing.objects.map((object) => storageObjectDto(object.key, object)),
+    nextCursor: listing.truncated ? listing.nextContinuationToken : null,
+  };
+}
+
+export function storageKeyDto(key: StorageKeyRecord): StorageKeyDto {
+  return {
+    id: key.id,
+    name: key.name,
+    accessKeyId: key.accessKeyId,
+    buckets: key.buckets,
+    permission: key.permission,
+    managedBy: key.managedBy,
+    createdAt: key.createdAt,
+    lastUsedAt: key.lastUsedAt,
   };
 }
 

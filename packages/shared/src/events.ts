@@ -15,7 +15,7 @@ export type PlatformEvent =
   | { type: 'service.updated'; id: string; projectId: string; status: ServiceStatus }
   | { type: 'service.deleted'; id: string; projectId: string }
   | { type: 'server.updated'; id: string; status: ServerStatus }
-  | { type: 'domain.updated'; id: string; applicationId: string }
+  | { type: 'domain.updated'; id: string; applicationId: string | null; serviceId: string | null }
   | { type: 'project.updated'; id: string }
   | { type: 'project.deleted'; id: string }
   | { type: 'backup.updated'; id: string; serviceId: string }

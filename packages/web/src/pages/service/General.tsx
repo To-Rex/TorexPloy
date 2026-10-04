@@ -19,8 +19,9 @@ import { useAction } from '../../lib/mutate.ts';
 import { fetchServiceCredentials, keys } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 import { useServiceContext, useServiceTerminal } from './ServiceLayout.tsx';
+import { StorageGeneralTab } from './storage/StorageGeneral.tsx';
 
-function DeployCard({ service }: { service: ServiceDto }) {
+export function DeployCard({ service }: { service: ServiceDto }) {
   const { m } = useI18n();
   const d = m.deploySettings;
   const confirm = useConfirm();
@@ -143,7 +144,7 @@ function CredentialsCard({ service, credentials, onReveal, loading }: { service:
   );
 }
 
-function ExternalCard({ service, credentials }: { service: ServiceDto; credentials: ServiceCredentialsDto | null }) {
+export function ExternalCard({ service, credentials }: { service: ServiceDto; credentials: ServiceCredentialsDto | null }) {
   const { m } = useI18n();
   const initial = service.publicPort === null ? '' : String(service.publicPort);
   const [port, setPort] = useState(initial);
@@ -209,6 +210,11 @@ function LinkedCard({ service, credentials }: { service: ServiceDto; credentials
 
 export function ServiceGeneralTab() {
   const service = useServiceContext();
+  if (service.type === 'files') return <StorageGeneralTab service={service} />;
+  return <DatabaseGeneralTab service={service} />;
+}
+
+function DatabaseGeneralTab({ service }: { service: ServiceDto }) {
   const toast = useToast();
   const [credentials, setCredentials] = useState<ServiceCredentialsDto | null>(null);
   const [loading, setLoading] = useState(false);

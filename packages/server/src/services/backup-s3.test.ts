@@ -47,7 +47,7 @@ test('backups are copied to S3, readable from there, and removed from both place
   writeFileSync(join(dir, 's3.json'), JSON.stringify({ identities: [{ name: 'ploy', credentials: [{ accessKey: accessKeyId, secretKey: secretAccessKey }], actions: ['Admin', 'Read', 'Write', 'List', 'Tagging'] }] }));
   const weed = spawn(
     binary,
-    ['server', `-dir=${join(dir, 'weed')}`, '-ip=127.0.0.1', '-ip.bind=127.0.0.1', `-master.port=${base}`, `-volume.port=${base + 1}`, `-filer.port=${base + 2}`, '-s3', `-s3.port=${base + 3}`, `-s3.config=${join(dir, 's3.json')}`, '-volume.max=5', '-s3.port.iceberg=0', '-s3.port.lance=0'],
+    ['server', `-dir=${join(dir, 'weed')}`, '-ip=127.0.0.1', '-ip.bind=127.0.0.1', `-master.port=${base}`, `-volume.port=${base + 1}`, `-filer.port=${base + 2}`, '-s3', `-s3.port=${base + 3}`, `-s3.config=${join(dir, 's3.json')}`, '-volume.max=5', '-volume.minFreeSpace=0', '-s3.port.iceberg=0', '-s3.port.lance=0'],
     { stdio: 'ignore' },
   );
   process.env.PLOY_RUN_DIR = join(dir, 'run');

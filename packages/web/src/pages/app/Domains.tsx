@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { QueryKey } from '@tanstack/react-query';
 import { ArrowRight, CornerDownRight, ExternalLink, Globe, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { createDomainSchema, type DomainDto } from '@ploy/shared';
 import { useConfirm, Dialog } from '../../components/Dialog.tsx';
@@ -14,10 +15,10 @@ import { keys, useCompose, useDomains } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 import { useAppContext } from './AppLayout.tsx';
 
-function DomainRow({ domain, appId }: { domain: DomainDto; appId: string }) {
+/** One domain with its DNS and certificate state; `invalidate` names what to refresh after a change. */
+export function DomainRow({ domain, invalidate }: { domain: DomainDto; invalidate: QueryKey[] }) {
   const { m, t, formatDate } = useI18n();
   const confirm = useConfirm();
-  const invalidate = [keys.appPart(appId, 'domains'), keys.app(appId)];
   const verify = useAction(() => api.post(`/api/domains/${domain.id}/verify`), { invalidate });
   const toggleHttps = useAction((https: boolean) => api.patch(`/api/domains/${domain.id}`, { https }), { invalidate });
   const remove = useAction(() => api.delete(`/api/domains/${domain.id}`), { success: m.domains.removed, invalidate });
@@ -277,7 +278,7 @@ export function DomainsTab() {
           {m.domains.empty}
         </EmptyState>
       ) : (
-        domains.data!.map((domain) => <DomainRow key={domain.id} domain={domain} appId={app.id} />)
+        domains.data!.map((domain) => <DomainRow key={domain.id} domain={domain} invalidate={[keys.appPart(app.id, 'domains'), keys.app(app.id)]} />)
       )}
       <AddDomainDialog open={adding} onClose={() => setAdding(false)} appId={app.id} compose={compose} primaryOrigin={primaryOrigin} canGenerate={!(domains.data ?? []).some((domain) => domain.isGenerated)} />
     </Card>

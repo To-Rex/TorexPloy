@@ -44,6 +44,10 @@ import type {
   ServiceCredentialsDto,
   ServiceDto,
   SessionDto,
+  StorageBucketDto,
+  StorageKeyDto,
+  StorageListingDto,
+  StorageOverviewDto,
   TeamCronJobDto,
   TeamDeploymentDto,
   TeamDto,
@@ -170,6 +174,24 @@ export const useServiceMetrics = (id: string, range: MetricRange) =>
   });
 export const fetchServiceCredentials = (id: string) => api.get<ServiceCredentialsDto>(`/api/services/${id}/credentials`);
 export const useTemplates = (enabled = true) => useQuery({ queryKey: ['templates'], queryFn: () => api.get<TemplateDto[]>('/api/catalog/templates'), staleTime: Infinity, enabled });
+// File store
+export const useStorageOverview = (id: string) =>
+  useQuery({ queryKey: keys.servicePart(id, 'storage'), queryFn: () => api.get<StorageOverviewDto>(`/api/services/${id}/storage`), retry: false });
+export const useBuckets = (id: string) =>
+  useQuery({ queryKey: keys.servicePart(id, 'storage', 'buckets'), queryFn: () => api.get<StorageBucketDto[]>(`/api/services/${id}/storage/buckets`), retry: false });
+export const useObjects = (id: string, bucket: string | null, prefix: string) =>
+  useInfiniteQuery({
+    queryKey: keys.servicePart(id, 'storage', 'objects', bucket, prefix),
+    queryFn: ({ pageParam }) => api.get<StorageListingDto>(`/api/services/${id}/storage/buckets/${encodeURIComponent(bucket ?? '')}/objects${qs({ prefix, cursor: pageParam, limit: 200 })}`),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: bucket !== null,
+    retry: false,
+  });
+export const useStorageKeys = (id: string) =>
+  useQuery({ queryKey: keys.servicePart(id, 'storage', 'keys'), queryFn: () => api.get<StorageKeyDto[]>(`/api/services/${id}/storage/keys`), retry: false });
+export const useServiceDomains = (id: string) => useQuery({ queryKey: keys.servicePart(id, 'domains'), queryFn: () => api.get<DomainDto[]>(`/api/services/${id}/domains`) });
+
 export const useCatalog = () => useQuery({ queryKey: keys.catalog, queryFn: () => api.get<ServiceCatalogEntryDto[]>('/api/catalog/services'), staleTime: Infinity });
 
 export const useServers = () => useQuery({ queryKey: keys.servers, queryFn: () => api.get<ServerDto[]>('/api/servers') });

@@ -77,7 +77,10 @@ export class EnvStore {
 
 export interface DomainRecord {
   id: string;
-  applicationId: string;
+  /** The application served, or null for a domain on a service. */
+  applicationId: string | null;
+  /** The service served (a file store's S3 endpoint), or null for an application domain. */
+  serviceId: string | null;
   teamId: string;
   host: string;
   /** Path prefix routed by this domain; '/' is the whole host. */
@@ -105,7 +108,8 @@ export interface DomainRecord {
 function mapDomain(row: Row): DomainRecord {
   return {
     id: str(row.id),
-    applicationId: str(row.application_id),
+    applicationId: strOrNull(row.application_id),
+    serviceId: strOrNull(row.service_id),
     teamId: str(row.team_id),
     host: str(row.host),
     path: str(row.path),
@@ -127,6 +131,11 @@ function mapDomain(row: Row): DomainRecord {
   };
 }
 
+function primaryOf(domains: DomainRecord[]): string | null {
+  const primary = domains.find((domain) => !domain.isGenerated) ?? domains[0];
+  return primary === undefined ? null : `${primary.https ? 'https' : 'http'}://${primary.host}`;
+}
+
 export class DomainStore {
   private readonly db: Database;
 
@@ -134,8 +143,10 @@ export class DomainStore {
     this.db = db;
   }
 
+  /** A domain for an application, or (`serviceId`) for a service's own endpoint. */
   create(input: {
-    applicationId: string;
+    applicationId?: string | null;
+    serviceId?: string | null;
     teamId: string;
     host: string;
     https: boolean;
@@ -149,10 +160,11 @@ export class DomainStore {
     const id = newId('dom');
     const now = nowIso();
     this.db.run(
-      `INSERT INTO domains (id, application_id, team_id, host, path, strip_path, https, port, service_name, redirect_to, is_generated, tls_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO domains (id, application_id, service_id, team_id, host, path, strip_path, https, port, service_name, redirect_to, is_generated, tls_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
-      input.applicationId,
+      input.applicationId ?? null,
+      input.serviceId ?? null,
       input.teamId,
       input.host.toLowerCase(),
       input.path ?? '/',
@@ -197,17 +209,34 @@ export class DomainStore {
       .map(mapDomain);
   }
 
+  listForService(serviceId: string): DomainRecord[] {
+    return this.db.all('SELECT * FROM domains WHERE service_id = ? ORDER BY is_generated, created_at', serviceId).map(mapDomain);
+  }
+
+  /** Every domain the server's proxy must serve: those of its applications and of its services. */
   listForServer(serverId: string): DomainRecord[] {
     return this.db
-      .all('SELECT d.* FROM domains d JOIN applications a ON a.id = d.application_id WHERE a.server_id = ? ORDER BY d.host, d.path', serverId)
+      .all(
+        `SELECT d.* FROM domains d
+           LEFT JOIN applications a ON a.id = d.application_id
+           LEFT JOIN services s ON s.id = d.service_id
+          WHERE a.server_id = ? OR s.server_id = ?
+          ORDER BY d.host, d.path`,
+        serverId,
+        serverId,
+      )
       .map(mapDomain);
   }
 
   /** The address an application is opened at: its first own domain, else a generated one. */
   primaryUrl(applicationId: string): string | null {
-    const domains = this.listForApplication(applicationId);
-    const primary = domains.find((domain) => !domain.isGenerated) ?? domains[0];
-    return primary === undefined ? null : `${primary.https ? 'https' : 'http'}://${primary.host}`;
+    return primaryOf(this.listForApplication(applicationId));
+  }
+
+  /** The address a service is reached at from outside, preferring HTTPS. */
+  primaryServiceUrl(serviceId: string): string | null {
+    const domains = this.listForService(serviceId);
+    return primaryOf([...domains.filter((domain) => domain.https), ...domains.filter((domain) => !domain.https)]);
   }
 
   listAll(): DomainRecord[] {

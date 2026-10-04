@@ -335,7 +335,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     ctx.domains.followUp(domain.id);
     void ctx.domains.check(domain.id);
     audit(ctx, c, 'domain.added', { type: 'domain', id: domain.id, name: domain.host });
-    emit(ctx, application.teamId, { type: 'domain.updated', id: domain.id, applicationId: application.id });
+    emit(ctx, application.teamId, { type: 'domain.updated', id: domain.id, applicationId: application.id, serviceId: null });
     return c.json(domainDto(ctx, domain), 201);
   });
 
@@ -353,18 +353,21 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     return c.json(stores.domains.listForApplication(application.id).map((domain) => domainDto(ctx, domain)), 201);
   });
 
+  /** A domain of an application or of a service (file store), with the server it is served from. */
   const loadDomain = (c: Ctx, role: Role) => {
     const auth = requireTeam(c, role);
     const domain = stores.domains.getForTeam(auth.teamId, c.req.param('domainId')!);
     if (domain === undefined) throw notFound('Domain');
-    return { domain, application: stores.applications.get(domain.applicationId)! };
+    const owner = domain.applicationId !== null ? stores.applications.get(domain.applicationId) : stores.services.get(domain.serviceId!);
+    if (owner === undefined) throw notFound('Domain');
+    return { domain, serverId: owner.serverId, teamId: owner.teamId };
   };
 
   app.patch('/api/domains/:domainId', async (c) => {
-    const { domain, application } = loadDomain(c, 'developer');
+    const { domain, serverId } = loadDomain(c, 'developer');
     const input = await body(c, updateDomainSchema);
     stores.domains.update(domain.id, input);
-    await ctx.proxy.requestSync(application.serverId).catch(() => undefined);
+    await ctx.proxy.requestSync(serverId).catch(() => undefined);
     ctx.domains.followUp(domain.id);
     audit(ctx, c, 'domain.updated', { type: 'domain', id: domain.id, name: domain.host }, input);
     return c.json(domainDto(ctx, stores.domains.get(domain.id)!));
@@ -377,11 +380,11 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
   });
 
   app.delete('/api/domains/:domainId', async (c) => {
-    const { domain, application } = loadDomain(c, 'developer');
+    const { domain, serverId, teamId } = loadDomain(c, 'developer');
     stores.domains.delete(domain.id);
-    await ctx.proxy.requestSync(application.serverId).catch(() => undefined);
+    await ctx.proxy.requestSync(serverId).catch(() => undefined);
     audit(ctx, c, 'domain.removed', { type: 'domain', id: domain.id, name: domain.host });
-    emit(ctx, application.teamId, { type: 'domain.updated', id: domain.id, applicationId: application.id });
+    emit(ctx, teamId, { type: 'domain.updated', id: domain.id, applicationId: domain.applicationId, serviceId: domain.serviceId });
     return c.json({ ok: true });
   });
 

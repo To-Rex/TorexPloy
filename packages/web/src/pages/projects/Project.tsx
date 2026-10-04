@@ -6,7 +6,7 @@
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { Boxes, ChevronDown, Database, Ellipsis, Globe, Layers, LayoutGrid, Link2, Pencil, Play, Plus, Rocket, Search, Square, Trash2, Variable, X } from 'lucide-react';
+import { Boxes, ChevronDown, Database, Ellipsis, FolderArchive, Globe, Layers, LayoutGrid, Link2, Pencil, Play, Plus, Rocket, Search, Square, Trash2, Variable, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { updateProjectSchema, type ApplicationDto, type ServiceDto } from '@ploy/shared';
 import { useConfirm, Dialog } from '../../components/Dialog.tsx';
@@ -28,6 +28,7 @@ import { NotFound } from '../../app/RouteError.tsx';
 import { NewAppDialog } from './NewAppDialog.tsx';
 import { NewComposeDialog } from './NewComposeDialog.tsx';
 import { NewServiceDialog } from './NewServiceDialog.tsx';
+import { NewStorageDialog } from './NewStorageDialog.tsx';
 import { TemplateMark, TemplatesDialog } from './TemplatesDialog.tsx';
 
 type Filter = 'all' | 'apps' | 'compose' | 'databases';
@@ -92,7 +93,7 @@ function ServiceCard({ service, selected, onSelect }: { service: ServiceDto; sel
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="svc-card__name">{service.name}</div>
           <div className="svc-card__sub">
-            {m.project.databaseLabel[service.type]} {service.version}
+            {service.type === 'files' ? m.project.databaseLabel.files : `${m.project.databaseLabel[service.type]} ${service.version}`}
           </div>
         </div>
         <Status kind="service" status={service.status} />
@@ -133,6 +134,7 @@ export function ProjectPage() {
   const [newService, setNewService] = useState(false);
   const [templates, setTemplates] = useState(false);
   const [newCompose, setNewCompose] = useState(false);
+  const [newStorage, setNewStorage] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -141,6 +143,7 @@ export function ProjectPage() {
     { id: 'app', icon: <Boxes />, title: m.create.app, hint: m.create.appHint, run: () => setNewApp(true) },
     { id: 'compose', icon: <Layers />, title: m.create.compose, hint: m.create.composeHint, run: () => setNewCompose(true) },
     { id: 'database', icon: <Database />, title: m.create.database, hint: m.create.databaseHint, run: () => setNewService(true) },
+    { id: 'storage', icon: <FolderArchive />, title: m.create.storage, hint: m.create.storageHint, run: () => setNewStorage(true) },
     { id: 'template', icon: <LayoutGrid />, title: m.create.template, hint: m.create.templateHint, run: () => setTemplates(true) },
   ];
   const [editing, setEditing] = useState(false);
@@ -368,6 +371,7 @@ export function ProjectPage() {
       <NewServiceDialog projectId={projectId} open={newService} onClose={() => setNewService(false)} />
       <TemplatesDialog projectId={projectId} open={templates} onClose={() => setTemplates(false)} />
       <NewComposeDialog projectId={projectId} open={newCompose} onClose={() => setNewCompose(false)} />
+      <NewStorageDialog projectId={projectId} open={newStorage} onClose={() => setNewStorage(false)} />
       <Dialog open={variablesOpen} onClose={() => setVariablesOpen(false)} wide title={m.project.variables} description={m.project.variablesHint}>
         {variables.data === undefined ? <Skeleton height={120} /> : <EnvEditor variables={variables.data.variables} onSave={(list) => saveVariables.mutateAsync(list)} saving={saveVariables.isPending} />}
       </Dialog>
