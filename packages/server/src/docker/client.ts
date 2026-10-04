@@ -11,7 +11,7 @@
  * the official CLI does it, so behaviour does not shift across daemon upgrades.
  */
 import { Agent, request, type IncomingMessage } from 'node:http';
-import { Transform, type Readable, type TransformCallback } from 'node:stream';
+import { Transform, type Duplex, type Readable, type TransformCallback } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
 
 /** Oldest Engine API this client relies on (Docker 20.10). */
@@ -84,6 +84,7 @@ export interface ContainerSummary {
   State: string;
   Status: string;
   Created: number;
+  Ports?: { IP?: string; PrivatePort: number; PublicPort?: number; Type: string }[];
 }
 
 export interface ContainerInspect {
@@ -147,6 +148,13 @@ export interface SystemDf {
   Containers?: { SizeRw?: number }[] | null;
   Volumes?: { UsageData?: { Size: number; RefCount: number } }[] | null;
   BuildCache?: { Size: number; InUse: boolean }[] | null;
+}
+
+/** Registry credentials as the Engine API takes them (`POST /auth`, `X-Registry-Auth`). */
+export interface RegistryAuthConfig {
+  username: string;
+  password: string;
+  serveraddress: string;
 }
 
 export interface DockerEvent {
@@ -451,6 +459,17 @@ export class DockerClient {
     }
   }
 
+  /** Networks carrying a label (`key=value`). */
+  listNetworks(label: string): Promise<NetworkInspect[]> {
+    return this.call<NetworkInspect[]>('GET', '/networks', { query: { filters: { label: [label] } } });
+  }
+
+  /** Volumes carrying a label (`key=value`). */
+  async listVolumes(label: string): Promise<{ Name: string; Labels: Record<string, string> | null }[]> {
+    const result = await this.call<{ Volumes: { Name: string; Labels: Record<string, string> | null }[] | null }>('GET', '/volumes', { query: { filters: { label: [label] } } });
+    return result.Volumes ?? [];
+  }
+
   inspectNetwork(name: string): Promise<NetworkInspect> {
     return this.call<NetworkInspect>('GET', `/networks/${encodeURIComponent(name)}`);
   }
@@ -504,6 +523,15 @@ export class DockerClient {
 
   listImages(label: string): Promise<ImageSummary[]> {
     return this.call<ImageSummary[]>('GET', '/images/json', { query: { filters: { label: [label] } } });
+  }
+
+  /**
+   * Check registry credentials the way `docker login` does, without storing
+   * anything on the daemon. A rejected login is a DockerError carrying the
+   * registry's own message.
+   */
+  async auth(credentials: RegistryAuthConfig): Promise<void> {
+    await this.call('POST', '/auth', { body: credentials, timeoutMs: 30_000 });
   }
 
   /**
@@ -733,6 +761,62 @@ export class DockerClient {
   async execExitCode(execId: string): Promise<number> {
     const inspect = await this.call<{ ExitCode: number | null }>('GET', `/exec/${execId}/json`);
     return inspect.ExitCode ?? -1;
+  }
+
+  /**
+   * Start an interactive process with a TTY and return the hijacked connection.
+   * Docker answers `101 UPGRADED` and turns the HTTP connection into a raw
+   * byte pipe: writes reach the process's stdin, reads are its terminal output
+   * (a TTY is not multiplexed).
+   */
+  async execTty(id: string, cmd: string[], options: { cols: number; rows: number; env?: string[] }): Promise<{ execId: string; socket: Duplex }> {
+    const created = await this.call<{ Id: string }>('POST', `/containers/${encodeURIComponent(id)}/exec`, {
+      body: { AttachStdin: true, AttachStdout: true, AttachStderr: true, Tty: true, Cmd: cmd, Env: options.env ?? [] },
+    });
+    const socket = await this.upgrade(`/exec/${created.Id}/start`, { Detach: false, Tty: true });
+    await this.resizeExec(created.Id, options.cols, options.rows);
+    return { execId: created.Id, socket };
+  }
+
+  /** Resize an exec's TTY. A process that already exited cannot be resized, which is harmless. */
+  async resizeExec(execId: string, cols: number, rows: number): Promise<void> {
+    try {
+      await this.call('POST', `/exec/${execId}/resize`, { query: { h: rows, w: cols }, timeoutMs: 10_000 });
+    } catch (error) {
+      if (error instanceof DockerError) return;
+      throw error;
+    }
+  }
+
+  /** POST with `Upgrade: tcp` and resolve with the raw socket once the daemon switches protocols. */
+  private async upgrade(path: string, body: unknown): Promise<Duplex> {
+    await this.ensureVersion();
+    const payload = Buffer.from(JSON.stringify(body), 'utf8');
+    return new Promise((resolve, reject) => {
+      const req = request({
+        socketPath: this.socketPath,
+        // A hijacked connection never returns to a pool.
+        agent: false,
+        method: 'POST',
+        path: `/v${this.apiVersion}${path}`,
+        headers: { Host: 'docker', 'Content-Type': 'application/json', 'Content-Length': String(payload.length), Connection: 'Upgrade', Upgrade: 'tcp' },
+      });
+      req.setTimeout(30_000, () => req.destroy(new Error(`Docker request timed out: POST ${path}`)));
+      req.on('upgrade', (_response, socket, head) => {
+        req.setTimeout(0);
+        socket.setTimeout(0);
+        if (head.length > 0) socket.unshift(head);
+        resolve(socket);
+      });
+      req.on('response', (response) => {
+        // No upgrade: the daemon refused (container stopped, exec gone).
+        this.fail(response).catch(reject);
+      });
+      req.on('error', (error: NodeJS.ErrnoException) => {
+        reject(error.code === 'ENOENT' || error.code === 'ECONNREFUSED' || error.code === 'EACCES' ? new DockerUnavailableError(`Docker is not reachable at ${this.socketPath} (${error.code})`) : error);
+      });
+      req.end(payload);
+    });
   }
 
   /** Live daemon events filtered to containers managed by the platform. */

@@ -6,6 +6,9 @@ import type { Secrets } from '../lib/secrets.ts';
 import { ApplicationStore, DeploymentStore, ProjectStore } from './apps.ts';
 import { ApiTokenStore, SessionStore, UserStore } from './identity.ts';
 import { BackupStore, CronStore, DomainStore, EnvStore, InstallationStore, LinkStore, MetricStore, ServiceStore, VolumeStore } from './resources.ts';
+import { NotificationStore } from './notifications.ts';
+import { RegistryStore } from './registries.ts';
+import { S3DestinationStore } from './s3.ts';
 import { ServerStore } from './servers.ts';
 import { AuditStore, SettingsStore, TeamStore } from './teams.ts';
 
@@ -30,6 +33,9 @@ export interface Stores {
   cron: CronStore;
   installations: InstallationStore;
   metrics: MetricStore;
+  notifications: NotificationStore;
+  s3: S3DestinationStore;
+  registries: RegistryStore;
 }
 
 export function createStores(db: Database, secrets: Secrets): Stores {
@@ -54,11 +60,17 @@ export function createStores(db: Database, secrets: Secrets): Stores {
     cron: new CronStore(db),
     installations: new InstallationStore(db),
     metrics: new MetricStore(db),
+    notifications: new NotificationStore(db, secrets),
+    s3: new S3DestinationStore(db, secrets),
+    registries: new RegistryStore(db, secrets),
   };
 }
 
 export type * from './apps.ts';
 export type * from './identity.ts';
+export type * from './notifications.ts';
+export type * from './registries.ts';
+export type * from './s3.ts';
 export type * from './resources.ts';
 export type * from './servers.ts';
 export type * from './teams.ts';

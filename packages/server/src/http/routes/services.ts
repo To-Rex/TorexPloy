@@ -1,8 +1,6 @@
 /**
  * Database and infrastructure services, their credentials, logs and backups.
  */
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import type { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
@@ -66,6 +64,9 @@ export function registerServiceRoutes(app: Hono<Env>, ctx: Context): void {
         throw new AppError('validation_failed', 'Invalid schedule', { issues: [{ path: 'backupSchedule', code: 'invalid_format', message: (error as Error).message }] });
       }
       if (catalogEntry(service.type).backup === null) throw new AppError('bad_request', 'This service type does not support backups');
+    }
+    if (input.backupDestinationId != null && stores.s3.getForTeam(service.teamId, input.backupDestinationId) === undefined) {
+      throw new AppError('validation_failed', 'Unknown S3 destination', { issues: [{ path: 'backupDestinationId', code: 'custom', message: 'Unknown destination' }] });
     }
     if (input.publicPort != null && stores.services.isPublicPortTaken(service.serverId, input.publicPort, service.id)) {
       throw new AppError('conflict', 'Another service already uses this public port', { params: { reason: 'port_taken' } });
@@ -172,14 +173,14 @@ export function registerServiceRoutes(app: Hono<Env>, ctx: Context): void {
 
   app.get('/api/services/:id/backups', (c) => {
     const service = load(c, 'viewer');
-    return c.json(stores.backups.listForService(service.id).map(backupDto));
+    return c.json(stores.backups.listForService(service.id).map((backup) => backupDto(ctx, backup)));
   });
 
   app.post('/api/services/:id/backups', async (c) => {
     const service = load(c, 'developer');
     const backup = await ctx.services.backup(service, 'manual');
     audit(ctx, c, 'backup.started', { type: 'service', id: service.id, name: service.name });
-    return c.json(backupDto(backup), 202);
+    return c.json(backupDto(ctx, backup), 202);
   });
 
   const loadBackup = (c: Ctx, role: 'viewer' | 'developer' | 'admin') => {
@@ -191,16 +192,14 @@ export function registerServiceRoutes(app: Hono<Env>, ctx: Context): void {
 
   app.get('/api/services/:id/backups/:backupId/download', async (c) => {
     const { service, backup } = loadBackup(c, 'admin');
-    const file = ctx.services.backupFile(service, backup);
-    if (file === null) throw notFound('Backup file');
-    const info = await stat(file).catch(() => null);
-    if (info === null) throw notFound('Backup file');
+    const source = await ctx.services.openBackup(service, backup);
+    if (source === null) throw notFound('Backup file');
     audit(ctx, c, 'backup.downloaded', { type: 'service', id: service.id, name: service.name }, { backupId: backup.id });
     const name = `${service.slug}-${backup.filePath!}`;
-    return new Response(Readable.toWeb(createReadStream(file)) as ReadableStream, {
+    return new Response(Readable.toWeb(source.stream) as ReadableStream, {
       headers: {
         'Content-Type': 'application/octet-stream',
-        'Content-Length': String(info.size),
+        ...(source.size === null ? {} : { 'Content-Length': String(source.size) }),
         'Content-Disposition': `attachment; filename="${name}"`,
       },
     });

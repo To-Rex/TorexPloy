@@ -15,18 +15,24 @@ export interface DialogProps {
   children?: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  /** Nearly full width: terminals, editors. */
+  xl?: boolean;
   /** Render the body inside a form so Enter submits. */
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 }
 
-export function Dialog({ open, onClose, title, description, children, footer, wide = false, onSubmit }: DialogProps) {
+export function Dialog({ open, onClose, title, description, children, footer, wide = false, xl = false, onSubmit }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const { m } = useI18n();
 
   useEffect(() => {
     const dialog = ref.current;
     if (dialog === null) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      // showModal focuses the first control (the close button); React's autoFocus does not set the attribute, so honour data-autofocus.
+      dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+    }
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
@@ -49,7 +55,7 @@ export function Dialog({ open, onClose, title, description, children, footer, wi
   return (
     <dialog
       ref={ref}
-      className={wide ? 'dialog dialog--wide' : 'dialog'}
+      className={xl ? 'dialog dialog--xl' : wide ? 'dialog dialog--wide' : 'dialog'}
       onClose={onClose}
       onCancel={(event) => {
         event.preventDefault();

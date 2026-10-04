@@ -39,7 +39,7 @@ export type Ctx = HonoContext<Env>;
 // Client address
 // ---------------------------------------------------------------------------
 
-function isPrivateAddress(address: string): boolean {
+export function isPrivateAddress(address: string): boolean {
   const ip = address.replace(/^::ffff:/, '');
   if (ip === '127.0.0.1' || ip === '::1') return true;
   if (isIP(ip) === 4) {
@@ -117,25 +117,30 @@ export function authMiddleware(ctx: Context): MiddlewareHandler<Env> {
 
     const cookie = getCookie(c, SESSION_COOKIE);
     if (cookie !== undefined) {
-      const session = stores.sessions.resolve(cookie);
-      const user = session === undefined ? undefined : stores.users.getById(session.userId);
-      if (session !== undefined && user !== undefined) {
-        let teamId = user.currentTeamId;
-        let role = teamId === null ? undefined : stores.teams.getRole(teamId, user.id);
-        if (role === undefined) {
-          // Removed from the current team: fall back to the first team they still belong to.
-          const first = stores.teams.listForUser(user.id)[0];
-          teamId = first?.team.id ?? null;
-          role = first?.role;
-          stores.users.update(user.id, { currentTeamId: teamId });
-        }
-        c.set('auth', { user, sessionId: session.id, tokenId: null, teamId, role: role ?? null });
-      } else {
-        clearSessionCookie(c);
-      }
+      const auth = sessionAuth(ctx, cookie);
+      if (auth !== null) c.set('auth', auth);
+      else clearSessionCookie(c);
     }
     await next();
   };
+}
+
+/** The signed-in user behind a session token, acting within their current team. */
+export function sessionAuth(ctx: Context, token: string): Auth | null {
+  const { stores } = ctx;
+  const session = stores.sessions.resolve(token);
+  const user = session === undefined ? undefined : stores.users.getById(session.userId);
+  if (session === undefined || user === undefined) return null;
+  let teamId = user.currentTeamId;
+  let role = teamId === null ? undefined : stores.teams.getRole(teamId, user.id);
+  if (role === undefined) {
+    // Removed from the current team: fall back to the first team they still belong to.
+    const first = stores.teams.listForUser(user.id)[0];
+    teamId = first?.team.id ?? null;
+    role = first?.role;
+    stores.users.update(user.id, { currentTeamId: teamId });
+  }
+  return { user, sessionId: session.id, tokenId: null, teamId, role: role ?? null };
 }
 
 /**

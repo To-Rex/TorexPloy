@@ -190,10 +190,17 @@ export class ServerManager {
       } catch {
         alive = false;
       }
-      if (alive && server.status !== 'ready') void this.verify(server.id);
-      else if (!alive && server.status === 'ready') {
+      if (alive && server.status !== 'ready') {
+        const wasOffline = server.status === 'offline';
+        void this.verify(server.id)
+          .then((verified) => {
+            if (wasOffline && verified.status === 'ready') this.ctx.notifier.serverRecovered(verified);
+          })
+          .catch(() => undefined);
+      } else if (!alive && server.status === 'ready') {
         await this.ctx.connections.invalidate(server.id);
         this.setStatus(server, 'offline', 'The server stopped responding', 'not_responding');
+        this.ctx.notifier.serverOffline(server, null);
       } else if (alive) {
         this.ctx.stores.servers.setStatus(server.id, 'ready', null);
       }

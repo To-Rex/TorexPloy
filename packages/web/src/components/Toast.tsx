@@ -16,6 +16,8 @@ interface ToastItem {
 interface ToastApi {
   success: (title: string, description?: string) => void;
   error: (error: unknown) => void;
+  /** A failure described by the caller (not an API error). */
+  failure: (title: string, description?: string) => void;
   info: (title: string, description?: string) => void;
 }
 
@@ -38,6 +40,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       success: (title, description) => push('ok', title, description),
       info: (title, description) => push('info', title, description),
       error: (error) => push('bad', errorText(m, error)),
+      failure: (title, description) => push('bad', title, description),
     }),
     [push, m],
   );

@@ -12,6 +12,7 @@
  * keeps Caddy's admin endpoint bound to the proxy container's own loopback.
  */
 import { createHash } from 'node:crypto';
+import { serviceAlias } from '../compose/transform.ts';
 import type { DockerClient } from '../docker/client.ts';
 import {
   LABEL_MANAGED,
@@ -62,15 +63,21 @@ export class ProxyManager {
       const app = this.stores.applications.get(domain.applicationId);
       if (app === undefined) continue;
       networks.add(projectNetwork(app.projectId));
+      const base = { host: domain.host, path: domain.path, stripPath: domain.stripPath, https: domain.https, label: app.name };
+      if (domain.redirectTo !== null) {
+        routes.push({ ...base, upstreams: [], redirectTo: domain.redirectTo });
+        continue;
+      }
       const active = app.activeDeploymentId === null ? undefined : this.stores.deployments.get(app.activeDeploymentId);
       const serving = app.status !== 'stopped' && active !== undefined && active.containers.length > 0;
+      if (app.kind === 'compose') {
+        // Compose services are reached by their alias on the project network, whatever their container is called.
+        const port = domain.port ?? DEFAULT_APP_PORT;
+        routes.push({ ...base, upstreams: serving && domain.serviceName !== null ? [`${serviceAlias(app.slug, domain.serviceName)}:${port}`] : [] });
+        continue;
+      }
       const port = domain.port ?? active?.port ?? app.port ?? DEFAULT_APP_PORT;
-      routes.push({
-        host: domain.host,
-        https: domain.https,
-        upstreams: serving ? active.containers.map((container) => `${container}:${port}`) : [],
-        label: app.name,
-      });
+      routes.push({ ...base, upstreams: serving ? active.containers.map((container) => `${container}:${port}`) : [] });
     }
 
     const local = this.stores.servers.getLocal();
@@ -165,6 +172,18 @@ export class ProxyManager {
     const { acmeEmail } = this.stores.settings.platform();
     const json = JSON.stringify(buildCaddyConfig({ acmeEmail, routes }), null, 2);
     return { json, hash: createHash('sha256').update(json).digest('hex'), networks };
+  }
+
+  /** What a server's proxy serves, and the exact configuration it is (or will be) given. */
+  overview(serverId: string): { routes: ProxyRoute[]; config: string; inSync: boolean } {
+    const { json, hash } = this.render(serverId);
+    return { routes: this.desiredRoutes(serverId).routes, config: json, inSync: this.lastHash.get(serverId) === hash };
+  }
+
+  /** Load the configuration again even when nothing changed (after the proxy was restarted or edited by hand). */
+  async reload(serverId: string): Promise<void> {
+    this.lastHash.delete(serverId);
+    await this.requestSync(serverId);
   }
 
   /** Bring a server's proxy in line with the database. Coalesces concurrent requests. */

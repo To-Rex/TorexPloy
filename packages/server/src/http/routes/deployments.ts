@@ -1,13 +1,14 @@
 /**
- * Individual deployments: detail, live log, cancel, redeploy/rollback.
+ * Deployments: the team-wide list, and individual ones (detail, live log,
+ * cancel, redeploy/rollback).
  */
 import type { Hono } from 'hono';
-import { isTerminalDeployment } from '@ploy/shared';
+import { ACTIVE_DEPLOYMENT_STATUSES, deploymentListQuerySchema, isTerminalDeployment, type Page, type TeamDeploymentDto } from '@ploy/shared';
 import type { Context } from '../../context.ts';
 import { logPath, readLog } from '../../deploy/logs.ts';
 import { notFound } from '../../lib/errors.ts';
-import { audit, requireTeam, type Ctx, type Env } from '../core.ts';
-import { deploymentDto } from '../dto.ts';
+import { audit, query, requireTeam, type Ctx, type Env } from '../core.ts';
+import { deploymentDto, teamDeploymentDtos } from '../dto.ts';
 import { streamLog } from './applications.ts';
 
 export function registerDeploymentRoutes(app: Hono<Env>, ctx: Context): void {
@@ -20,9 +21,19 @@ export function registerDeploymentRoutes(app: Hono<Env>, ctx: Context): void {
     return { auth, deployment, application: stores.applications.get(deployment.applicationId) };
   };
 
+  /** Every deployment of the team, newest first. `status=active` matches the ones still in flight. */
+  app.get('/api/deployments', (c) => {
+    const auth = requireTeam(c);
+    const { cursor, limit, status } = query(c, deploymentListQuerySchema);
+    const statuses = status === undefined ? [] : status === 'active' ? ACTIVE_DEPLOYMENT_STATUSES : [status];
+    const page = stores.deployments.pageForTeam(auth.teamId, cursor, limit, statuses);
+    const body: Page<TeamDeploymentDto> = { items: teamDeploymentDtos(ctx, page.items), nextCursor: page.nextCursor };
+    return c.json(body);
+  });
+
   app.get('/api/deployments/:id', (c) => {
-    const { deployment, application } = load(c, 'viewer');
-    return c.json({ ...deploymentDto(deployment, application), applicationName: application?.name ?? '—' });
+    const { deployment } = load(c, 'viewer');
+    return c.json(teamDeploymentDtos(ctx, [deployment])[0]!);
   });
 
   /** Live log as Server-Sent Events: full replay, then follow until the deployment finishes. */

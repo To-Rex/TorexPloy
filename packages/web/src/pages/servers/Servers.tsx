@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Plus, Server as ServerIcon } from 'lucide-react';
 import { createServerSchema, type ServerDto } from '@ploy/shared';
+import { Frame } from '../../components/Frame.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
 import { usePageMeta } from '../../components/PageMeta.tsx';
 import { Status } from '../../components/Status.tsx';
@@ -32,17 +33,16 @@ export function ServersPage() {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div className="page-head__text">
-          <h1>{m.servers.title}</h1>
-          <p>{m.servers.subtitle}</p>
-        </div>
-        <div className="page-head__actions">
+      <Frame
+        icon={<ServerIcon />}
+        title={m.servers.title}
+        description={m.servers.subtitle}
+        actions={
           <Button variant="primary" icon={<Plus />} onClick={() => { setErrors({}); setAdding(true); }}>
             {m.servers.add}
           </Button>
-        </div>
-      </div>
+        }
+      >
       {servers.isPending ? (
         <SkeletonRows rows={2} />
       ) : (
@@ -72,6 +72,7 @@ export function ServersPage() {
           ))}
         </div>
       )}
+      </Frame>
       <Dialog
         open={adding}
         onClose={() => setAdding(false)}

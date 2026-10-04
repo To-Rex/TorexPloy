@@ -1,4 +1,5 @@
 export * from './constants.ts';
+export * from './dotenv.ts';
 export * from './dto.ts';
 export * from './errors.ts';
 export * from './events.ts';

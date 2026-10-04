@@ -48,14 +48,15 @@ function mapProject(row: Row): ProjectRecord {
   };
 }
 
+/** Pull request previews are not counted: they belong to their parent application. */
 const PROJECT_STATS = `
-  (SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id) AS app_count,
+  (SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id AND a.parent_application_id IS NULL) AS app_count,
   (SELECT COUNT(*) FROM services s WHERE s.project_id = p.id) AS service_count,
-  (SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id AND a.status = 'running')
+  (SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id AND a.parent_application_id IS NULL AND a.status = 'running')
     + (SELECT COUNT(*) FROM services s WHERE s.project_id = p.id AND s.status = 'running') AS running,
-  (SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id AND a.status IN ('failed','crashed'))
+  (SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id AND a.parent_application_id IS NULL AND a.status IN ('failed','crashed'))
     + (SELECT COUNT(*) FROM services s WHERE s.project_id = p.id AND s.status = 'failed') AS failed,
-  (SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id AND a.status IN ('queued','building','deploying')) AS building`;
+  (SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id AND a.parent_application_id IS NULL AND a.status IN ('queued','building','deploying')) AS building`;
 
 function mapProjectStats(row: Row): ProjectWithStats {
   return {
@@ -185,6 +186,28 @@ export interface ApplicationRecord {
   /** Sealed private key used to clone `git@` repositories; the public half is shown to the user. */
   deployKey: string | null;
   deployPublicKey: string | null;
+  /** One-click template the app was installed from. */
+  templateId: string | null;
+  /** Compose: the stored file (raw source). */
+  composeFile: string | null;
+  /** Compose: the file's path in the repository. */
+  composePath: string;
+  /** Compose: an admin allowed host-reaching features (privileged, host network, absolute binds). */
+  hostAccess: boolean;
+  /** Preview: the application whose pull request this one deploys. Previews are hidden from every list. */
+  parentApplicationId: string | null;
+  /** Preview: the pull request, and the head commit GitHub last reported for it. */
+  previewPrNumber: number | null;
+  previewPrTitle: string | null;
+  previewPrUrl: string | null;
+  previewPrAuthor: string | null;
+  previewHeadSha: string | null;
+  /** Preview: the pull request comment that carries its address. */
+  previewCommentId: number | null;
+  /** Parent: pull requests get previews, at most `previewLimit` at once, with `previewEnvSealed` (dotenv text) over its variables. */
+  previewsEnabled: boolean;
+  previewLimit: number;
+  previewEnvSealed: string | null;
   status: AppStatus;
   activeDeploymentId: string | null;
   configUpdatedAt: string;
@@ -226,6 +249,20 @@ function mapApplication(row: Row): ApplicationRecord {
     deployHookToken: strOrNull(row.deploy_hook_token),
     deployKey: strOrNull(row.deploy_key),
     deployPublicKey: strOrNull(row.deploy_public_key),
+    templateId: strOrNull(row.template_id),
+    composeFile: strOrNull(row.compose_file),
+    composePath: str(row.compose_path),
+    hostAccess: bool(row.host_access),
+    parentApplicationId: strOrNull(row.parent_application_id),
+    previewPrNumber: numOrNull(row.preview_pr_number),
+    previewPrTitle: strOrNull(row.preview_pr_title),
+    previewPrUrl: strOrNull(row.preview_pr_url),
+    previewPrAuthor: strOrNull(row.preview_pr_author),
+    previewHeadSha: strOrNull(row.preview_head_sha),
+    previewCommentId: numOrNull(row.preview_comment_id),
+    previewsEnabled: bool(row.previews_enabled),
+    previewLimit: num(row.preview_limit),
+    previewEnvSealed: strOrNull(row.preview_env_sealed),
     status: str(row.status) as AppStatus,
     activeDeploymentId: strOrNull(row.active_deployment_id),
     configUpdatedAt: str(row.config_updated_at),
@@ -260,17 +297,32 @@ const APP_COLUMNS = {
   healthCheckTimeoutSec: { column: 'health_check_timeout_sec', config: false },
   strategy: { column: 'strategy', config: false },
   autoDeploy: { column: 'auto_deploy', config: false },
+  composeFile: { column: 'compose_file', config: true },
+  composePath: { column: 'compose_path', config: true },
+  previewsEnabled: { column: 'previews_enabled', config: false },
+  previewLimit: { column: 'preview_limit', config: false },
 } as const;
 
 export type ApplicationPatch = Partial<Pick<ApplicationRecord, keyof typeof APP_COLUMNS>>;
+
+/** The pull request a preview deploys, as the webhook describes it. */
+export interface PullRequestInfo {
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  headSha: string;
+}
 
 export type NewApplication = Pick<
   ApplicationRecord,
   'projectId' | 'teamId' | 'serverId' | 'name' | 'kind' | 'sourceType' | 'githubInstallationId' | 'repository' | 'gitUrl' | 'branch' | 'image'
 > &
-  Partial<Pick<ApplicationRecord, 'buildType' | 'dockerfilePath' | 'rootDirectory' | 'installCommand' | 'buildCommand' | 'startCommand' | 'outputDirectory' | 'port'>> & {
+  Partial<Pick<ApplicationRecord, 'buildType' | 'dockerfilePath' | 'rootDirectory' | 'installCommand' | 'buildCommand' | 'startCommand' | 'outputDirectory' | 'port' | 'templateId' | 'composeFile' | 'composePath'>> & {
     slug: string;
     sealedHookToken: string;
+    /** Creates a pull request preview of `parentApplicationId`. */
+    preview?: PullRequestInfo & { parentApplicationId: string };
   };
 
 export class ApplicationStore {
@@ -287,8 +339,9 @@ export class ApplicationStore {
       `INSERT INTO applications (
          id, project_id, team_id, server_id, name, slug, kind, source_type, github_installation_id, repository, git_url, branch, image,
          build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, port,
-         deploy_hook_token, config_updated_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         deploy_hook_token, template_id, compose_file, compose_path, parent_application_id, preview_pr_number, preview_pr_title,
+         preview_pr_url, preview_pr_author, preview_head_sha, config_updated_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.projectId,
       input.teamId,
@@ -311,6 +364,15 @@ export class ApplicationStore {
       input.outputDirectory ?? null,
       input.port ?? null,
       input.sealedHookToken,
+      input.templateId ?? null,
+      input.composeFile ?? null,
+      input.composePath ?? 'docker-compose.yml',
+      input.preview?.parentApplicationId ?? null,
+      input.preview?.number ?? null,
+      input.preview?.title ?? null,
+      input.preview?.url ?? null,
+      input.preview?.author ?? null,
+      input.preview?.headSha ?? null,
       now,
       now,
       now,
@@ -328,12 +390,37 @@ export class ApplicationStore {
     return row === undefined ? undefined : mapApplication(row);
   }
 
+  /** The project's applications, without pull request previews (those are listed under their parent). */
   listForProject(projectId: string): ApplicationRecord[] {
-    return this.db.all('SELECT * FROM applications WHERE project_id = ? ORDER BY created_at', projectId).map(mapApplication);
+    return this.db.all('SELECT * FROM applications WHERE project_id = ? AND parent_application_id IS NULL ORDER BY created_at', projectId).map(mapApplication);
   }
 
+  /** The team's applications, without pull request previews. */
   listForTeam(teamId: string): ApplicationRecord[] {
-    return this.db.all('SELECT * FROM applications WHERE team_id = ? ORDER BY name', teamId).map(mapApplication);
+    return this.db.all('SELECT * FROM applications WHERE team_id = ? AND parent_application_id IS NULL ORDER BY name', teamId).map(mapApplication);
+  }
+
+  /** Pull request previews of an application, newest first. */
+  listPreviews(parentId: string): ApplicationRecord[] {
+    return this.db.all('SELECT * FROM applications WHERE parent_application_id = ? ORDER BY created_at DESC, id DESC', parentId).map(mapApplication);
+  }
+
+  findPreview(parentId: string, pullRequest: number): ApplicationRecord | undefined {
+    const row = this.db.get('SELECT * FROM applications WHERE parent_application_id = ? AND preview_pr_number = ?', parentId, pullRequest);
+    return row === undefined ? undefined : mapApplication(row);
+  }
+
+  /** Every preview of pull request `number` of `repository`, whichever parent made it. */
+  previewsForPullRequest(installationId: number, repository: string, number: number): ApplicationRecord[] {
+    return this.db
+      .all(
+        `SELECT * FROM applications
+          WHERE parent_application_id IS NOT NULL AND github_installation_id = ? AND lower(repository) = lower(?) AND preview_pr_number = ?`,
+        installationId,
+        repository,
+        number,
+      )
+      .map(mapApplication);
   }
 
   listForServer(serverId: string): ApplicationRecord[] {
@@ -344,15 +431,30 @@ export class ApplicationStore {
     return this.db.all('SELECT * FROM applications').map(mapApplication);
   }
 
-  /** Applications that deploy automatically on a push to `repository@branch`. */
+  /** Applications that deploy automatically on a push to `repository@branch`. Previews deploy from pull request events instead. */
   findForPush(installationId: number, repository: string, branch: string): ApplicationRecord[] {
     return this.db
       .all(
         `SELECT * FROM applications
-          WHERE source_type = 'github' AND github_installation_id = ? AND lower(repository) = lower(?) AND branch = ? AND auto_deploy = 1`,
+          WHERE source_type = 'github' AND github_installation_id = ? AND lower(repository) = lower(?) AND branch = ? AND auto_deploy = 1
+            AND parent_application_id IS NULL`,
         installationId,
         repository,
         branch,
+      )
+      .map(mapApplication);
+  }
+
+  /** Web applications that preview pull requests into `repository@baseBranch`. */
+  findForPullRequest(installationId: number, repository: string, baseBranch: string): ApplicationRecord[] {
+    return this.db
+      .all(
+        `SELECT * FROM applications
+          WHERE source_type = 'github' AND github_installation_id = ? AND lower(repository) = lower(?) AND branch = ? AND kind = 'web'
+            AND previews_enabled = 1 AND parent_application_id IS NULL`,
+        installationId,
+        repository,
+        baseBranch,
       )
       .map(mapApplication);
   }
@@ -396,6 +498,10 @@ export class ApplicationStore {
     this.db.run('UPDATE applications SET config_updated_at = ? WHERE project_id = ?', nowIso(), projectId);
   }
 
+  setHostAccess(id: string, allowed: boolean): void {
+    this.db.run('UPDATE applications SET host_access = ?, updated_at = ? WHERE id = ?', int01(allowed), nowIso(), id);
+  }
+
   setStatus(id: string, status: AppStatus): void {
     this.db.run('UPDATE applications SET status = ?, updated_at = ? WHERE id = ?', status, nowIso(), id);
   }
@@ -410,6 +516,28 @@ export class ApplicationStore {
 
   setHookToken(id: string, sealed: string): void {
     this.db.run('UPDATE applications SET deploy_hook_token = ? WHERE id = ?', sealed, id);
+  }
+
+  /** Sealed `.env` text applied to every preview of this application; null for none. */
+  setPreviewEnv(id: string, sealed: string | null): void {
+    this.db.run('UPDATE applications SET preview_env_sealed = ?, updated_at = ? WHERE id = ?', sealed, nowIso(), id);
+  }
+
+  /** A preview's pull request changed (new commits, retitled). */
+  updatePullRequest(id: string, pullRequest: PullRequestInfo): void {
+    this.db.run(
+      'UPDATE applications SET preview_pr_title = ?, preview_pr_url = ?, preview_pr_author = ?, preview_head_sha = ?, updated_at = ? WHERE id = ?',
+      pullRequest.title,
+      pullRequest.url,
+      pullRequest.author,
+      pullRequest.headSha,
+      nowIso(),
+      id,
+    );
+  }
+
+  setPreviewComment(id: string, commentId: number | null): void {
+    this.db.run('UPDATE applications SET preview_comment_id = ? WHERE id = ?', commentId, id);
   }
 
   delete(id: string): void {
@@ -553,6 +681,28 @@ export class DeploymentStore {
           after.id,
           limit + 1,
         );
+    return toPage(rows.map(mapDeployment), limit);
+  }
+
+  /** Every deployment of a team, newest first; `statuses` narrows the list (empty: all). */
+  pageForTeam(
+    teamId: string,
+    cursor: string | undefined,
+    limit: number,
+    statuses: readonly DeploymentStatus[] = [],
+  ): { items: DeploymentRecord[]; nextCursor: string | null } {
+    const after = decodeCursor(cursor);
+    const where = ['d.team_id = ?'];
+    const params: (string | number)[] = [teamId];
+    if (statuses.length > 0) {
+      where.push(`d.status IN (${statuses.map(() => '?').join(', ')})`);
+      params.push(...statuses);
+    }
+    if (after !== null) {
+      where.push('(d.created_at, d.id) < (?, ?)');
+      params.push(after.createdAt, after.id);
+    }
+    const rows = this.db.all(`${DEPLOYMENT_SELECT} WHERE ${where.join(' AND ')} ORDER BY d.created_at DESC, d.id DESC LIMIT ?`, ...params, limit + 1);
     return toPage(rows.map(mapDeployment), limit);
   }
 

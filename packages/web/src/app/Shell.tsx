@@ -1,30 +1,76 @@
 /**
- * The authenticated application frame: sidebar, top bar with breadcrumbs,
- * command palette and the realtime connection.
+ * The authenticated application frame, laid out the way Dokploy does it: a
+ * grouped sidebar (home pages, then settings) that folds into an icon rail,
+ * a top bar with the rail toggle, breadcrumbs and search, the command
+ * palette and the realtime connection.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronRight, ChevronsUpDown, FolderKanban, LayoutDashboard, LogOut, Menu as MenuIcon, Plus, Search, Server, Settings, UserRound } from 'lucide-react';
-import { LOCALES, THEMES, type BootstrapDto } from '@ploy/shared';
+import {
+  Activity,
+  BellRing,
+  CalendarClock,
+  Check,
+  ChevronRight,
+  ChevronsUpDown,
+  CloudUpload,
+  Container,
+  FolderKanban,
+  GitBranch,
+  Globe,
+  KeyRound,
+  LogOut,
+  Menu as MenuIcon,
+  Network,
+  Package,
+  PanelLeft,
+  Plus,
+  Rocket,
+  ScrollText,
+  Search,
+  Server,
+  Shield,
+  UserRound,
+  Users,
+} from 'lucide-react';
+import { LOCALES, THEMES, roleAtLeast, type BootstrapDto } from '@ploy/shared';
 import { CommandPalette, usePaletteShortcut } from '../components/CommandPalette.tsx';
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/Menu.tsx';
 import { useCrumbsValue } from '../components/PageMeta.tsx';
 import { Avatar, BrandMark, Button, Kbd, Segmented } from '../components/ui.tsx';
 import { LOCALE_NAMES, useI18n } from '../i18n/index.tsx';
 import { api } from '../lib/api.ts';
-import { useProjects } from '../lib/queries.ts';
 import { useRealtime } from '../lib/realtime.ts';
 import { useTheme } from '../lib/theme.tsx';
 import { NewProjectDialog } from '../pages/projects/NewProjectDialog.tsx';
 import { useToast } from '../components/Toast.tsx';
 
-const PROJECT_COLORS = ['#2746C7', '#0C9A8A', '#D18A00', '#C73340', '#7A4FD0', '#2F7FC1', '#B85C38', '#4F8A3C'];
+const PROJECT_COLORS = ['#2563EB', '#16A34A', '#D97706', '#DC2626', '#7C3AED', '#0891B2', '#C2410C', '#4D7C0F'];
 
 export function projectColor(id: string): string {
   let hash = 0;
   for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return PROJECT_COLORS[hash % PROJECT_COLORS.length]!;
+}
+
+const RAIL_KEY = 'ploy.sidebar';
+
+function readRail(): boolean {
+  try {
+    return localStorage.getItem(RAIL_KEY) === 'rail';
+  } catch {
+    return false;
+  }
+}
+
+function SideLink({ to, icon, label, end = false }: { to: string; icon: ReactNode; label: string; end?: boolean }) {
+  return (
+    <NavLink className="nav-link" to={to} end={end} title={label}>
+      {icon}
+      <span className="nav-link__label">{label}</span>
+    </NavLink>
+  );
 }
 
 export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
@@ -35,16 +81,28 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
   const navigate = useNavigate();
   const location = useLocation();
   const crumbs = useCrumbsValue();
-  const projects = useProjects();
   const live = useRealtime(bootstrap.currentTeamId);
   const [drawer, setDrawer] = useState(false);
+  const [rail, setRail] = useState(readRail);
   const [palette, setPalette] = useState(false);
   const [newProject, setNewProject] = useState(false);
   const user = bootstrap.user!;
   const team = bootstrap.teams.find((candidate) => candidate.id === bootstrap.currentTeamId) ?? bootstrap.teams[0];
+  const admin = team !== undefined && roleAtLeast(team.role, 'admin');
+  const mac = navigator.platform.includes('Mac');
 
   usePaletteShortcut(useCallback(() => setPalette(true), []));
   useEffect(() => setDrawer(false), [location.pathname]);
+
+  const toggleRail = () =>
+    setRail((current) => {
+      try {
+        localStorage.setItem(RAIL_KEY, current ? 'full' : 'rail');
+      } catch {
+        // Private windows: the choice lasts for this page only.
+      }
+      return !current;
+    });
 
   const persist = (patch: { locale?: string; theme?: string }) => void api.patch('/api/me', patch).catch(() => undefined);
 
@@ -65,7 +123,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
   };
 
   return (
-    <div className="shell" data-drawer={drawer ? 'open' : undefined}>
+    <div className="shell" data-drawer={drawer ? 'open' : undefined} data-rail={rail ? '' : undefined}>
       <a className="skip-link" href="#main">
         {m.nav.skipToContent}
       </a>
@@ -75,11 +133,11 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
             align="start"
             label={m.nav.teams}
             trigger={(props) => (
-              <button className="team-switch" type="button" {...props} aria-label={m.nav.switchTeam}>
+              <button className="team-switch" type="button" {...props} aria-label={m.nav.switchTeam} title={team?.name}>
                 <BrandMark />
                 <span className="team-switch__text">
-                  <span className="team-switch__name">{team?.name ?? 'TorexPloy'}</span>
-                  <span className="team-switch__role">{team === undefined ? '' : m.roles[team.role]}</span>
+                  <span className="team-switch__name">TorexPloy</span>
+                  <span className="team-switch__role">{team?.name ?? ''}</span>
                 </span>
                 <ChevronsUpDown aria-hidden="true" />
               </button>
@@ -88,7 +146,10 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
             <MenuLabel>{m.nav.teams}</MenuLabel>
             {bootstrap.teams.map((candidate) => (
               <MenuItem key={candidate.id} icon={candidate.id === team?.id ? <Check /> : <span style={{ width: 15 }} />} onSelect={() => void switchTeam(candidate.id)}>
-                {candidate.name}
+                <span className="menu__rich">
+                  <span>{candidate.name}</span>
+                  <small>{m.roles[candidate.role]}</small>
+                </span>
               </MenuItem>
             ))}
             <MenuSeparator />
@@ -96,54 +157,40 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
               {m.nav.createTeam}
             </MenuItem>
           </Menu>
-          <button type="button" className="search-trigger" onClick={() => setPalette(true)}>
-            <Search aria-hidden="true" />
-            <span>{m.nav.search}</span>
-            <Kbd>{navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl K'}</Kbd>
-          </button>
         </div>
 
-        <nav className="sidebar__nav">
-          <NavLink className="nav-link" to="/" end>
-            <LayoutDashboard aria-hidden="true" />
-            {m.nav.overview}
-          </NavLink>
-          <NavLink className="nav-link" to="/projects" end>
-            <FolderKanban aria-hidden="true" />
-            {m.nav.projects}
-            {projects.data !== undefined && <span className="nav-link__count">{projects.data.length}</span>}
-          </NavLink>
-          <NavLink className="nav-link" to="/servers">
-            <Server aria-hidden="true" />
-            {m.nav.servers}
-          </NavLink>
-          <NavLink className="nav-link" to="/settings">
-            <Settings aria-hidden="true" />
-            {m.nav.settings}
-          </NavLink>
-        </nav>
-
-        <div className="sidebar__group">
-          <div className="sidebar__group-title">
-            <span>{m.nav.projectsGroup}</span>
-            <Button variant="ghost" size="sm" iconOnly icon={<Plus />} onClick={() => setNewProject(true)}>
-              {m.nav.newProject}
-            </Button>
+        <nav className="sidebar__scroll">
+          <div className="sidebar__group">
+            <div className="sidebar__label">{m.nav.groupHome}</div>
+            <SideLink to="/projects" icon={<FolderKanban aria-hidden="true" />} label={m.nav.projects} />
+            <SideLink to="/deployments" icon={<Rocket aria-hidden="true" />} label={m.nav.deployments} />
+            <SideLink to="/monitoring" icon={<Activity aria-hidden="true" />} label={m.nav.monitoring} />
+            <SideLink to="/schedules" icon={<CalendarClock aria-hidden="true" />} label={m.nav.schedules} />
+            {admin && <SideLink to="/docker" icon={<Container aria-hidden="true" />} label={m.nav.docker} />}
+            {admin && <SideLink to="/proxy" icon={<Network aria-hidden="true" />} label={m.nav.proxy} />}
           </div>
-          {(projects.data ?? []).slice(0, 30).map((project) => (
-            <NavLink key={project.id} to={`/projects/${project.id}`} className="sidebar__project">
-              <span className="project-dot" style={{ ['--project-color' as string]: projectColor(project.id) }} aria-hidden="true" />
-              <span className="truncate">{project.name}</span>
-            </NavLink>
-          ))}
-        </div>
+          <div className="sidebar__group">
+            <div className="sidebar__label">{m.nav.groupSettings}</div>
+            {user.isInstanceAdmin && <SideLink to="/settings/platform" icon={<Globe aria-hidden="true" />} label={m.settings.nav.platform} />}
+            <SideLink to="/servers" icon={<Server aria-hidden="true" />} label={m.nav.servers} />
+            <SideLink to="/settings/profile" icon={<UserRound aria-hidden="true" />} label={m.settings.nav.profile} />
+            <SideLink to="/settings/security" icon={<Shield aria-hidden="true" />} label={m.settings.nav.security} />
+            <SideLink to="/settings/team" icon={<Users aria-hidden="true" />} label={m.settings.nav.team} />
+            <SideLink to="/settings/git" icon={<GitBranch aria-hidden="true" />} label={m.settings.nav.git} />
+            {admin && <SideLink to="/settings/registries" icon={<Package aria-hidden="true" />} label={m.settings.nav.registries} />}
+            {admin && <SideLink to="/settings/storage" icon={<CloudUpload aria-hidden="true" />} label={m.settings.nav.storage} />}
+            {admin && <SideLink to="/settings/notifications" icon={<BellRing aria-hidden="true" />} label={m.settings.nav.notifications} />}
+            <SideLink to="/settings/tokens" icon={<KeyRound aria-hidden="true" />} label={m.settings.nav.tokens} />
+            {admin && <SideLink to="/settings/audit" icon={<ScrollText aria-hidden="true" />} label={m.settings.nav.audit} />}
+          </div>
+        </nav>
 
         <div className="sidebar__foot">
           <Menu
             align="start"
             label={m.nav.profile}
             trigger={(props) => (
-              <button className="user-button" type="button" {...props}>
+              <button className="user-button" type="button" {...props} title={user.name}>
                 <Avatar name={user.name} src={user.avatarUrl} />
                 <span className="user-button__text">
                   <span className="user-button__name">{user.name}</span>
@@ -187,15 +234,20 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
               {m.nav.signOut}
             </MenuItem>
           </Menu>
+          <div className="sidebar__version">TorexPloy v{bootstrap.version}</div>
         </div>
       </aside>
       <div className="drawer-backdrop" onClick={() => setDrawer(false)} aria-hidden="true" />
 
       <div className="main">
         <header className="topbar">
-          <Button className="topbar__menu" variant="ghost" iconOnly icon={<MenuIcon />} onClick={() => setDrawer(true)}>
+          <Button className="topbar__menu" variant="ghost" size="sm" iconOnly icon={<MenuIcon />} onClick={() => setDrawer(true)}>
             {m.nav.menu}
           </Button>
+          <Button className="topbar__rail" variant="ghost" size="sm" iconOnly icon={<PanelLeft />} onClick={toggleRail} aria-pressed={rail}>
+            {m.nav.toggleSidebar}
+          </Button>
+          <span className="topbar__sep" aria-hidden="true" />
           <nav className="crumbs" aria-label="breadcrumb">
             {crumbs.map((crumb, index) => {
               const last = index === crumbs.length - 1;
@@ -215,8 +267,13 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
               );
             })}
           </nav>
+          <button type="button" className="search-trigger" onClick={() => setPalette(true)}>
+            <Search aria-hidden="true" />
+            <span>{m.nav.search}</span>
+            <Kbd>{mac ? '⌘K' : 'Ctrl K'}</Kbd>
+          </button>
           <span className="live-indicator" data-state={live} title={live === 'open' ? m.nav.live : m.nav.reconnecting}>
-            {live === 'open' ? m.nav.live : live === 'reconnecting' ? m.nav.reconnecting : ''}
+            <span className="live-indicator__text">{live === 'open' ? m.nav.live : live === 'reconnecting' ? m.nav.reconnecting : ''}</span>
           </span>
         </header>
         <main id="main" tabIndex={-1} style={{ outline: 'none' }}>

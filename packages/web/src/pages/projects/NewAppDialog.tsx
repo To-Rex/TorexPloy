@@ -1,21 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
-import { Boxes, Container, GitBranch, Lock, Search, Workflow } from 'lucide-react';
-import { createApplicationSchema, type ApplicationDto, type AppKind, type CreateApplicationInput } from '@ploy/shared';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { Boxes, Container, GitBranch, Workflow } from 'lucide-react';
+import { createApplicationSchema, type ApplicationDto, type CreateApplicationInput } from '@ploy/shared';
 import { CopyButton } from '../../components/Copy.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
-import { Button, Callout, Field, GithubMark, Input, Select } from '../../components/ui.tsx';
+import { RepoPicker } from '../../components/RepoPicker.tsx';
+import { Button, Field, GithubMark, Input, Select } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
-import { keys, useBranches, useGithub, useRepositories, useServers } from '../../lib/queries.ts';
+import { keys, useGithub, useServers } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 
 type SourceKind = 'github' | 'git' | 'image';
 
 export function NewAppDialog({ projectId, open, onClose }: { projectId: string; open: boolean; onClose: () => void }) {
-  const { m, formatRelative } = useI18n();
+  const { m } = useI18n();
   const navigate = useNavigate();
   const github = useGithub();
   const servers = useServers();
@@ -23,7 +24,6 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
 
   const [source, setSource] = useState<SourceKind>('github');
   const [installationId, setInstallationId] = useState<number | null>(null);
-  const [search, setSearch] = useState('');
   const [repository, setRepository] = useState<string | null>(null);
   const [branch, setBranch] = useState('');
   const [gitUrl, setGitUrl] = useState('');
@@ -31,19 +31,13 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
   const [serverId, setServerId] = useState('');
-  const [kind, setKind] = useState<AppKind>('web');
+  const [kind, setKind] = useState<'web' | 'worker'>('web');
   const [rootDirectory, setRootDirectory] = useState('');
   const [port, setPort] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [created, setCreated] = useState<{ app: ApplicationDto; publicKey: string | null } | null>(null);
 
-  const repositories = useRepositories(source === 'github' ? installationId : null);
-  const branches = useBranches(installationId, repository);
-
-  useEffect(() => {
-    if (installationId === null && installations.length > 0) setInstallationId(installations[0]!.id);
-  }, [installations, installationId]);
   useEffect(() => {
     if (serverId === '' && servers.data !== undefined && servers.data.length > 0) {
       setServerId((servers.data.find((server) => server.status === 'ready') ?? servers.data[0]!).id);
@@ -58,10 +52,6 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
     if (!nameTouched) setName(value.split('/').pop()?.replace(/\.git$/, '').replace(/[:@].*$/, '') ?? '');
   };
 
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return (repositories.data ?? []).filter((repo) => repo.fullName.toLowerCase().includes(needle)).slice(0, 100);
-  }, [repositories.data, search]);
 
   const reset = () => {
     setRepository(null);
@@ -74,7 +64,6 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
     setPort('');
     setErrors({});
     setCreated(null);
-    setSearch('');
   };
 
   const close = () => {
@@ -152,7 +141,6 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
     );
   }
 
-  const sourceError = errors['source.repository'] ?? errors['source.installationId'];
   return (
     <Dialog
       open={open}
@@ -200,80 +188,20 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
           </div>
         </div>
 
-        {source === 'github' &&
-          (installations.length === 0 ? (
-            <Callout
-              tone="info"
-              title={m.newApp.noInstallationsTitle}
-              action={
-                <Link className="btn btn--sm" to="/settings/git" onClick={close} style={{ textDecoration: 'none' }}>
-                  {m.newApp.connectGithub}
-                </Link>
-              }
-            >
-              {m.newApp.noInstallationsText}
-            </Callout>
-          ) : (
-            <>
-              {installations.length > 1 && (
-                <Field label={m.newApp.account}>
-                  <Select value={installationId ?? ''} onChange={(event) => { setInstallationId(Number(event.target.value)); setRepository(null); }}>
-                    {installations.map((installation) => (
-                      <option key={installation.id} value={installation.id}>
-                        {installation.accountLogin}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-              <div className="field">
-                <span className="field__label">{m.newApp.repository}</span>
-                <label className="input" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Search width={15} height={15} className="faint" aria-hidden="true" />
-                  <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={m.newApp.searchRepositories} style={{ border: 0, outline: 0, background: 'transparent', flex: 1, minWidth: 0 }} aria-label={m.newApp.searchRepositories} />
-                </label>
-                <div className="repo-list" role="listbox" aria-label={m.newApp.repository}>
-                  {repositories.isPending ? (
-                    <p className="faint" style={{ padding: 12 }}>{m.newApp.loadingRepositories}</p>
-                  ) : filtered.length === 0 ? (
-                    <p className="faint" style={{ padding: 12 }}>{m.newApp.noRepositories}</p>
-                  ) : (
-                    filtered.map((repo) => (
-                      <button
-                        key={repo.id}
-                        type="button"
-                        role="option"
-                        className="repo-option"
-                        aria-selected={repository === repo.fullName}
-                        onClick={() => {
-                          setRepository(repo.fullName);
-                          setBranch(repo.defaultBranch);
-                          suggestName(repo.fullName);
-                        }}
-                      >
-                        {repo.private ? <Lock width={14} height={14} className="faint" aria-hidden="true" /> : <GitBranch width={14} height={14} className="faint" aria-hidden="true" />}
-                        <span className="grow truncate" style={{ fontWeight: 540 }}>{repo.fullName}</span>
-                        {repo.language !== null && <span className="faint" style={{ fontSize: 'var(--text-sm)' }}>{repo.language}</span>}
-                        {repo.updatedAt !== null && <span className="faint" style={{ fontSize: 'var(--text-sm)' }}>{formatRelative(repo.updatedAt)}</span>}
-                      </button>
-                    ))
-                  )}
-                </div>
-                {sourceError !== undefined && <p className="field__error">{sourceError}</p>}
-              </div>
-              {repository !== null && (
-                <Field label={m.newApp.branch} error={errors['source.branch']}>
-                  <Select value={branch} onChange={(event) => setBranch(event.target.value)}>
-                    {(branches.data ?? [branch]).map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-            </>
-          ))}
+        {source === 'github' && (
+          <RepoPicker
+            installations={installations}
+            value={{ installationId, repository, branch }}
+            onChange={(next) => {
+              setInstallationId(next.installationId);
+              if (next.repository !== null && next.repository !== repository) suggestName(next.repository);
+              setRepository(next.repository);
+              setBranch(next.branch);
+            }}
+            onConnect={close}
+            errors={errors}
+          />
+        )}
 
         {source === 'git' && (
           <div className="form-grid" style={{ gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)' }}>

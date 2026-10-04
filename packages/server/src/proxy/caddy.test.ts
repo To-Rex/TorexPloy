@@ -31,7 +31,7 @@ function upstream(name: string): Promise<{ server: Server; port: number }> {
   return new Promise((resolve) => {
     const server = createServer((req, res) => {
       res.setHeader('content-type', 'text/plain');
-      res.end(`${name} ${req.headers['x-forwarded-host'] ?? ''}`);
+      res.end(`${name} ${req.headers['x-forwarded-host'] ?? ''} ${req.url}`);
     });
     server.listen(0, '127.0.0.1', () => {
       const address = server.address();
@@ -41,9 +41,9 @@ function upstream(name: string): Promise<{ server: Server; port: number }> {
 }
 
 /** `fetch` refuses to override Host, so virtual-host routing needs node:http. */
-function get(port: number, host: string): Promise<{ status: number; body: string; location: string | null }> {
+function get(port: number, host: string, path = '/some/path?q=1'): Promise<{ status: number; body: string; location: string | null }> {
   return new Promise((resolve, reject) => {
-    const req = request({ host: '127.0.0.1', port, path: '/some/path?q=1', headers: { host }, agent: false }, (res) => {
+    const req = request({ host: '127.0.0.1', port, path, headers: { host }, agent: false }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk: string) => {
@@ -162,6 +162,85 @@ test('real Caddy accepts the generated config and routes, balances and hot-reloa
     caddy.kill('SIGTERM');
     one.server.close();
     two.server.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('path prefixes are ordered most-specific first, and redirect routes keep path and query', () => {
+  const config = buildCaddyConfig({
+    acmeEmail: 'ops@example.com',
+    routes: [
+      { host: 'shop.example.uz', https: true, upstreams: ['web:3000'], label: 'Web' },
+      { host: 'shop.example.uz', path: '/api', stripPath: true, https: true, upstreams: ['api:8080'], label: 'API' },
+      { host: 'www.shop.example.uz', https: true, upstreams: [], label: 'Web', redirectTo: 'https://shop.example.uz' },
+    ],
+  });
+  const https = (config.apps as { http: { servers: { https: { routes: { match?: Record<string, string[]>[]; handle: Record<string, unknown>[] }[] } } } }).http.servers.https;
+  assert.deepEqual(https.routes[0]!.match, [{ host: ['shop.example.uz'], path: ['/api', '/api/*'] }], '/api is matched before the catch-all /');
+  assert.deepEqual(https.routes[0]!.handle[1], { handler: 'rewrite', strip_path_prefix: '/api' });
+  assert.deepEqual(https.routes[1]!.match, [{ host: ['shop.example.uz'] }]);
+  assert.deepEqual(https.routes[2]!.handle[1], { handler: 'static_response', status_code: 308, headers: { Location: ['https://shop.example.uz{http.request.uri}'] } });
+  const subjects = (config.apps as { tls: { automation: { policies: { subjects: string[] }[] } } }).tls.automation.policies[0]!.subjects;
+  assert.deepEqual(subjects, ['shop.example.uz', 'www.shop.example.uz'], 'one certificate per host, however many paths');
+});
+
+test('real Caddy routes path prefixes, strips them, and redirects with path and query intact', async (t) => {
+  const binary = caddyBinary();
+  if (binary === null) {
+    t.skip('caddy binary not available (set PLOY_TEST_CADDY)');
+    return;
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'ploy-caddy-paths-'));
+  const web = await upstream('web');
+  const api = await upstream('api');
+  const docs = await upstream('docs');
+  const [httpPort, httpsPort, adminPort] = await Promise.all([freePort(), freePort(), freePort()]);
+  const config = buildCaddyConfig({
+    acmeEmail: null,
+    httpPort,
+    httpsPort,
+    routes: [
+      { host: 'shop.test', https: false, upstreams: [`127.0.0.1:${web.port}`], label: 'Web' },
+      { host: 'shop.test', path: '/api', stripPath: true, https: false, upstreams: [`127.0.0.1:${api.port}`], label: 'API' },
+      { host: 'shop.test', path: '/docs', https: false, upstreams: [`127.0.0.1:${docs.port}`], label: 'Docs' },
+      { host: 'www.shop.test', https: false, upstreams: [], label: 'Web', redirectTo: 'http://shop.test' },
+    ],
+  });
+  (config.admin as { listen: string }).listen = `localhost:${adminPort}`;
+  (config.admin as { config: { persist: boolean } }).config.persist = false;
+  const configPath = join(dir, 'caddy.json');
+  writeFileSync(configPath, JSON.stringify(config));
+  const caddy = spawn(binary, ['run', '--config', configPath], { stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, HOME: dir, XDG_DATA_HOME: dir, XDG_CONFIG_HOME: dir } });
+  let stderr = '';
+  caddy.stderr.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  try {
+    let ready = false;
+    for (let attempt = 0; attempt < 50 && !ready; attempt += 1) {
+      try {
+        await get(httpPort, 'shop.test', '/');
+        ready = true;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    assert.ok(ready, `caddy did not start: ${stderr}`);
+
+    assert.match((await get(httpPort, 'shop.test', '/')).body, /^web shop\.test \/$/);
+    assert.match((await get(httpPort, 'shop.test', '/api/users?page=2')).body, /^api shop\.test \/users\?page=2$/, 'the /api prefix is stripped');
+    assert.match((await get(httpPort, 'shop.test', '/api')).body, /^api /, 'the bare prefix matches too');
+    assert.match((await get(httpPort, 'shop.test', '/apiary')).body, /^web /, '/apiary is not under /api');
+    assert.match((await get(httpPort, 'shop.test', '/docs/intro')).body, /^docs shop\.test \/docs\/intro$/, 'without strip the prefix is kept');
+
+    const redirect = await get(httpPort, 'www.shop.test', '/cart?item=7');
+    assert.equal(redirect.status, 308);
+    assert.equal(redirect.location, 'http://shop.test/cart?item=7');
+  } finally {
+    caddy.kill('SIGTERM');
+    web.server.close();
+    api.server.close();
+    docs.server.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });

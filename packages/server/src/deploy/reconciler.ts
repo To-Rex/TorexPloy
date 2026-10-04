@@ -49,6 +49,7 @@ export class Reconciler {
     if (app.status === status) return;
     this.ctx.stores.applications.setStatus(app.id, status);
     emit(this.ctx, app.teamId, { type: 'application.updated', id: app.id, projectId: app.projectId, status });
+    if (status === 'crashed') this.ctx.notifier.appCrashed(app);
   }
 
   private async run(serverId: string): Promise<void> {
@@ -66,6 +67,28 @@ export class Reconciler {
       if (deployer.isRunning(app.id)) continue;
       const open = stores.deployments.listOpen().some((deployment) => deployment.applicationId === app.id);
       const active = app.activeDeploymentId === null ? undefined : stores.deployments.get(app.activeDeploymentId);
+
+      if (app.kind === 'compose') {
+        // Compose owns its containers (restart policies come from the file); the reconciler only reports their state.
+        if (active === undefined || app.status === 'stopped' || open) continue;
+        const stack = containers.filter((container) => container.Labels[LABEL_APP] === app.id && container.Labels[LABEL_ROLE] === 'compose');
+        if (stack.length === 0) {
+          this.setAppStatus(app, 'failed');
+          continue;
+        }
+        let crashing = false;
+        for (const container of stack) {
+          const inspect = await docker.inspectContainer(container.Id);
+          if (inspect === null) continue;
+          const previous = this.restartCounts.get(container.Id);
+          this.restartCounts.set(container.Id, inspect.RestartCount);
+          const failedExit = !inspect.State.Running && inspect.State.ExitCode !== 0;
+          if (inspect.State.Restarting || (previous !== undefined && inspect.RestartCount > previous) || failedExit) crashing = true;
+        }
+        this.setAppStatus(app, crashing ? 'crashed' : 'running');
+        continue;
+      }
+
       const keep = new Set(active?.containers ?? []);
 
       // Debris from deployments that are not active.
@@ -128,7 +151,7 @@ export class Reconciler {
     // --------------------------------------------- orphans of deleted resources
     for (const container of containers) {
       const role = container.Labels[LABEL_ROLE];
-      const orphanApp = role === 'app' && !appIds.has(container.Labels[LABEL_APP] ?? '');
+      const orphanApp = (role === 'app' || role === 'compose') && !appIds.has(container.Labels[LABEL_APP] ?? '');
       const orphanService = role === 'service' && !serviceIds.has(container.Labels[LABEL_SERVICE] ?? '');
       const finishedCron = role === 'cron' && container.State === 'exited' && Date.now() / 1000 - container.Created > 3_600;
       if (orphanApp || orphanService || finishedCron) await docker.removeContainer(container.Id, { force: true }).catch(() => undefined);

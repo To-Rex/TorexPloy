@@ -94,6 +94,13 @@ export class ConnectionManager {
     return connection.session.exec(command, { timeoutMs });
   }
 
+  /** Like `shell`, feeding `stdin` to the command (text; binary payloads go base64-encoded). */
+  async shellWithInput(serverId: string, command: string, stdin: string, timeoutMs = 60_000): Promise<ProcessResult | null> {
+    const connection = await this.connection(serverId);
+    if (connection.session === null) return null;
+    return connection.session.exec(command, { timeoutMs, stdin });
+  }
+
   /** Drop a cached connection (server edited, deleted or re-verified). */
   async invalidate(serverId: string): Promise<void> {
     const pending = this.connections.get(serverId);

@@ -11,17 +11,23 @@ import {
   BRANCH_RE,
   BUILD_TYPES,
   DEPLOY_STRATEGIES,
+  DEPLOYMENT_STATUS_FILTERS,
   ENV_KEY_RE,
   HOSTNAME_RE,
   IMAGE_RE,
+  imageRegistryHost,
   LIMITS,
   LOCALES,
   MOUNT_PATH_RE,
+  normalizeRegistryAddress,
+  NOTIFICATION_EVENTS,
+  REGISTRY_HOST_RE,
   REPO_FULL_NAME_RE,
   SERVICE_TYPES,
   TEAM_ROLES,
   THEMES,
 } from './constants.ts';
+import { parseDotenv } from './dotenv.ts';
 
 // ---------------------------------------------------------------------------
 // Building blocks
@@ -225,6 +231,44 @@ export const sourceSchema = z.discriminatedUnion('type', [
 ]);
 export type SourceInput = z.infer<typeof sourceSchema>;
 
+/** A Docker Compose file as text; the server parses and validates its structure. */
+export const composeFileSchema = z
+  .string()
+  .max(LIMITS.composeFileMax)
+  .refine((value) => value.trim().length > 0, { message: 'The compose file is empty' });
+
+export const composeSourceSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('github'),
+    installationId: z.int().positive(),
+    repository: z.string().trim().regex(REPO_FULL_NAME_RE),
+    branch: branchSchema,
+  }),
+  z.object({ type: z.literal('git'), url: gitUrlSchema, branch: branchSchema }),
+  z.object({ type: z.literal('raw'), content: composeFileSchema }),
+]);
+export type ComposeSourceInput = z.infer<typeof composeSourceSchema>;
+
+export const createComposeSchema = z.object({
+  name: nameSchema,
+  serverId: z.string().min(1).max(64),
+  source: composeSourceSchema,
+  /** Path of the compose file inside the repository (ignored for a raw file). */
+  composePath: relativePathSchema.min(1).default('docker-compose.yml'),
+  /** Grant host-reaching features (privileged, host network, absolute binds). Admins only. */
+  allowHostAccess: z.boolean().default(false),
+});
+export type CreateComposeInput = z.input<typeof createComposeSchema>;
+
+export const updateComposeSchema = z
+  .object({
+    /** Replaces the stored file (raw source only). */
+    content: composeFileSchema,
+    composePath: relativePathSchema.min(1),
+  })
+  .partial();
+export type UpdateComposeInput = z.infer<typeof updateComposeSchema>;
+
 export const buildSettingsSchema = z.object({
   buildType: z.enum(BUILD_TYPES),
   dockerfilePath: relativePathSchema.min(1),
@@ -262,6 +306,24 @@ export const createApplicationSchema = z.object({
 });
 export type CreateApplicationInput = z.input<typeof createApplicationSchema>;
 
+/** Variables for pull request previews, as `.env` text (may be empty). */
+export const previewEnvSchema = z
+  .string()
+  .max(LIMITS.previewEnvMax)
+  .superRefine((value, ctx) => {
+    const { badLine } = parseDotenv(value);
+    if (badLine !== null) ctx.addIssue({ code: 'custom', message: `Line ${badLine} is not KEY=value`, params: { reason: 'invalid_line', line: badLine } });
+  });
+
+/** Pull request previews of a GitHub web application. */
+export const previewSettingsSchema = z.object({
+  previewsEnabled: z.boolean(),
+  /** Previews that may run at once; further pull requests wait until one closes. */
+  previewLimit: z.int().min(1).max(LIMITS.previewsMax),
+  /** Applied over the parent's variables in every preview. */
+  previewEnv: previewEnvSchema,
+});
+
 export const updateApplicationSchema = z
   .object({
     name: nameSchema,
@@ -270,6 +332,7 @@ export const updateApplicationSchema = z
   })
   .extend(buildSettingsSchema.shape)
   .extend(runtimeSettingsSchema.shape)
+  .extend(previewSettingsSchema.shape)
   .partial();
 export type UpdateApplicationInput = z.infer<typeof updateApplicationSchema>;
 
@@ -278,16 +341,40 @@ export const deployRequestSchema = z.object({
 });
 export type DeployRequestInput = z.infer<typeof deployRequestSchema>;
 
+/** A URL path prefix: `/`, `/api`, `/docs/v2` (no trailing slash, no wildcards or queries). */
+export const routePathSchema = z
+  .string()
+  .trim()
+  .max(200)
+  .regex(/^\/(?:[A-Za-z0-9._~%!$&'()+,;=:@-]+(?:\/[A-Za-z0-9._~%!$&'()+,;=:@-]+)*)?$/);
+
+/** Compose service names follow the Compose spec: lowercase letters, digits, `_`, `-`, `.`. */
+export const composeServiceSchema = z.string().trim().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/);
+
+/** Where a redirect domain sends requests: an origin, without a path. */
+export const redirectTargetSchema = z
+  .string()
+  .trim()
+  .max(260)
+  .regex(/^https?:\/\/[a-z0-9.-]+(?::\d{1,5})?$/i);
+
 export const createDomainSchema = z.object({
   host: hostnameSchema,
   https: z.boolean().default(true),
   port: portSchema.nullable().optional(),
+  path: routePathSchema.default('/'),
+  stripPath: z.boolean().default(false),
+  serviceName: composeServiceSchema.nullable().optional(),
+  redirectTo: redirectTargetSchema.nullable().optional(),
 });
 export type CreateDomainInput = z.input<typeof createDomainSchema>;
 
 export const updateDomainSchema = z.object({
   https: z.boolean().optional(),
   port: portSchema.nullable().optional(),
+  stripPath: z.boolean().optional(),
+  serviceName: composeServiceSchema.nullable().optional(),
+  redirectTo: redirectTargetSchema.nullable().optional(),
 });
 export type UpdateDomainInput = z.infer<typeof updateDomainSchema>;
 
@@ -342,9 +429,127 @@ export const updateServiceSchema = z
     memoryLimitMb: z.int().min(LIMITS.memoryMbMin).max(LIMITS.memoryMbMax).nullable(),
     backupSchedule: z.string().trim().min(9).max(120).nullable(),
     backupRetention: z.int().min(1).max(365),
+    /** S3 destination that receives a copy of every backup; null keeps them on the server only. */
+    backupDestinationId: z.string().min(1).max(64).nullable(),
   })
   .partial();
 export type UpdateServiceInput = z.infer<typeof updateServiceSchema>;
+
+// ---------------------------------------------------------------------------
+// S3 backup destinations
+// ---------------------------------------------------------------------------
+
+export const createS3DestinationSchema = z.object({
+  name: nameSchema,
+  endpoint: z.string().trim().max(300).pipe(z.url({ protocol: /^https?$/ })),
+  /** `us-east-1`, `eu-central-1`; Cloudflare R2 uses `auto`. */
+  region: z.string().trim().min(1).max(64).regex(/^[a-z0-9-]+$/),
+  bucket: z.string().trim().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/),
+  pathPrefix: z.string().trim().max(200).regex(/^[A-Za-z0-9!_.*'()/-]*$/).default(''),
+  accessKeyId: z.string().trim().min(1).max(256),
+  secretAccessKey: z.string().min(1).max(512),
+  forcePathStyle: z.boolean().default(false),
+});
+export type CreateS3DestinationInput = z.input<typeof createS3DestinationSchema>;
+
+/** Every field optional; an omitted secret keeps the stored one. */
+export const updateS3DestinationSchema = createS3DestinationSchema.partial();
+export type UpdateS3DestinationInput = z.infer<typeof updateS3DestinationSchema>;
+
+export const installTemplateSchema = z.object({
+  templateId: z.string().trim().min(1).max(64),
+  name: nameSchema.optional(),
+  serverId: z.string().min(1).max(64),
+  /** A domain the user already pointed at the server; otherwise one is generated. */
+  domain: hostnameSchema.optional(),
+});
+export type InstallTemplateInput = z.infer<typeof installTemplateSchema>;
+
+// ---------------------------------------------------------------------------
+// Container registries
+// ---------------------------------------------------------------------------
+
+/**
+ * A registry host as Docker names it (`ghcr.io`, `registry.example.uz:5000`).
+ * A pasted `https://…/` is stripped and Docker Hub aliases become `docker.io`.
+ * Only hosts an image reference can actually name are accepted: a bare word
+ * such as `myregistry` would be read by Docker as a Docker Hub namespace.
+ */
+export const registryAddressSchema = z
+  .string()
+  .max(300)
+  .transform(normalizeRegistryAddress)
+  .pipe(
+    z
+      .string()
+      .min(1)
+      .max(260)
+      .regex(REGISTRY_HOST_RE)
+      .refine((host) => imageRegistryHost(`${host}/image`) === host, { message: 'Use a registry host such as ghcr.io or registry.example.uz:5000' }),
+  );
+
+export const createRegistrySchema = z.object({
+  name: nameSchema,
+  serverAddress: registryAddressSchema,
+  username: z.string().trim().min(1).max(200),
+  /** A password or an access token. */
+  password: z.string().min(1).max(4_096),
+});
+export type CreateRegistryInput = z.input<typeof createRegistrySchema>;
+
+/** Every field optional; an omitted password keeps the stored one. */
+export const updateRegistrySchema = createRegistrySchema.partial();
+export type UpdateRegistryInput = z.infer<typeof updateRegistrySchema>;
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+const httpsUrl = (hosts: RegExp) =>
+  z
+    .string()
+    .trim()
+    .max(500)
+    .pipe(z.url({ protocol: /^https$/, hostname: hosts }));
+
+export const notificationConfigSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('telegram'),
+    /** From @BotFather: `123456789:AA…`. */
+    botToken: z.string().trim().regex(/^\d{5,}:[A-Za-z0-9_-]{30,}$/),
+    /** A user or group id (groups are negative) or a public channel `@name`. */
+    chatId: z.string().trim().regex(/^(-?\d{3,20}|@[A-Za-z][A-Za-z0-9_]{4,31})$/),
+  }),
+  z.object({ kind: z.literal('discord'), url: httpsUrl(/^(discord\.com|discordapp\.com|ptb\.discord\.com|canary\.discord\.com)$/) }),
+  z.object({ kind: z.literal('slack'), url: httpsUrl(/^hooks\.slack\.com$/) }),
+  z.object({
+    kind: z.literal('webhook'),
+    url: z.string().trim().max(500).pipe(z.url({ protocol: /^https?$/ })),
+    /** Optional shared secret: requests carry `X-Ploy-Signature: sha256=<hmac>`. */
+    secret: z.string().trim().min(16).max(200).optional(),
+  }),
+]);
+export type NotificationConfigInput = z.infer<typeof notificationConfigSchema>;
+
+export const createNotificationChannelSchema = z.object({
+  name: nameSchema,
+  locale: z.enum(LOCALES).default('uz'),
+  events: z.array(z.enum(NOTIFICATION_EVENTS)).min(1).max(NOTIFICATION_EVENTS.length),
+  config: notificationConfigSchema,
+});
+export type CreateNotificationChannelInput = z.input<typeof createNotificationChannelSchema>;
+
+export const updateNotificationChannelSchema = z
+  .object({
+    name: nameSchema,
+    locale: z.enum(LOCALES),
+    events: z.array(z.enum(NOTIFICATION_EVENTS)).min(1).max(NOTIFICATION_EVENTS.length),
+    enabled: z.boolean(),
+    /** Replaces the whole config; omitted keeps the stored (secret) one. */
+    config: notificationConfigSchema,
+  })
+  .partial();
+export type UpdateNotificationChannelInput = z.infer<typeof updateNotificationChannelSchema>;
 
 export const createLinkSchema = z.object({
   serviceId: z.string().min(1).max(64),
@@ -388,3 +593,9 @@ export const paginationSchema = z.object({
   cursor: z.string().max(128).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
+
+/** `GET /api/deployments`: a page of the team's deployments, optionally narrowed by status (empty: all). */
+export const deploymentListQuerySchema = paginationSchema.extend({
+  status: z.preprocess((value) => (value === '' ? undefined : value), z.enum(DEPLOYMENT_STATUS_FILTERS).optional()),
+});
+export type DeploymentListQuery = z.infer<typeof deploymentListQuerySchema>;

@@ -99,8 +99,9 @@ test('output beyond the buffer cap is truncated, not accumulated', async () => {
   );
 
   assert.equal(result.code, 0);
-  assert.ok(result.stdout.length < 200, `expected a bounded buffer, got ${result.stdout.length}`);
-  assert.match(result.stdout, /output truncated/);
+  // Exactly the cap is kept however the pipe chunks the writes, then a note with the dropped count.
+  assert.equal(result.stdout.split('\n[output truncated')[0]!.length, 100);
+  assert.match(result.stdout, /\[output truncated: 4900 characters dropped\]$/);
 });
 
 test('runProcessOrThrow resolves on success and throws ProcessError on failure', async () => {

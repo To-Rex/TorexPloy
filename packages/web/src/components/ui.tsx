@@ -115,11 +115,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   return <select ref={ref} className={['select', className].filter(Boolean).join(' ')} {...rest} />;
 });
 
-export function Switch({ checked, onChange, label, hint, disabled }: { checked: boolean; onChange: (value: boolean) => void; label: ReactNode; hint?: ReactNode; disabled?: boolean }) {
+export function Switch({ checked, onChange, label, hint, disabled, hideLabel = false }: { checked: boolean; onChange: (value: boolean) => void; label: ReactNode; hint?: ReactNode; disabled?: boolean; hideLabel?: boolean }) {
   return (
     <label className="switch" style={{ alignItems: hint === undefined ? 'center' : 'flex-start' }}>
       <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} style={hint === undefined ? undefined : { marginTop: 2 }} />
-      <span>
+      <span className={hideLabel ? 'sr-only' : undefined}>
         <span style={{ display: 'block', fontWeight: 540 }}>{label}</span>
         {hint !== undefined && <span className="field__hint">{hint}</span>}
       </span>
@@ -127,11 +127,14 @@ export function Switch({ checked, onChange, label, hint, disabled }: { checked: 
   );
 }
 
-export function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: ReactNode }) {
+export function Checkbox({ checked, onChange, label, hint }: { checked: boolean; onChange: (value: boolean) => void; label: ReactNode; hint?: ReactNode }) {
   return (
     <label className="row" style={{ gap: 9, cursor: 'pointer', alignItems: 'flex-start' }}>
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} style={{ marginTop: 3, accentColor: 'var(--lapis)' }} />
-      <span>{label}</span>
+      <span>
+        <span style={{ display: 'block' }}>{label}</span>
+        {hint !== undefined && <span className="field__hint">{hint}</span>}
+      </span>
     </label>
   );
 }

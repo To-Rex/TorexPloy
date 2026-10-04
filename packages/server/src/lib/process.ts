@@ -121,12 +121,16 @@ export function runProcess(command: string, args: string[], options: RunProcessO
     }
 
     const append = (stream: 'stdout' | 'stderr', chunk: string): void => {
+      // Keep at most `maxBuffer` characters: a chunk that crosses the cap is cut, not kept whole
+      // (pipes coalesce writes, so a single chunk can be tens of kilobytes).
       if (stream === 'stdout') {
-        if (stdout.length < maxBuffer) stdout += chunk;
-        else stdoutDropped += chunk.length;
+        const room = Math.max(0, maxBuffer - stdout.length);
+        stdout += chunk.slice(0, room);
+        stdoutDropped += chunk.length - Math.min(room, chunk.length);
       } else {
-        if (stderr.length < maxBuffer) stderr += chunk;
-        else stderrDropped += chunk.length;
+        const room = Math.max(0, maxBuffer - stderr.length);
+        stderr += chunk.slice(0, room);
+        stderrDropped += chunk.length - Math.min(room, chunk.length);
       }
       options.onOutput?.(chunk);
     };

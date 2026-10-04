@@ -3,7 +3,6 @@ import { RelativeTime } from '../../components/Time.tsx';
 import { Avatar, Button, EmptyState, SkeletonRows } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { useAudit } from '../../lib/queries.ts';
-import { SettingsSection } from './SettingsLayout.tsx';
 
 export function AuditPage() {
   const { m, formatDate } = useI18n();
@@ -11,7 +10,7 @@ export function AuditPage() {
   const items = audit.data?.pages.flatMap((page) => page.items) ?? [];
   const actions = m.audit.actions as Record<string, string>;
   return (
-    <SettingsSection title={m.audit.title} hint={m.audit.subtitle}>
+    <>
       {audit.isPending ? (
         <SkeletonRows rows={6} />
       ) : items.length === 0 ? (
@@ -47,6 +46,6 @@ export function AuditPage() {
           )}
         </>
       )}
-    </SettingsSection>
+    </>
   );
 }

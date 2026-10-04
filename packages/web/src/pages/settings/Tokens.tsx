@@ -10,7 +10,7 @@ import { api } from '../../lib/api.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useTokens } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
-import { SettingsSection } from './SettingsLayout.tsx';
+import { FrameActions } from '../../components/Frame.tsx';
 
 const EXPIRY = ['7', '30', '90', '365', 'never'] as const;
 
@@ -38,12 +38,12 @@ export function TokensPage() {
   };
 
   return (
-    <SettingsSection title={m.tokens.title} hint={m.tokens.subtitle}>
-      <div>
+    <>
+      <FrameActions>
         <Button variant="primary" icon={<Plus />} onClick={() => setCreating(true)}>
           {m.tokens.create}
         </Button>
-      </div>
+      </FrameActions>
       {tokens.data === undefined ? (
         <Skeleton height={100} />
       ) : tokens.data.length === 0 ? (
@@ -156,6 +156,6 @@ export function TokensPage() {
           </div>
         )}
       </Dialog>
-    </SettingsSection>
+    </>
   );
 }

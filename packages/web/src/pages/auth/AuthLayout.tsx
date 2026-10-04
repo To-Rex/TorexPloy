@@ -11,6 +11,8 @@ import { useTheme } from '../../lib/theme.tsx';
 
 function DemoRail() {
   const [step, setStep] = useState(-1);
+  // The active stage counts up from the moment it lit; finished stages show typical durations.
+  const [activeSince, setActiveSince] = useState(() => Date.now());
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setStep(DEPLOY_STAGES.length);
@@ -20,18 +22,16 @@ function DemoRail() {
     const timer = window.setInterval(() => {
       current += 1;
       setStep(current);
+      setActiveSince(Date.now());
       if (current >= DEPLOY_STAGES.length) window.clearInterval(timer);
     }, 650);
     return () => window.clearInterval(timer);
   }, []);
-  const base = 1_700_000_000_000;
   const durations = [1_400, 38_200, 2_100, 4_800, 300, 10_000];
-  let t = base;
   const stages: StageView[] = DEPLOY_STAGES.map((stage, index) => {
-    const startedAt = t;
-    t += durations[index]!;
-    const state = index < step ? 'done' : index === step ? 'active' : 'pending';
-    return { stage, state, startedAt: state === 'pending' ? null : startedAt, endedAt: state === 'done' ? t : null };
+    if (index < step) return { stage, state: 'done', startedAt: 0, endedAt: durations[index]! };
+    if (index === step) return { stage, state: 'active', startedAt: activeSince, endedAt: null };
+    return { stage, state: 'pending', startedAt: null, endedAt: null };
   });
   return (
     <div className="auth__demo" aria-hidden="true">

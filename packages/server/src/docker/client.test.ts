@@ -91,6 +91,33 @@ test('surfaces pull failures reported inside a 200 progress stream', async () =>
   }
 });
 
+test('registry logins go to POST /auth and a rejection carries the registry message', async () => {
+  const daemon = await fakeDaemon((_req, res, body) => {
+    const credentials = JSON.parse(body.toString('utf8')) as { username: string; password: string };
+    res.setHeader('content-type', 'application/json');
+    if (credentials.password === 'right') {
+      res.end(JSON.stringify({ Status: 'Login Succeeded', IdentityToken: '' }));
+      return;
+    }
+    res.statusCode = 401;
+    res.end(JSON.stringify({ message: 'login attempt to https://ghcr.io/v2/ failed with status: 401 Unauthorized' }));
+  });
+  const client = new DockerClient(daemon.socket);
+  try {
+    await client.auth({ username: 'robot', password: 'right', serveraddress: 'ghcr.io' });
+    const call = daemon.calls.find((recorded) => recorded.url.endsWith('/auth'))!;
+    assert.equal(call.method, 'POST');
+    assert.deepEqual(JSON.parse(call.body), { username: 'robot', password: 'right', serveraddress: 'ghcr.io' });
+    await assert.rejects(
+      client.auth({ username: 'robot', password: 'wrong', serveraddress: 'ghcr.io' }),
+      (error: unknown) => error instanceof DockerError && error.status === 401 && /401 Unauthorized/.test(error.message),
+    );
+  } finally {
+    client.close();
+    daemon.close();
+  }
+});
+
 test('exec demultiplexes stdout/stderr frames split across packets and reports the exit code', async () => {
   const daemon = await fakeDaemon((req, res) => {
     if (req.url?.endsWith('/exec')) {
@@ -167,4 +194,65 @@ test('CPU and memory math matches docker stats semantics', () => {
   assert.equal(cpuPercent(sample(100, 1_000, 0, 0), sample(600, 2_000, 0, 0)), 200);
   assert.equal(cpuPercent(sample(100, 1_000, 0, 0), sample(100, 1_000, 0, 0)), 0);
   assert.equal(memoryUsage(sample(0, 0, 500, 120)), 380);
+});
+
+test('an interactive exec hijacks the connection into a raw TTY pipe', async () => {
+  const daemon = await fakeDaemon((req, res) => {
+    if (req.url?.endsWith('/exec') === true) {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ Id: 'e1' }));
+      return;
+    }
+    res.statusCode = 201;
+    res.end();
+  });
+  // Docker switches protocols after the JSON body (Node's parser consumes it); the fake echoes keystrokes back in upper case.
+  daemon.server.on('upgrade', (req: IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => {
+    daemon.calls.push({ method: req.method ?? '', url: req.url ?? '', body: '' });
+    socket.write('HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n');
+    const echo = (chunk: Buffer): void => void socket.write(chunk.toString('utf8').toUpperCase());
+    if (head.length > 0) echo(head);
+    socket.on('data', echo);
+  });
+  const client = new DockerClient(daemon.socket);
+  try {
+    const { execId, socket } = await client.execTty('app-1', ['sh'], { cols: 120, rows: 30, env: ['TERM=xterm-256color'] });
+    assert.equal(execId, 'e1');
+    const create = daemon.calls.find((call) => call.url.endsWith('/containers/app-1/exec'));
+    assert.ok(create);
+    assert.deepEqual(JSON.parse(create.body), { AttachStdin: true, AttachStdout: true, AttachStderr: true, Tty: true, Cmd: ['sh'], Env: ['TERM=xterm-256color'] });
+    assert.ok(daemon.calls.some((call) => call.url === '/v1.47/exec/e1/start' && call.method === 'POST'));
+    assert.ok(daemon.calls.some((call) => call.url === '/v1.47/exec/e1/resize?h=30&w=120'));
+    const echoed = new Promise<string>((resolve) => socket.once('data', (chunk: Buffer) => resolve(chunk.toString('utf8'))));
+    socket.write('ls -la\n');
+    assert.equal(await echoed, 'LS -LA\n');
+    socket.destroy();
+  } finally {
+    client.close();
+    daemon.close();
+  }
+});
+
+test('an interactive exec into a stopped container is refused with the daemon message', async () => {
+  const daemon = await fakeDaemon((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.url?.endsWith('/exec') === true) {
+      res.end(JSON.stringify({ Id: 'e2' }));
+      return;
+    }
+    res.statusCode = 409;
+    res.end(JSON.stringify({ message: 'container app-1 is not running' }));
+  });
+  // Without an upgrade listener Node would drop the connection; answer the start call like a refusing daemon.
+  daemon.server.on('upgrade', (_req: IncomingMessage, socket: import('node:stream').Duplex) => {
+    const body = JSON.stringify({ message: 'container app-1 is not running' });
+    socket.end(`HTTP/1.1 409 Conflict\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n${body}`);
+  });
+  const client = new DockerClient(daemon.socket);
+  try {
+    await assert.rejects(client.execTty('app-1', ['sh'], { cols: 80, rows: 24 }), (error: unknown) => error instanceof DockerError && error.isConflict && /not running/.test(error.message));
+  } finally {
+    client.close();
+    daemon.close();
+  }
 });

@@ -32,10 +32,12 @@ export type ServerKind = (typeof SERVER_KINDS)[number];
 export const SERVER_STATUSES = ['pending', 'connecting', 'ready', 'error', 'offline'] as const;
 export type ServerStatus = (typeof SERVER_STATUSES)[number];
 
+/** Kinds created from the "new application" flow; `compose` apps have their own. */
 export const APP_KINDS = ['web', 'worker'] as const;
-export type AppKind = (typeof APP_KINDS)[number];
+export type AppKind = (typeof APP_KINDS)[number] | 'compose';
 
-export const SOURCE_TYPES = ['github', 'git', 'image'] as const;
+/** `raw`: a compose file kept in the panel instead of a repository. */
+export const SOURCE_TYPES = ['github', 'git', 'image', 'raw'] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
 export const BUILD_TYPES = ['auto', 'dockerfile', 'static'] as const;
@@ -64,6 +66,13 @@ export function isTerminalDeployment(status: DeploymentStatus): boolean {
   return TERMINAL_DEPLOYMENT_STATUSES.includes(status);
 }
 
+/** Deployments still in flight: what the `active` list filter matches. */
+export const ACTIVE_DEPLOYMENT_STATUSES: readonly DeploymentStatus[] = ['queued', 'building', 'deploying'];
+
+/** Values the deployment list accepts as `?status=`: a status, or `active` for any in-flight one. */
+export const DEPLOYMENT_STATUS_FILTERS = [...DEPLOYMENT_STATUSES, 'active'] as const;
+export type DeploymentStatusFilter = (typeof DEPLOYMENT_STATUS_FILTERS)[number];
+
 export const DEPLOYMENT_TRIGGERS = ['manual', 'push', 'rollback', 'redeploy', 'api', 'restart'] as const;
 export type DeploymentTrigger = (typeof DEPLOYMENT_TRIGGERS)[number];
 
@@ -84,6 +93,16 @@ export type BackupStatus = (typeof BACKUP_STATUSES)[number];
 
 export const CRON_RUN_STATUSES = ['running', 'succeeded', 'failed'] as const;
 export type CronRunStatus = (typeof CRON_RUN_STATUSES)[number];
+
+export const TEMPLATE_CATEGORIES = ['automation', 'monitoring', 'analytics', 'cms', 'productivity', 'developer', 'database', 'security'] as const;
+export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
+
+export const NOTIFICATION_KINDS = ['telegram', 'discord', 'slack', 'webhook'] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
+/** Events a notification channel can subscribe to. */
+export const NOTIFICATION_EVENTS = ['deployment.failed', 'deployment.succeeded', 'application.crashed', 'backup.failed', 'server.offline'] as const;
+export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
 
 export const METRIC_RANGES = ['1h', '6h', '24h', '7d'] as const;
 export type MetricRange = (typeof METRIC_RANGES)[number];
@@ -136,4 +155,51 @@ export const LIMITS = {
   memoryMbMax: 262_144,
   passwordMin: 10,
   passwordMax: 256,
+  composeFileMax: 256 * 1024,
+  /** Pull request previews one application may run at once. */
+  previewsMax: 20,
+  /** Preview variables, as `.env` text. */
+  previewEnvMax: 32 * 1024,
 } as const;
+
+// ---------------------------------------------------------------------------
+// Container registries
+// ---------------------------------------------------------------------------
+
+/** Docker Hub, as image references and registry records name it. */
+export const DOCKER_HUB = 'docker.io';
+
+/** Other spellings of Docker Hub that turn up in docs and old CLI configs. */
+const DOCKER_HUB_ALIASES = ['index.docker.io', 'registry-1.docker.io', 'registry.hub.docker.com', 'hub.docker.com'];
+
+/** A registry host with an optional port: `ghcr.io`, `localhost:5000`, `10.0.0.5:5000`. */
+export const REGISTRY_HOST_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*(?::[0-9]{1,5})?$/;
+
+/**
+ * A registry address as Docker names it: lowercase, without a scheme, a
+ * trailing slash or an API path (`https://index.docker.io/v1/`), and with
+ * every Docker Hub alias folded into `docker.io`.
+ */
+export function normalizeRegistryAddress(value: string): string {
+  const host = value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '')
+    .replace(/\/v[12]$/, '');
+  return DOCKER_HUB_ALIASES.includes(host) ? DOCKER_HUB : host;
+}
+
+/**
+ * The registry an image reference pulls from, by Docker's own rule: the first
+ * path component is a registry host only when it contains `.` or `:`, is
+ * `localhost`, or has uppercase letters. Everything else (`nginx`,
+ * `bitnami/redis`) lives on Docker Hub.
+ */
+export function imageRegistryHost(image: string): string {
+  const slash = image.indexOf('/');
+  if (slash === -1) return DOCKER_HUB;
+  const first = image.slice(0, slash);
+  if (!/[.:]/.test(first) && first !== 'localhost' && first === first.toLowerCase()) return DOCKER_HUB;
+  return normalizeRegistryAddress(first);
+}

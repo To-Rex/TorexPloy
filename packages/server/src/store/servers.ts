@@ -203,7 +203,8 @@ export class ServerStore {
 
   usage(id: string): { applications: number; services: number } {
     return {
-      applications: num(this.db.scalar('SELECT COUNT(*) FROM applications WHERE server_id = ?', id)),
+      // Previews run beside their parent on the same server; they are not counted on their own.
+      applications: num(this.db.scalar('SELECT COUNT(*) FROM applications WHERE server_id = ? AND parent_application_id IS NULL', id)),
       services: num(this.db.scalar('SELECT COUNT(*) FROM services WHERE server_id = ?', id)),
     };
   }

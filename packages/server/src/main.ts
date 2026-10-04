@@ -2,6 +2,8 @@
  * Control-plane entry point.
  */
 import { serve, type ServerType } from '@hono/node-server';
+import type { Server } from 'node:http';
+import { ComposeEngine } from './compose/engine.ts';
 import { openDatabase } from './db/database.ts';
 import { Deployer } from './deploy/deployer.ts';
 import { Reconciler } from './deploy/reconciler.ts';
@@ -16,13 +18,19 @@ import { errorMessage } from './lib/errors.ts';
 import { createLogger } from './lib/logger.ts';
 import { Secrets } from './lib/secrets.ts';
 import { MetricsCollector } from './metrics/collector.ts';
+import { Notifier } from './notifications/notifier.ts';
+import { PreviewManager } from './previews/manager.ts';
 import { ProxyManager } from './proxy/manager.ts';
 import { EventBus } from './realtime/bus.ts';
 import { ConnectionManager } from './servers/connections.ts';
 import { ServerManager } from './servers/manager.ts';
 import { ServiceManager } from './services/manager.ts';
 import { createStores } from './store/index.ts';
+import { TerminalGateway } from './terminal/gateway.ts';
 import type { Context } from './context.ts';
+
+/** Upper bound for a graceful stop (deployments in flight get this long to wind down). */
+const SHUTDOWN_GRACE_MS = 20_000;
 
 export async function createContext(overrides: Parameters<typeof loadConfig>[1] = {}): Promise<Context> {
   const config = loadConfig(process.env, overrides);
@@ -38,6 +46,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   const ctx = { config, logger, stores, secrets, bus, connections, proxy, startedAt: Date.now() } as Context;
   ctx.servers = new ServerManager(ctx);
   ctx.deployer = new Deployer(ctx);
+  ctx.compose = new ComposeEngine(ctx);
   ctx.reconciler = new Reconciler(ctx);
   ctx.services = new ServiceManager(ctx);
   ctx.github = new GithubApp(ctx);
@@ -45,6 +54,8 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   ctx.domains = new DomainChecker(ctx);
   ctx.cron = new CronRunner(ctx);
   ctx.maintenance = new Maintenance(ctx);
+  ctx.notifier = new Notifier(ctx);
+  ctx.previews = new PreviewManager(ctx);
   return ctx;
 }
 
@@ -79,6 +90,9 @@ async function start(): Promise<void> {
     logger.info('TorexPloy is listening', { url: `http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${info.port}`, version: config.version, dataDir: config.dataDir });
   });
 
+  const terminals = new TerminalGateway(ctx);
+  terminals.attach(server as Server);
+
   // Bring servers up in the background; the API is usable immediately.
   void (async () => {
     if (stores.users.count() > 0) await ctx.servers.bootstrapLocal().catch(() => undefined);
@@ -95,15 +109,29 @@ async function start(): Promise<void> {
 
   let stopping = false;
   const shutdown = async (signal: string): Promise<void> => {
-    if (stopping) return;
+    if (stopping) {
+      // A second Ctrl+C means "now".
+      logger.warn('Forced exit', { signal });
+      process.exit(1);
+    }
     stopping = true;
     logger.info('Shutting down', { signal });
+    // Never hang: whatever is still running after the grace period is abandoned.
+    setTimeout(() => {
+      logger.error('Shutdown took too long; exiting');
+      process.exit(1);
+    }, SHUTDOWN_GRACE_MS).unref();
     scheduler.stop();
     ctx.reconciler.stopAll();
     ctx.domains.stop();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    terminals.close();
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+    // Open dashboards hold SSE streams forever; close() alone would wait for them indefinitely.
+    (server as Server).closeAllConnections();
+    await closed;
     await ctx.cron.stopAll();
     await ctx.deployer.shutdown();
+    await ctx.notifier.flush();
     await ctx.connections.closeAll();
     stores.db.checkpoint();
     stores.db.close();

@@ -10,17 +10,24 @@ import { Hono } from 'hono';
 import type { ApiErrorBody } from '@ploy/shared';
 import type { Context } from '../context.ts';
 import { randomId } from '../lib/ids.ts';
+import { DockerUnavailableError } from '../docker/client.ts';
 import { AppError, isAppError } from '../lib/errors.ts';
-import { authMiddleware, csrfMiddleware, isHttps, type Env } from './core.ts';
+import { authMiddleware, csrfMiddleware, isHttps, requestOrigin, type Env } from './core.ts';
 import { registerAccountRoutes } from './routes/account.ts';
 import { registerApplicationRoutes } from './routes/applications.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerComposeRoutes } from './routes/composes.ts';
 import { registerDeploymentRoutes } from './routes/deployments.ts';
 import { registerGithubRoutes } from './routes/github.ts';
 import { registerPlatformRoutes } from './routes/platform.ts';
+import { registerNotificationRoutes } from './routes/notifications.ts';
+import { registerPreviewRoutes } from './routes/previews.ts';
 import { registerProjectRoutes } from './routes/projects.ts';
+import { registerRegistryRoutes } from './routes/registries.ts';
+import { registerS3Routes } from './routes/s3.ts';
 import { registerServerRoutes } from './routes/servers.ts';
 import { registerServiceRoutes } from './routes/services.ts';
+import { registerTemplateRoutes } from './routes/templates.ts';
 
 const MAX_JSON_BYTES = 1024 * 1024;
 
@@ -68,7 +75,8 @@ export function createHttpApp(ctx: Context): Hono<Env> {
     c.header('Cross-Origin-Opener-Policy', 'same-origin');
     c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
     if (isHttps(c)) c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-    if (!c.req.path.startsWith('/api/')) c.header('Content-Security-Policy', CSP);
+    // 'self' covers same-origin WebSockets in current browsers; the explicit ws(s) origin keeps older Safari working for the terminal.
+    if (!c.req.path.startsWith('/api/')) c.header('Content-Security-Policy', CSP.replace("connect-src 'self'", `connect-src 'self' ${requestOrigin(c).replace(/^http/, 'ws')}`));
     const ms = Math.round(performance.now() - started);
     const contentType = c.res.headers.get('content-type') ?? '';
     if (!contentType.includes('event-stream') && c.req.path.startsWith('/api/') && c.req.path !== '/api/health') {
@@ -91,8 +99,14 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   registerServerRoutes(app, ctx);
   registerProjectRoutes(app, ctx);
   registerApplicationRoutes(app, ctx);
+  registerPreviewRoutes(app, ctx);
+  registerComposeRoutes(app, ctx);
   registerDeploymentRoutes(app, ctx);
   registerServiceRoutes(app, ctx);
+  registerTemplateRoutes(app, ctx);
+  registerNotificationRoutes(app, ctx);
+  registerS3Routes(app, ctx);
+  registerRegistryRoutes(app, ctx);
   registerGithubRoutes(app, ctx);
 
   app.all('/api/*', () => {
@@ -129,8 +143,10 @@ export function createHttpApp(ctx: Context): Hono<Env> {
 
   // ---------------------------------------------------------------- errors
 
-  app.onError((error, c) => {
+  app.onError((caught, c) => {
     const requestId = c.get('requestId');
+    // A server whose Docker daemon is down is an expected state, not a bug: report it as such.
+    const error = caught instanceof DockerUnavailableError ? new AppError('docker_unavailable', caught.message) : caught;
     if (isAppError(error)) {
       if (error.status >= 500) ctx.logger.error(error.message, { requestId, code: error.code, cause: error.cause });
       const payload: ApiErrorBody = {

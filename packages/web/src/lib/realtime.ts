@@ -18,6 +18,7 @@ export function applyEvent(client: QueryClient, event: PlatformEvent): void {
       invalidate(keys.app(event.applicationId));
       invalidate(keys.project(event.projectId));
       invalidate(keys.overview);
+      invalidate(keys.teamDeployments);
       break;
     case 'application.updated':
       invalidate(keys.app(event.id));
@@ -62,6 +63,7 @@ export function applyEvent(client: QueryClient, event: PlatformEvent): void {
       break;
     case 'cron.updated':
       invalidate(keys.appPart(event.applicationId, 'cron'));
+      invalidate(keys.teamCron);
       break;
   }
 }

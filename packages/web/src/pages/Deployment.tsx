@@ -51,13 +51,15 @@ export function DeploymentPage() {
 
   return (
     <div className="page page--wide" style={{ maxWidth: 1400 }}>
-      <div className="page-head" style={{ marginBottom: 18 }}>
-        <div className="page-head__text">
-          <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+      <section className="frame">
+      <div className="frame__sheet resource">
+      <header className="resource__head">
+        <div className="grow" style={{ minWidth: 0 }}>
+          <div className="resource__title">
             <h1 className="truncate">{data.commitMessage ?? `${m.deployment.title} ${deploymentId.slice(-6)}`}</h1>
             <Status kind="deployment" status={data.status} />
           </div>
-          <dl className="resource-head__meta" style={{ margin: '8px 0 0' }}>
+          <dl className="resource__meta">
             <span>
               <Link to={`/apps/${data.applicationId}/deployments`}>{data.applicationName}</Link>
             </span>
@@ -76,7 +78,7 @@ export function DeploymentPage() {
             {data.buildDurationMs !== null && <span className="tabular">{m.deployment.buildTime}: {formatDuration(data.buildDurationMs)}</span>}
           </dl>
         </div>
-        <div className="page-head__actions">
+        <div className="resource__actions">
           {running && (
             <Button icon={<Ban />} busy={cancel.isPending} onClick={() => cancel.mutate()}>
               {m.deployments.cancel}
@@ -98,14 +100,15 @@ export function DeploymentPage() {
             {m.deployment.downloadLog}
           </ButtonLink>
         </div>
-      </div>
+      </header>
 
-      <div className="panel" style={{ padding: '16px 18px 12px', marginBottom: 16 }}>
+      <div className="resource__body" style={{ paddingTop: 0 }}>
+      <div className="card" style={{ padding: '16px 18px 12px' }}>
         <PipelineRail stages={stages} />
       </div>
 
       {data.status === 'failed' && (
-        <div style={{ marginBottom: 16 }}>
+        <div>
           <Callout tone="bad" title={failedStage === undefined ? m.deployment.failedTitle : t(m.deployment.failedAtStage, { stage: m.stages[failedStage.stage] })}>
             <p>
               <Reason kind="deploy" code={data.errorCode} message={data.errorMessage} />
@@ -114,13 +117,12 @@ export function DeploymentPage() {
           </Callout>
         </div>
       )}
-      {data.status === 'queued' && (
-        <div style={{ marginBottom: 16 }}>
-          <Callout tone="work">{m.deployment.waiting}</Callout>
-        </div>
-      )}
+      {data.status === 'queued' && <Callout tone="work">{m.deployment.waiting}</Callout>}
 
-      <LogViewer lines={lines} height="calc(100dvh - 380px)" empty={m.deployment.logEmpty} live={running} />
+      <LogViewer lines={lines} height="calc(100dvh - 420px)" empty={m.deployment.logEmpty} live={running} />
+      </div>
+      </div>
+      </section>
     </div>
   );
 }

@@ -14,6 +14,13 @@ export interface Migration {
   readonly version: number;
   readonly name: string;
   readonly sql: string;
+  /**
+   * Rebuilds a table (SQLite cannot alter CHECK or UNIQUE constraints in place).
+   * Foreign keys are switched off around the transaction, as SQLite's documented
+   * procedure requires: otherwise dropping the old table would cascade-delete
+   * every child row. Integrity is verified with `foreign_key_check` before commit.
+   */
+  readonly rebuildsTables?: boolean;
 }
 
 const INITIAL = /* sql */ `
@@ -395,6 +402,187 @@ CREATE TABLE settings (
 );
 `;
 
-export const MIGRATIONS: readonly Migration[] = [{ version: 1, name: 'initial', sql: INITIAL }];
+/** Compose applications and richer domains (path routing, redirects, compose service targets). */
+const COMPOSE_AND_ROUTING = /* sql */ `
+CREATE TABLE applications_v4 (
+  id                       TEXT PRIMARY KEY,
+  project_id               TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  team_id                  TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  server_id                TEXT NOT NULL REFERENCES servers(id) ON DELETE RESTRICT,
+  name                     TEXT NOT NULL,
+  slug                     TEXT NOT NULL,
+  description              TEXT,
+  kind                     TEXT NOT NULL DEFAULT 'web' CHECK (kind IN ('web','worker','compose')),
+  source_type              TEXT NOT NULL CHECK (source_type IN ('github','git','image','raw')),
+  github_installation_id   INTEGER,
+  repository               TEXT,
+  git_url                  TEXT,
+  branch                   TEXT,
+  image                    TEXT,
+  build_type               TEXT NOT NULL DEFAULT 'auto' CHECK (build_type IN ('auto','dockerfile','static')),
+  dockerfile_path          TEXT NOT NULL DEFAULT 'Dockerfile',
+  root_directory           TEXT NOT NULL DEFAULT '',
+  install_command          TEXT,
+  build_command            TEXT,
+  start_command            TEXT,
+  output_directory         TEXT,
+  port                     INTEGER,
+  replicas                 INTEGER NOT NULL DEFAULT 1 CHECK (replicas BETWEEN 1 AND 20),
+  cpu_limit                REAL,
+  memory_limit_mb          INTEGER,
+  health_check_path        TEXT,
+  health_check_timeout_sec INTEGER NOT NULL DEFAULT 120,
+  strategy                 TEXT NOT NULL DEFAULT 'rolling' CHECK (strategy IN ('rolling','recreate')),
+  auto_deploy              INTEGER NOT NULL DEFAULT 1 CHECK (auto_deploy IN (0,1)),
+  deploy_hook_token        TEXT,
+  deploy_key               TEXT,
+  deploy_public_key        TEXT,
+  status                   TEXT NOT NULL DEFAULT 'idle'
+                           CHECK (status IN ('idle','queued','building','deploying','running','crashed','failed','stopped')),
+  active_deployment_id     TEXT REFERENCES deployments(id) ON DELETE SET NULL,
+  config_updated_at        TEXT NOT NULL,
+  created_at               TEXT NOT NULL,
+  updated_at               TEXT NOT NULL,
+  template_id              TEXT,
+  -- Compose: the file itself (raw source) or its path inside the repository.
+  compose_file             TEXT,
+  compose_path             TEXT NOT NULL DEFAULT 'docker-compose.yml',
+  -- Compose features that reach the host (privileged, host network, absolute bind mounts…), granted by an admin.
+  host_access              INTEGER NOT NULL DEFAULT 0 CHECK (host_access IN (0,1)),
+  UNIQUE (project_id, slug),
+  CHECK (kind <> 'compose' OR source_type IN ('github','git','raw')),
+  CHECK (source_type <> 'raw' OR (kind = 'compose' AND compose_file IS NOT NULL))
+);
+INSERT INTO applications_v4 (id, project_id, team_id, server_id, name, slug, description, kind, source_type, github_installation_id, repository, git_url, branch, image, build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, port, replicas, cpu_limit, memory_limit_mb, health_check_path, health_check_timeout_sec, strategy, auto_deploy, deploy_hook_token, deploy_key, deploy_public_key, status, active_deployment_id, config_updated_at, created_at, updated_at, template_id) SELECT id, project_id, team_id, server_id, name, slug, description, kind, source_type, github_installation_id, repository, git_url, branch, image, build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, port, replicas, cpu_limit, memory_limit_mb, health_check_path, health_check_timeout_sec, strategy, auto_deploy, deploy_hook_token, deploy_key, deploy_public_key, status, active_deployment_id, config_updated_at, created_at, updated_at, template_id FROM applications;
+DROP TABLE applications;
+ALTER TABLE applications_v4 RENAME TO applications;
+CREATE INDEX idx_applications_team ON applications(team_id);
+CREATE INDEX idx_applications_server ON applications(server_id);
+CREATE INDEX idx_applications_repo ON applications(repository, branch) WHERE source_type = 'github';
+
+CREATE TABLE domains_v4 (
+  id             TEXT PRIMARY KEY,
+  application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  team_id        TEXT NOT NULL,
+  host           TEXT NOT NULL COLLATE NOCASE,
+  -- Path prefix this domain routes ('/' for the whole host).
+  path           TEXT NOT NULL DEFAULT '/',
+  strip_path     INTEGER NOT NULL DEFAULT 0 CHECK (strip_path IN (0,1)),
+  https          INTEGER NOT NULL DEFAULT 1 CHECK (https IN (0,1)),
+  port           INTEGER,
+  -- Compose: which service receives the traffic.
+  service_name   TEXT,
+  -- Set for a redirect-only domain: requests are sent to this host (same path and query).
+  redirect_to    TEXT,
+  is_generated   INTEGER NOT NULL DEFAULT 0 CHECK (is_generated IN (0,1)),
+  dns_status     TEXT NOT NULL DEFAULT 'pending' CHECK (dns_status IN ('pending','ok','mismatch','error')),
+  dns_records    TEXT NOT NULL DEFAULT '[]',
+  dns_checked_at TEXT,
+  tls_status     TEXT NOT NULL DEFAULT 'pending' CHECK (tls_status IN ('pending','active','error','disabled')),
+  tls_issuer     TEXT,
+  tls_expires_at TEXT,
+  tls_message    TEXT,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL
+);
+INSERT INTO domains_v4 (id, application_id, team_id, host, https, port, is_generated, dns_status, dns_records, dns_checked_at, tls_status, tls_issuer, tls_expires_at, tls_message, created_at, updated_at) SELECT id, application_id, team_id, host, https, port, is_generated, dns_status, dns_records, dns_checked_at, tls_status, tls_issuer, tls_expires_at, tls_message, created_at, updated_at FROM domains;
+DROP TABLE domains;
+ALTER TABLE domains_v4 RENAME TO domains;
+CREATE INDEX idx_domains_app ON domains(application_id);
+CREATE UNIQUE INDEX idx_domains_route ON domains(host COLLATE NOCASE, path);
+`;
+
+/** Append-only. Never edit a released migration; add a new one. */
+export const MIGRATIONS: readonly Migration[] = [
+  { version: 1, name: 'initial', sql: INITIAL },
+  { version: 2, name: 'application-templates', sql: 'ALTER TABLE applications ADD COLUMN template_id TEXT;' },
+  {
+    version: 3,
+    name: 'notification-channels',
+    sql: `
+CREATE TABLE notification_channels (
+  id           TEXT PRIMARY KEY,
+  team_id      TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  kind         TEXT NOT NULL CHECK (kind IN ('telegram','discord','slack','webhook')),
+  config       TEXT NOT NULL,
+  locale       TEXT NOT NULL DEFAULT 'uz',
+  events       TEXT NOT NULL DEFAULT '[]',
+  enabled      INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+  last_status  TEXT CHECK (last_status IN ('ok','failed')),
+  last_error   TEXT,
+  last_sent_at TEXT,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE INDEX idx_notification_channels_team ON notification_channels(team_id);
+`,
+  },
+  { version: 4, name: 'compose-and-routing', sql: COMPOSE_AND_ROUTING, rebuildsTables: true },
+  {
+    version: 5,
+    name: 's3-backup-destinations',
+    sql: `
+CREATE TABLE s3_destinations (
+  id                TEXT PRIMARY KEY,
+  team_id           TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  endpoint          TEXT NOT NULL,
+  region            TEXT NOT NULL,
+  bucket            TEXT NOT NULL,
+  path_prefix       TEXT NOT NULL DEFAULT '',
+  access_key_id     TEXT NOT NULL,
+  secret_access_key TEXT NOT NULL,
+  force_path_style  INTEGER NOT NULL DEFAULT 0 CHECK (force_path_style IN (0,1)),
+  created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL
+);
+CREATE INDEX idx_s3_destinations_team ON s3_destinations(team_id);
+ALTER TABLE services ADD COLUMN backup_destination_id TEXT REFERENCES s3_destinations(id) ON DELETE SET NULL;
+-- Where the copy of a backup lives off the server (null: on the server only).
+ALTER TABLE backups ADD COLUMN remote_destination_id TEXT;
+ALTER TABLE backups ADD COLUMN remote_key TEXT;
+`,
+  },
+  {
+    version: 6,
+    name: 'container-registries',
+    sql: `
+CREATE TABLE registries (
+  id              TEXT PRIMARY KEY,
+  team_id         TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  -- Host as Docker names it: ghcr.io, docker.io, registry.example.uz:5000.
+  server_address  TEXT NOT NULL,
+  username        TEXT NOT NULL,
+  password_sealed TEXT NOT NULL,
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL,
+  UNIQUE (team_id, server_address)
+);
+`,
+  },
+  {
+    version: 7,
+    name: 'preview-deployments',
+    sql: `
+-- A preview is a hidden child application deployed from one pull request of its parent's repository.
+ALTER TABLE applications ADD COLUMN parent_application_id TEXT REFERENCES applications(id) ON DELETE CASCADE;
+ALTER TABLE applications ADD COLUMN preview_pr_number INTEGER CHECK ((parent_application_id IS NULL) = (preview_pr_number IS NULL));
+ALTER TABLE applications ADD COLUMN preview_pr_title TEXT;
+ALTER TABLE applications ADD COLUMN preview_pr_url TEXT;
+ALTER TABLE applications ADD COLUMN preview_pr_author TEXT;
+-- Head commit GitHub last reported for the pull request.
+ALTER TABLE applications ADD COLUMN preview_head_sha TEXT;
+-- The pull request comment carrying the preview address, updated after each deployment.
+ALTER TABLE applications ADD COLUMN preview_comment_id INTEGER;
+-- Parent settings: whether pull requests get previews, how many at once, and their extra variables (sealed dotenv text).
+ALTER TABLE applications ADD COLUMN previews_enabled INTEGER NOT NULL DEFAULT 0 CHECK (previews_enabled IN (0,1));
+ALTER TABLE applications ADD COLUMN preview_limit INTEGER NOT NULL DEFAULT 3 CHECK (preview_limit BETWEEN 1 AND 20);
+ALTER TABLE applications ADD COLUMN preview_env_sealed TEXT;
+CREATE UNIQUE INDEX idx_applications_preview ON applications(parent_application_id, preview_pr_number) WHERE parent_application_id IS NOT NULL;
+`,
+  },
+];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

@@ -10,17 +10,18 @@
  * plane (gzip where the engine does not compress itself); nothing is buffered
  * in memory, so multi-gigabyte databases are fine.
  */
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync } from 'node:fs';
 import { mkdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Transform } from 'node:stream';
+import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
 import type { CreateServiceInput } from '@ploy/shared';
 import { emit, type Context } from '../context.ts';
-import { LABEL_MANAGED, LABEL_PROJECT, LABEL_ROLE, LABEL_SERVICE, LABEL_TEAM, projectNetwork, serviceContainer, serviceVolume } from '../docker/naming.ts';
+import { idPart, LABEL_MANAGED, LABEL_PROJECT, LABEL_ROLE, LABEL_SERVICE, LABEL_TEAM, projectNetwork, serviceContainer, serviceVolume } from '../docker/naming.ts';
 import { AppError, errorMessage, reasonOf } from '../lib/errors.ts';
 import { newId } from '../lib/ids.ts';
+import { S3Client } from '../lib/s3.ts';
 import { tarSingleFile } from '../lib/tar.ts';
 import type { BackupRecord, ProjectRecord, ServiceRecord } from '../store/index.ts';
 import { APP_CAPABILITIES } from '../deploy/deployer.ts';
@@ -253,12 +254,38 @@ export class ServiceManager {
       if (exitCode !== 0) throw new AppError('bad_request', `Backup command failed (exit ${exitCode}): ${stderr.trim().slice(0, 500)}`);
       const { size } = await stat(path);
       stores.backups.finish(record.id, { status: 'succeeded', filePath: fileName, sizeBytes: size });
+      await this.uploadBackup(service, record.id, path, size, fileName);
       await this.pruneBackups(service);
     } catch (error) {
       await rm(path, { force: true });
       stores.backups.finish(record.id, { status: 'failed', error: errorMessage(error) });
+      this.ctx.notifier.backupFailed(service, errorMessage(error));
     }
     emit(this.ctx, service.teamId, { type: 'backup.updated', id: record.id, serviceId: service.id });
+  }
+
+  /** Copy a finished backup to the service's S3 destination, when it has one. A failed upload keeps the local file. */
+  private async uploadBackup(service: ServiceRecord, backupId: string, path: string, size: number, fileName: string): Promise<void> {
+    const fresh = this.ctx.stores.services.get(service.id) ?? service;
+    const destination = fresh.backupDestinationId === null ? undefined : this.ctx.stores.s3.get(fresh.backupDestinationId);
+    if (destination === undefined) return;
+    const key = [destination.pathPrefix, `${service.slug}-${idPart(service.id, 6)}`, fileName].filter((part) => part.length > 0).join('/');
+    try {
+      await new S3Client(destination).put(key, createReadStream(path), size);
+      this.ctx.stores.backups.setRemote(backupId, destination.id, key);
+    } catch (error) {
+      const message = `Stored on the server, but the upload to ${destination.name} failed: ${errorMessage(error)}`;
+      this.ctx.stores.backups.setWarning(backupId, message);
+      this.ctx.notifier.backupFailed(service, message);
+    }
+  }
+
+  /** Remove the off-server copy of a backup; best effort (the destination may be gone). */
+  private async deleteRemote(backup: BackupRecord): Promise<void> {
+    if (backup.remoteDestinationId === null || backup.remoteKey === null) return;
+    const destination = this.ctx.stores.s3.get(backup.remoteDestinationId);
+    if (destination === undefined) return;
+    await new S3Client(destination).delete(backup.remoteKey).catch((error: unknown) => this.ctx.logger.warn('Could not delete remote backup', { backupId: backup.id, error: errorMessage(error) }));
   }
 
   private async pruneBackups(service: ServiceRecord): Promise<void> {
@@ -267,6 +294,7 @@ export class ServiceManager {
     for (const old of succeeded.slice(service.backupRetention)) {
       const file = this.backupFile(service, old);
       if (file !== null) await rm(file, { force: true });
+      await this.deleteRemote(old);
       stores.backups.delete(old.id);
     }
   }
@@ -274,19 +302,33 @@ export class ServiceManager {
   async deleteBackup(service: ServiceRecord, backup: BackupRecord): Promise<void> {
     const file = this.backupFile(service, backup);
     if (file !== null) await rm(file, { force: true });
+    await this.deleteRemote(backup);
     this.ctx.stores.backups.delete(backup.id);
+  }
+
+  /** The backup's bytes: the local file, or the S3 copy when the server no longer has it. */
+  async openBackup(service: ServiceRecord, backup: BackupRecord): Promise<{ stream: Readable; size: number | null } | null> {
+    const file = this.backupFile(service, backup);
+    if (file !== null && existsSync(file)) return { stream: createReadStream(file), size: (await stat(file)).size };
+    if (backup.remoteDestinationId === null || backup.remoteKey === null) return null;
+    const destination = this.ctx.stores.s3.get(backup.remoteDestinationId);
+    if (destination === undefined) return null;
+    const response = await new S3Client(destination).get(backup.remoteKey);
+    const length = Number(response.headers['content-length']);
+    return { stream: response, size: Number.isFinite(length) ? length : null };
   }
 
   /** Upload a backup into the container and run the engine's restore command. */
   async restore(service: ServiceRecord, backup: BackupRecord): Promise<void> {
     const spec = catalogEntry(service.type).backup;
     if (spec === null || spec.restore === null) throw new AppError('bad_request', 'This service type does not support restore');
-    const file = this.backupFile(service, backup);
-    if (file === null || backup.status !== 'succeeded') throw new AppError('bad_request', 'This backup cannot be restored');
+    if (backup.status !== 'succeeded') throw new AppError('bad_request', 'This backup cannot be restored');
+    const source = await this.openBackup(service, backup);
+    if (source === null || source.size === null) throw new AppError('bad_request', 'The backup file is no longer available on the server or in S3');
     const docker = await this.ctx.connections.docker(service.serverId);
-    const { size } = await stat(file);
+    const size = source.size;
     const name = `ploy-restore.${spec.extension}${spec.gzip ? '.gz' : ''}`;
-    const archive = tarSingleFile(name, size, createReadStream(file) as AsyncIterable<Buffer>);
+    const archive = tarSingleFile(name, size, source.stream as AsyncIterable<Buffer>);
     const { Readable } = await import('node:stream');
     await docker.putArchive(service.containerName, '/tmp', Readable.from(archive));
     const result = await docker.exec(service.containerName, spec.restore(service.credentials, `/tmp/${name}`), { timeoutMs: 6 * 3_600_000 });

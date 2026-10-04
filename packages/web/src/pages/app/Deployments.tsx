@@ -1,12 +1,14 @@
 import { Link } from 'react-router';
-import { Ban, Ellipsis, GitCommitHorizontal, History, RotateCcw, ScrollText } from 'lucide-react';
-import { isTerminalDeployment, type DeploymentDto } from '@ploy/shared';
+import { Ban, Ellipsis, GitCommitHorizontal, History, RefreshCw, RotateCcw, ScrollText } from 'lucide-react';
+import { isTerminalDeployment, type ApplicationDto, type DeploymentDto } from '@ploy/shared';
+import { CopyButton, ValueField } from '../../components/Copy.tsx';
 import { useConfirm } from '../../components/Dialog.tsx';
+import { Card } from '../../components/Frame.tsx';
 import { Menu, MenuItem } from '../../components/Menu.tsx';
 import { computeStages, PipelineRail } from '../../components/Pipeline.tsx';
 import { Status } from '../../components/Status.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
-import { Badge, Button, EmptyState, SkeletonRows } from '../../components/ui.tsx';
+import { Badge, Button, Callout, SkeletonRows } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { useLogStream } from '../../lib/logs.ts';
@@ -22,7 +24,7 @@ function LiveDeployment({ deployment }: { deployment: DeploymentDto }) {
   const stages = computeStages(lines, deployment.status, deployment.finishedAt === null ? null : Date.parse(deployment.finishedAt));
   const tail = lines.slice(-5);
   return (
-    <div className="panel" style={{ marginBottom: 20 }}>
+    <div className="panel">
       <div className="panel__head">
         <Status kind="deployment" status={deployment.status} />
         <span className="grow truncate muted">{deployment.commitMessage ?? m.trigger[deployment.trigger]}</span>
@@ -53,11 +55,11 @@ export function DeploymentRow({ deployment, appId }: { deployment: DeploymentDto
   const running = !isTerminalDeployment(deployment.status);
 
   return (
-    <div className="list__row">
-      <div style={{ width: 132, flex: 'none' }}>
+    <div className="list__row deploy-row">
+      <div className="deploy-row__status">
         <Status kind="deployment" status={deployment.status} />
       </div>
-      <Link to={`/deployments/${deployment.id}`} className="grow" style={{ color: 'inherit', textDecoration: 'none', minWidth: 0 }}>
+      <Link to={`/deployments/${deployment.id}`} className="grow deploy-row__main" style={{ color: 'inherit', textDecoration: 'none', minWidth: 0 }}>
         <div className="row">
           {deployment.commitSha !== null && (
             <span className="row faint" style={{ gap: 4, flex: 'none' }}>
@@ -112,6 +114,35 @@ export function DeploymentRow({ deployment, appId }: { deployment: DeploymentDto
   );
 }
 
+/** The deploy hook: a secret URL a CI system calls to start a deployment. */
+function HookCard({ app }: { app: ApplicationDto }) {
+  const { m } = useI18n();
+  const rotate = useAction(() => api.post(`/api/applications/${app.id}/hook/rotate`), { success: m.appSettings.hookRotated, invalidate: [keys.app(app.id)] });
+  return (
+    <Card
+      title={m.appSettings.hook}
+      description={m.appSettings.hookHint}
+      actions={
+        <Button size="sm" icon={<RefreshCw />} busy={rotate.isPending} onClick={() => rotate.mutate()}>
+          {m.appSettings.rotateHook}
+        </Button>
+      }
+    >
+      {app.deployHookUrl === null ? (
+        <Callout tone="info">{m.appSettings.hookUnavailable}</Callout>
+      ) : (
+        <>
+          <ValueField value={app.deployHookUrl} secret />
+          <div className="codeblock">
+            {`curl -X POST ${app.deployHookUrl}`}
+            <CopyButton value={`curl -X POST ${app.deployHookUrl}`} />
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export function DeploymentsTab() {
   const app = useAppContext();
   const { m } = useI18n();
@@ -119,23 +150,30 @@ export function DeploymentsTab() {
   const items = deployments.data?.pages.flatMap((page) => page.items) ?? [];
   const live = items.find((deployment) => !isTerminalDeployment(deployment.status));
 
-  if (deployments.isPending) return <SkeletonRows rows={5} />;
-  if (items.length === 0) return <EmptyState icon={<History />}>{m.deployments.empty}</EmptyState>;
   return (
     <>
       {live !== undefined && <LiveDeployment key={live.id} deployment={live} />}
-      <div className="list">
-        {items.map((deployment) => (
-          <DeploymentRow key={deployment.id} deployment={deployment} appId={app.id} />
-        ))}
-      </div>
-      {deployments.hasNextPage && (
-        <div style={{ marginTop: 12 }}>
-          <Button busy={deployments.isFetchingNextPage} onClick={() => void deployments.fetchNextPage()}>
-            {m.deployments.loadMore}
-          </Button>
-        </div>
-      )}
+      <Card title={m.deployments.title} description={m.deployments.hint} flush={items.length > 0}>
+        {deployments.isPending ? (
+          <SkeletonRows rows={5} />
+        ) : items.length === 0 ? (
+          <p className="muted" style={{ fontSize: 'var(--text-sm)' }}>{m.deployments.empty}</p>
+        ) : (
+          <div className="list">
+            {items.map((deployment) => (
+              <DeploymentRow key={deployment.id} deployment={deployment} appId={app.id} />
+            ))}
+          </div>
+        )}
+        {deployments.hasNextPage && (
+          <div style={{ padding: 12 }}>
+            <Button busy={deployments.isFetchingNextPage} onClick={() => void deployments.fetchNextPage()}>
+              {m.deployments.loadMore}
+            </Button>
+          </div>
+        )}
+      </Card>
+      <HookCard app={app} />
     </>
   );
 }

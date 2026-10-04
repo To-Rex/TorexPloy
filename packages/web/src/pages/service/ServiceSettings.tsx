@@ -1,8 +1,10 @@
+/** A database's Advanced tab: resource limits and deletion. */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Trash2 } from 'lucide-react';
 import { updateServiceSchema, type UpdateServiceInput } from '@ploy/shared';
 import { useConfirm } from '../../components/Dialog.tsx';
+import { Card, SaveFooter } from '../../components/Frame.tsx';
 import { Button, Field, Input } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
@@ -12,14 +14,12 @@ import { keys } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 import { useServiceContext } from './ServiceLayout.tsx';
 
-export function ServiceSettingsTab() {
+export function ServiceAdvancedTab() {
   const service = useServiceContext();
   const { m } = useI18n();
   const confirm = useConfirm();
   const navigate = useNavigate();
   const initial = {
-    name: service.name,
-    publicPort: service.publicPort === null ? '' : String(service.publicPort),
     cpuLimit: service.cpuLimit === null ? '' : String(service.cpuLimit),
     memoryLimitMb: service.memoryLimitMb === null ? '' : String(service.memoryLimitMb),
   };
@@ -41,48 +41,19 @@ export function ServiceSettingsTab() {
 
   const num = (value: string) => (value.trim().length === 0 ? null : Number(value));
   const patch: UpdateServiceInput = {};
-  if (form.name !== initial.name) patch.name = form.name.trim();
-  if (form.publicPort !== initial.publicPort) patch.publicPort = num(form.publicPort);
   if (form.cpuLimit !== initial.cpuLimit) patch.cpuLimit = num(form.cpuLimit);
   if (form.memoryLimitMb !== initial.memoryLimitMb) patch.memoryLimitMb = num(form.memoryLimitMb);
   const dirty = Object.keys(patch).length > 0;
+  const submit = () => {
+    const result = validate(m, updateServiceSchema, patch);
+    if (result.errors !== null) return setErrors(result.errors);
+    setErrors({});
+    save.mutate(patch, { onError: (error) => setErrors(fieldErrors(m, error)) });
+  };
 
   return (
-    <form
-      noValidate
-      onSubmit={(event) => {
-        event.preventDefault();
-        const result = validate(m, updateServiceSchema, patch);
-        if (result.errors !== null) {
-          setErrors(result.errors);
-          return;
-        }
-        setErrors({});
-        save.mutate(patch, { onError: (error) => setErrors(fieldErrors(m, error)) });
-      }}
-    >
-      <div className="section">
-        <div className="section__intro">
-          <h2>{m.appSettings.general}</h2>
-        </div>
-        <Field label={m.services.name} error={errors.name}>
-          <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-        </Field>
-      </div>
-      <div className="section">
-        <div className="section__intro">
-          <h2>{m.services.publicPort}</h2>
-          <p>{m.services.publicPortHint}</p>
-        </div>
-        <Field label={m.services.publicPort} error={errors.publicPort}>
-          <Input value={form.publicPort} onChange={(event) => setForm({ ...form, publicPort: event.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="—" />
-        </Field>
-      </div>
-      <div className="section">
-        <div className="section__intro">
-          <h2>{m.services.resources}</h2>
-          <p>{m.services.resourcesHint}</p>
-        </div>
+    <>
+      <Card title={m.services.resources} description={m.services.resourcesHint} footer={<SaveFooter dirty={dirty} saving={save.isPending} onSave={submit} onReset={() => setForm(initial)} />}>
         <div className="form-grid">
           <Field label={m.appSettings.cpu} hint={m.appSettings.cpuHint} error={errors.cpuLimit}>
             <Input value={form.cpuLimit} onChange={(event) => setForm({ ...form, cpuLimit: event.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal" placeholder="—" />
@@ -91,41 +62,25 @@ export function ServiceSettingsTab() {
             <Input value={form.memoryLimitMb} onChange={(event) => setForm({ ...form, memoryLimitMb: event.target.value.replace(/\D/g, '') })} inputMode="numeric" placeholder="—" />
           </Field>
         </div>
-      </div>
-      <div className="section">
-        <div className="section__intro">
-          <h2>{m.appSettings.danger}</h2>
-          <p>{m.appSettings.dangerHint}</p>
-        </div>
-        <div className="panel panel--danger">
-          <div className="panel__body row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-            <p className="muted" style={{ maxWidth: '60ch' }}>{m.services.deleteText}</p>
-            <Button
-              variant="danger"
-              icon={<Trash2 />}
-              onClick={async () => {
-                const result = await confirm({ title: m.services.delete, text: m.services.deleteText, confirmLabel: m.common.delete, danger: true, typeToConfirm: service.name, checkbox: { label: m.services.deleteData } });
-                if (result.confirmed) remove.mutate(result.checked);
-              }}
-            >
-              {m.services.delete}
-            </Button>
-          </div>
-        </div>
-      </div>
-      {dirty && (
-        <div className="savebar">
-          <span>{m.common.unsavedChanges}</span>
-          <div className="row">
-            <Button variant="ghost" onClick={() => setForm(initial)}>
-              {m.common.discard}
-            </Button>
-            <Button type="submit" variant="primary" busy={save.isPending}>
-              {m.common.saveChanges}
-            </Button>
-          </div>
-        </div>
-      )}
-    </form>
+      </Card>
+      <Card
+        tone="bad"
+        title={m.services.delete}
+        description={m.services.deleteText}
+        actions={
+          <Button
+            variant="danger"
+            icon={<Trash2 />}
+            busy={remove.isPending}
+            onClick={async () => {
+              const result = await confirm({ title: m.services.delete, text: m.services.deleteText, confirmLabel: m.common.delete, danger: true, typeToConfirm: service.name, checkbox: { label: m.services.deleteData } });
+              if (result.confirmed) remove.mutate(result.checked);
+            }}
+          >
+            {m.services.delete}
+          </Button>
+        }
+      />
+    </>
   );
 }

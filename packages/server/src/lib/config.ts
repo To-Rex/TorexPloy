@@ -9,7 +9,8 @@
  * Invalid values fail at startup, not halfway through a deployment.
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { LogLevel } from './logger.ts';
@@ -38,6 +39,8 @@ export interface AppConfig {
   drainMs: number;
   /** Where the host's `/proc` is visible (the container sees host CPU/memory through it). */
   hostProc: string;
+  /** IANA time zone handed to template apps that need one. */
+  timezone: string;
   version: string;
 }
 
@@ -88,6 +91,51 @@ function resolveSecretKey(dataDir: string, provided: string | undefined): string
   return key;
 }
 
+/** The socket behind the docker CLI's current context (`docker context use …`), if it is a unix socket. */
+function contextSocket(home: string, env: NodeJS.ProcessEnv): string | null {
+  try {
+    const configDir = str(env, 'DOCKER_CONFIG') ?? join(home, '.docker');
+    const name = str(env, 'DOCKER_CONTEXT') ?? (JSON.parse(readFileSync(join(configDir, 'config.json'), 'utf8')) as { currentContext?: string }).currentContext;
+    if (name === undefined || name === 'default') return null;
+    // The CLI stores each context under the SHA-256 of its name.
+    const meta = JSON.parse(readFileSync(join(configDir, 'contexts', 'meta', createHash('sha256').update(name).digest('hex'), 'meta.json'), 'utf8')) as {
+      Endpoints?: { docker?: { Host?: string } };
+    };
+    const host = meta.Endpoints?.docker?.Host;
+    return host?.startsWith('unix://') === true ? host.slice('unix://'.length) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where the Docker Engine listens. Explicit settings win (`PLOY_DOCKER_SOCKET`,
+ * a unix `DOCKER_HOST`); otherwise the CLI's current context, then the usual
+ * places: Linux and Docker Desktop's optional default socket, Docker Desktop's
+ * own socket on macOS, OrbStack, Colima, Rancher Desktop and rootless Docker.
+ * In production the control plane runs in a container with the host's socket
+ * mounted at /var/run/docker.sock, so the first candidate is the answer.
+ */
+export function resolveDockerSocket(env: NodeJS.ProcessEnv, exists: (path: string) => boolean = existsSync, home: string = homedir()): string {
+  const explicit = str(env, 'PLOY_DOCKER_SOCKET');
+  if (explicit !== undefined) return explicit;
+  const dockerHost = str(env, 'DOCKER_HOST');
+  if (dockerHost?.startsWith('unix://') === true) return dockerHost.slice('unix://'.length);
+  const fromContext = contextSocket(home, env);
+  const runtime = str(env, 'XDG_RUNTIME_DIR');
+  const candidates = [
+    ...(fromContext === null ? [] : [fromContext]),
+    '/var/run/docker.sock',
+    join(home, '.docker', 'run', 'docker.sock'),
+    join(home, '.orbstack', 'run', 'docker.sock'),
+    join(home, '.colima', 'default', 'docker.sock'),
+    join(home, '.colima', 'docker.sock'),
+    join(home, '.rd', 'docker.sock'),
+    ...(runtime === undefined ? [] : [join(runtime, 'docker.sock')]),
+  ];
+  return candidates.find((candidate) => exists(candidate)) ?? '/var/run/docker.sock';
+}
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
 function readVersion(): string {
@@ -127,13 +175,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     port: int(env, 'PLOY_PORT', 3000, 1, 65_535),
     publicUrl,
     secretKey: resolveSecretKey(dataDir, str(env, 'PLOY_SECRET_KEY')),
-    dockerSocket: str(env, 'PLOY_DOCKER_SOCKET') ?? '/var/run/docker.sock',
+    dockerSocket: resolveDockerSocket(env),
     controlUpstream: str(env, 'PLOY_CONTROL_UPSTREAM') ?? 'ploy-control:3000',
     webDist: existsSync(join(webDist, 'index.html')) ? webDist : null,
     proxyImage: str(env, 'PLOY_PROXY_IMAGE') ?? 'caddy:2.11-alpine',
     buildTimeoutMs: int(env, 'PLOY_BUILD_TIMEOUT_MINUTES', 30, 1, 360) * 60_000,
     drainMs: int(env, 'PLOY_DRAIN_SECONDS', 10, 0, 600) * 1000,
     hostProc: str(env, 'PLOY_HOST_PROC') ?? '/proc',
+    timezone: str(env, 'PLOY_TIMEZONE') ?? 'Asia/Tashkent',
     version: readVersion(),
     ...overrides,
   };

@@ -4,10 +4,10 @@
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Boxes, FolderKanban, Languages, LayoutDashboard, Moon, Plus, Search, Server, Settings } from 'lucide-react';
-import { LOCALES, type Locale } from '@ploy/shared';
+import { Activity, BellRing, Boxes, CalendarClock, Container, FolderKanban, Languages, Moon, Network, Package, Plus, Rocket, ScrollText, Search, Server, Settings, SquareTerminal, Variable } from 'lucide-react';
+import { LOCALES, roleAtLeast, type Locale } from '@ploy/shared';
 import { LOCALE_NAMES, useI18n } from '../i18n/index.tsx';
-import { useApplications, useProjects, useServers } from '../lib/queries.ts';
+import { useApplications, useProjects, useRole, useServers } from '../lib/queries.ts';
 import { useTheme } from '../lib/theme.tsx';
 
 interface Item {
@@ -17,6 +17,8 @@ interface Item {
   hint?: string;
   icon: ReactNode;
   run: () => void;
+  /** Deep links (an app's terminal, its logs) appear only when searching, to keep the default list short. */
+  searchOnly?: boolean;
 }
 
 const normalize = (value: string): string => value.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[ʻʼ'’`]/g, '');
@@ -32,6 +34,9 @@ export function CommandPalette({ open, onClose, onNewProject }: { open: boolean;
   const projects = useProjects();
   const apps = useApplications();
   const servers = useServers();
+  const role = useRole();
+  const admin = role !== null && roleAtLeast(role, 'admin');
+  const developer = role !== null && roleAtLeast(role, 'developer');
 
   useEffect(() => {
     const dialog = ref.current;
@@ -52,23 +57,42 @@ export function CommandPalette({ open, onClose, onNewProject }: { open: boolean;
     };
     const nextLocale = LOCALES[(LOCALES.indexOf(locale) + 1) % LOCALES.length] as Locale;
     const list: Item[] = [
-      { id: 'p-overview', group: m.palette.pages, label: m.nav.overview, icon: <LayoutDashboard />, run: go('/') },
       { id: 'p-projects', group: m.palette.pages, label: m.nav.projects, icon: <FolderKanban />, run: go('/projects') },
+      { id: 'p-deployments', group: m.palette.pages, label: m.nav.deployments, icon: <Rocket />, run: go('/deployments') },
+      { id: 'p-monitoring', group: m.palette.pages, label: m.nav.monitoring, icon: <Activity />, run: go('/monitoring') },
+      { id: 'p-schedules', group: m.palette.pages, label: m.nav.schedules, icon: <CalendarClock />, run: go('/schedules') },
+      ...(admin
+        ? [
+            { id: 'p-docker', group: m.palette.pages, label: m.nav.docker, icon: <Container />, run: go('/docker') },
+            { id: 'p-proxy', group: m.palette.pages, label: m.nav.proxy, icon: <Network />, run: go('/proxy') },
+          ]
+        : []),
       { id: 'p-servers', group: m.palette.pages, label: m.nav.servers, icon: <Server />, run: go('/servers') },
-      { id: 'p-settings', group: m.palette.pages, label: m.nav.settings, icon: <Settings />, run: go('/settings') },
+      { id: 'p-settings', group: m.palette.pages, label: m.nav.settings, icon: <Settings />, run: go('/settings/profile') },
+      ...(admin
+        ? [
+            { id: 'p-notifications', group: m.palette.pages, label: m.settings.nav.notifications, icon: <BellRing />, run: go('/settings/notifications') },
+            { id: 'p-registries', group: m.palette.pages, label: m.settings.nav.registries, icon: <Package />, run: go('/settings/registries') },
+          ]
+        : []),
       ...(projects.data ?? []).map((project) => ({ id: project.id, group: m.palette.projects, label: project.name, icon: <FolderKanban />, run: go(`/projects/${project.id}`) })),
       ...(apps.data ?? []).map((app) => ({ id: app.id, group: m.palette.applications, label: app.name, hint: app.url?.replace(/^https?:\/\//, '') ?? m.status.app[app.status], icon: <Boxes />, run: go(`/apps/${app.id}`) })),
+      ...(apps.data ?? []).flatMap((app) => [
+        { id: `${app.id}-logs`, group: m.palette.applications, label: `${app.name} › ${m.app.tabs.logs}`, icon: <ScrollText />, run: go(`/apps/${app.id}/logs`), searchOnly: true },
+        { id: `${app.id}-env`, group: m.palette.applications, label: `${app.name} › ${m.app.tabs.environment}`, icon: <Variable />, run: go(`/apps/${app.id}/environment`), searchOnly: true },
+        ...(developer ? [{ id: `${app.id}-terminal`, group: m.palette.applications, label: `${app.name} › ${m.deploySettings.terminal}`, icon: <SquareTerminal />, run: go(`/apps/${app.id}/general?terminal=1`), searchOnly: true }] : []),
+      ]),
       ...(servers.data ?? []).map((server) => ({ id: server.id, group: m.palette.servers, label: server.name, hint: server.host ?? server.publicIp ?? undefined, icon: <Server />, run: go(`/servers/${server.id}`) })),
       { id: 'c-new-project', group: m.palette.commands, label: m.projects.new, icon: <Plus />, run: () => { onClose(); onNewProject(); } },
       { id: 'c-theme', group: m.palette.commands, label: m.palette.toggleTheme, hint: resolved === 'dark' ? m.theme.light : m.theme.dark, icon: <Moon />, run: () => { setTheme(resolved === 'dark' ? 'light' : 'dark'); onClose(); } },
       { id: 'c-language', group: m.palette.commands, label: t(m.palette.language, { language: LOCALE_NAMES[nextLocale] }), icon: <Languages />, run: () => { void setLocale(nextLocale); onClose(); } },
     ];
     return list;
-  }, [m, t, projects.data, apps.data, servers.data, resolved, locale, navigate, onClose, onNewProject, setLocale, setTheme]);
+  }, [m, t, projects.data, apps.data, servers.data, resolved, locale, navigate, onClose, onNewProject, setLocale, setTheme, admin, developer]);
 
   const filtered = useMemo(() => {
     const needle = normalize(query.trim());
-    if (needle.length === 0) return items.filter((item) => item.group !== m.palette.applications || items.length < 40);
+    if (needle.length === 0) return items.filter((item) => item.searchOnly !== true && (item.group !== m.palette.applications || items.length < 40));
     return items.filter((item) => normalize(`${item.label} ${item.hint ?? ''}`).includes(needle)).slice(0, 50);
   }, [items, query, m]);
 
@@ -159,6 +183,8 @@ export function usePaletteShortcut(open: () => void): void {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        // Inside a terminal Ctrl+K belongs to the shell (kill to end of line); ⌘K still opens the palette.
+        if (!event.metaKey && event.target instanceof Element && event.target.closest('.xterm') !== null) return;
         event.preventDefault();
         open();
       }

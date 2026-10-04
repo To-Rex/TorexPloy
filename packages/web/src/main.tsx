@@ -5,6 +5,7 @@ import './styles/tokens.css';
 import './styles/components.css';
 import './styles/shell.css';
 import './styles/features.css';
+import './styles/frame.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

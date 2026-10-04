@@ -32,6 +32,8 @@ export const ERROR_CODES = [
   'last_owner',
   'invitation_invalid',
   'domain_taken',
+  'registry_exists',
+  'registry_auth_failed',
   'internal_error',
 ] as const;
 

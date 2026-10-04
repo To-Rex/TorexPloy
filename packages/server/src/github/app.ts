@@ -7,6 +7,7 @@
  * provides:
  * - repository access via short-lived installation tokens (cached ~55 min),
  * - push webhooks that trigger automatic deployments,
+ * - pull request webhooks that drive preview deployments (and a comment with the preview's address),
  * - commit statuses (✓/✗ next to each commit),
  * - "Sign in with GitHub" via the app's OAuth credentials.
  */
@@ -84,6 +85,16 @@ export class GithubApp {
     this.store(null);
   }
 
+  /** Origin GitHub delivers webhooks to: the one the app was created for, else the panel's public URL. */
+  webhookBase(): string | null {
+    return this.credentials()?.baseUrl ?? publicBaseUrl(this.ctx);
+  }
+
+  /** The app is connected and GitHub can reach its webhook (pushes and pull requests arrive). */
+  webhookReady(): boolean {
+    return this.credentials() !== null && isPublicOrigin(this.webhookBase());
+  }
+
   // ------------------------------------------------------------------ state
 
   createState(state: Omit<PendingState, 'expiresAt'>): string {
@@ -118,8 +129,10 @@ export class GithubApp {
       setup_url: `${publicUrl}/api/github/setup`,
       setup_on_update: true,
       public: false,
-      default_permissions: { contents: 'read', metadata: 'read', statuses: 'write', email_addresses: 'read' },
-      default_events: ['push'],
+      // `emails` — the manifest's name for "Email addresses" (read by /user/emails at sign-in); GitHub refuses
+      // a manifest that says `email_addresses` ("Default permission records resource is not included in the list").
+      default_permissions: { contents: 'read', metadata: 'read', statuses: 'write', pull_requests: 'write', emails: 'read' },
+      default_events: ['push', 'pull_request'],
     };
     const base = organization === null ? 'https://github.com/settings/apps/new' : `https://github.com/organizations/${encodeURIComponent(organization)}/settings/apps/new`;
     return { action: `${base}?state=${encodeURIComponent(state)}`, manifest: JSON.stringify(manifest) };
@@ -283,6 +296,22 @@ export class GithubApp {
     });
   }
 
+  /** Comment on an issue or pull request, or edit `commentId` in place. Returns the comment's id. */
+  async upsertIssueComment(installationId: number, repository: string, issue: number, commentId: number | null, body: string): Promise<number> {
+    const auth = `token ${await this.installationToken(installationId)}`;
+    if (commentId !== null) {
+      try {
+        await this.request(`/repos/${repository}/issues/comments/${commentId}`, { method: 'PATCH', auth, body: { body } });
+        return commentId;
+      } catch (error) {
+        // Deleted on GitHub: post a fresh one.
+        if (!(error instanceof AppError) || error.code !== 'not_found') throw error;
+      }
+    }
+    const created = await this.request<{ id: number }>(`/repos/${repository}/issues/${issue}/comments`, { method: 'POST', auth, body: { body } });
+    return created.id;
+  }
+
   // --------------------------------------------------------------- webhook
 
   verifySignature(body: Buffer, signature: string | undefined): boolean {
@@ -337,6 +366,8 @@ export class GithubApp {
       return `queued ${apps.length} deployment(s)`;
     }
 
+    if (event === 'pull_request') return this.ctx.previews.handlePullRequest(installationId, payload);
+
     return 'ignored';
   }
 
@@ -364,6 +395,11 @@ export class GithubApp {
     const primary = emails.find((email) => email.primary && email.verified) ?? emails.find((email) => email.verified);
     return { id: String(user.id), login: user.login, name: user.name ?? user.login, email: primary?.email ?? null, avatarUrl: user.avatar_url };
   }
+}
+
+/** Whether GitHub could reach `origin` (not a loopback or private-network address). */
+export function isPublicOrigin(origin: string | null): boolean {
+  return origin !== null && !/^https?:\/\/(localhost|127\.|10\.|192\.168\.)/.test(origin);
 }
 
 /** The dashboard's public origin: explicit config, else the platform domain, else null. */

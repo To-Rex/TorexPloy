@@ -23,6 +23,7 @@ import { planBuild, type BuildPlan } from '../build/detect.ts';
 import { buildWorkDir, checkout, cloneUrl } from '../build/git.ts';
 import { emit, type Context } from '../context.ts';
 import type { DockerClient } from '../docker/client.ts';
+import { cliAuths, registryAuthHeader } from '../docker/registry.ts';
 import {
   appContainer,
   appPrefix,
@@ -156,7 +157,7 @@ export class Deployer {
   enqueue(input: EnqueueInput): DeploymentRecord {
     const { stores } = this.ctx;
     const { app } = input;
-    if (app.sourceType !== 'image' && input.imageTag == null && cloneUrl(app).length === 0) {
+    if (app.sourceType !== 'image' && app.sourceType !== 'raw' && input.imageTag == null && cloneUrl(app).length === 0) {
       throw new AppError('nothing_to_deploy', 'Application has no source configured');
     }
 
@@ -331,6 +332,25 @@ export class Deployer {
       log.info(`Deployment ${queued.id} · ${queued.trigger} · ${app.name} on ${server.name}`);
       docker = await connections.docker(app.serverId);
 
+      if (app.kind === 'compose') {
+        const { containers } = await this.ctx.compose.deploy({ app, deployment: queued, docker, log, signal });
+        throwIfAborted(signal);
+        log.stage('switch', 'Routing traffic to the stack');
+        stores.deployments.setContainers(queued.id, containers, null);
+        stores.applications.setActiveDeployment(app.id, queued.id);
+        try {
+          await proxy.requestSync(app.serverId);
+        } catch (error) {
+          throw new AppError('proxy_error', `Could not update routing: ${errorMessage(error)}`);
+        }
+        stores.deployments.finish(queued.id, 'succeeded');
+        this.setAppStatus(app.id, 'running');
+        this.emitDeployment(queued.id);
+        this.ctx.notifier.deploymentFinished(queued.id);
+        log.info(`✓ Deployed in ${Math.round((Date.now() - Date.parse(stores.deployments.get(queued.id)!.startedAt!)) / 1000)}s`);
+        return;
+      }
+
       // ---------------------------------------------------------- image
       let image: string;
       let plan: BuildPlan | null = null;
@@ -341,9 +361,12 @@ export class Deployer {
         }
         log.stage('build', `Reusing image ${image} — no build needed`);
       } else if (app.sourceType === 'image') {
-        log.stage('fetch', `Pulling ${app.image}`);
+        // A private image pulls with the team's login for its registry, when one is stored.
+        const registry = stores.registries.forImage(app.teamId, app.image!);
+        log.stage('fetch', `Pulling ${app.image}${registry === undefined ? '' : ` (signed in to ${registry.serverAddress} as ${registry.username})`}`);
+        if (registry !== undefined) log.mask([registry.password]);
         try {
-          await docker.pullImage(app.image!, (line) => log.write(line, 'stdout'), undefined, signal);
+          await docker.pullImage(app.image!, (line) => log.write(line, 'stdout'), registry === undefined ? undefined : registryAuthHeader(registry), signal);
         } catch (error) {
           if (signal.aborted) throw error;
           throw new AppError('bad_request', `Could not pull ${app.image}: ${errorMessage(error)}`, { params: { reason: 'pull_failed' } });
@@ -432,6 +455,9 @@ export class Deployer {
       stores.deployments.finish(queued.id, 'succeeded');
       this.setAppStatus(app.id, 'running');
       this.emitDeployment(queued.id);
+      this.ctx.notifier.deploymentFinished(queued.id);
+      // A preview announces its address on the pull request; that never affects the deployment.
+      if (app.parentApplicationId !== null) void this.ctx.previews.commentDeployed(app.id, queued.id).catch(() => undefined);
 
       // ---------------------------------------------------------- drain
       if (previous !== undefined && previous.containers.length > 0) {
@@ -472,6 +498,7 @@ export class Deployer {
       }
       if (app !== undefined) this.restoreAppStatus(app.id);
       this.emitDeployment(queued.id);
+      if (!cancelled) this.ctx.notifier.deploymentFinished(queued.id);
     } finally {
       this.reportCommitStatus(queued.id);
       await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
@@ -528,7 +555,7 @@ export class Deployer {
       buildCommand: app.buildCommand,
       startCommand: app.startCommand,
       outputDirectory: app.outputDirectory,
-      kind: app.kind,
+      kind: app.kind === 'worker' ? 'worker' : 'web',
     });
     log.stage('build', `Build plan: ${plan.label}`);
     if (plan.dockerfile !== null) {
@@ -539,6 +566,9 @@ export class Deployer {
     const image = makeImageTag(app, deployment.id);
     const resolved = resolveAppEnv(stores, app);
     log.mask(resolved.secrets);
+    // `FROM` may name private images: the build signs in to the team's registries.
+    const registries = stores.registries.listForTeam(app.teamId);
+    log.mask(registries.map((registry) => registry.password));
     log.info(`Building ${image}${deployment.options.clearCache === true ? ' (without cache)' : ''}`);
     stores.deployments.setStatus(deployment.id, 'building');
     const { durationMs } = await buildImage({
@@ -550,6 +580,7 @@ export class Deployer {
       applicationId: app.id,
       deploymentId: deployment.id,
       buildEnv: resolved.env,
+      registryAuths: cliAuths(registries),
       noCache: deployment.options.clearCache === true,
       timeoutMs: config.buildTimeoutMs,
       signal,
@@ -653,6 +684,12 @@ export class Deployer {
   /** Stop serving: containers are stopped (kept for a fast start) and the proxy shows the unavailable page. */
   async stop(app: ApplicationRecord): Promise<void> {
     if (this.running.has(app.id)) throw new AppError('deployment_in_progress', 'A deployment is in progress');
+    if (app.kind === 'compose') {
+      this.setAppStatus(app.id, 'stopped');
+      await this.ctx.proxy.requestSync(app.serverId).catch(() => undefined);
+      await this.ctx.compose.stop(app);
+      return;
+    }
     const docker = await this.ctx.connections.docker(app.serverId);
     const active = app.activeDeploymentId === null ? undefined : this.ctx.stores.deployments.get(app.activeDeploymentId);
     this.setAppStatus(app.id, 'stopped');
@@ -663,6 +700,12 @@ export class Deployer {
   /** Start a stopped application from its active deployment, or redeploy it if its containers are gone. */
   async start(app: ApplicationRecord, userId: string | null): Promise<DeploymentRecord | null> {
     if (this.running.has(app.id)) throw new AppError('deployment_in_progress', 'A deployment is in progress');
+    if (app.kind === 'compose') {
+      if (!(await this.ctx.compose.start(app))) return this.enqueue({ app, trigger: 'manual', createdBy: userId });
+      this.setAppStatus(app.id, 'running');
+      await this.ctx.proxy.requestSync(app.serverId);
+      return null;
+    }
     const active = app.activeDeploymentId === null ? undefined : this.ctx.stores.deployments.get(app.activeDeploymentId);
     if (active === undefined || active.imageTag === null) {
       return this.enqueue({ app, trigger: 'manual', createdBy: userId });
@@ -710,6 +753,10 @@ export class Deployer {
     for (const open of this.ctx.stores.deployments.listOpen()) {
       if (open.applicationId === app.id && open.status === 'queued') this.ctx.stores.deployments.finish(open.id, 'cancelled', 'Application deleted', 'cancelled');
     }
+    if (app.kind === 'compose') {
+      await this.ctx.compose.destroy(app, removeVolumes);
+      return;
+    }
     try {
       const docker = await this.ctx.connections.docker(app.serverId);
       const containers = await docker.listContainers({ label: [`${LABEL_APP}=${app.id}`] });
@@ -727,6 +774,27 @@ export class Deployer {
       // The server may be gone; the database cleanup must still happen.
       this.ctx.logger.warn('Could not clean up application containers', { applicationId: app.id, error: errorMessage(error) });
     }
+  }
+
+  /**
+   * Delete an application for good: its pull request previews first (each
+   * through this same path — the database cascade alone would leave their
+   * containers running), then its containers, images, rows, logs and metrics.
+   */
+  async remove(app: ApplicationRecord, removeVolumes: boolean): Promise<void> {
+    const { stores, config } = this.ctx;
+    for (const preview of stores.applications.listPreviews(app.id)) await this.remove(preview, true);
+    await this.destroy(app, removeVolumes);
+    const deploymentIds = stores.db.all('SELECT id FROM deployments WHERE application_id = ?', app.id).map((row) => String(row.id));
+    const runIds = stores.db
+      .all('SELECT r.id FROM cron_runs r JOIN cron_jobs j ON j.id = r.cron_job_id WHERE j.application_id = ?', app.id)
+      .map((row) => String(row.id));
+    stores.applications.delete(app.id);
+    stores.metrics.deleteOwner(app.id);
+    for (const id of deploymentIds) await removeLog(logPath(config.dataDir, 'deployments', id));
+    for (const id of runIds) await removeLog(logPath(config.dataDir, 'cron', id));
+    await this.ctx.proxy.requestSync(app.serverId).catch(() => undefined);
+    emit(this.ctx, app.teamId, { type: 'application.deleted', id: app.id, projectId: app.projectId });
   }
 
   /** Name prefix of every container of an application (used by the reconciler). */

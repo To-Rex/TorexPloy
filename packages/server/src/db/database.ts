@@ -84,14 +84,24 @@ export class Database {
 
     for (const migration of MIGRATIONS) {
       if (migration.version <= current) continue;
-      this.transaction(() => {
-        this.db.exec(migration.sql);
-        this.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(
-          migration.version,
-          migration.name,
-          new Date().toISOString(),
-        );
-      });
+      // PRAGMA foreign_keys is a no-op inside a transaction, so it is switched around it.
+      if (migration.rebuildsTables === true) this.db.exec('PRAGMA foreign_keys = OFF');
+      try {
+        this.transaction(() => {
+          this.db.exec(migration.sql);
+          if (migration.rebuildsTables === true) {
+            const broken = this.all('PRAGMA foreign_key_check');
+            if (broken.length > 0) throw new Error(`Migration ${migration.version} would break ${broken.length} foreign key(s)`);
+          }
+          this.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(
+            migration.version,
+            migration.name,
+            new Date().toISOString(),
+          );
+        });
+      } finally {
+        if (migration.rebuildsTables === true) this.db.exec('PRAGMA foreign_keys = ON');
+      }
       current = migration.version;
       applied += 1;
     }

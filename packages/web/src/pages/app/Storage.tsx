@@ -1,19 +1,19 @@
+/** Persistent volumes, as a card on the Advanced tab. */
 import { useState } from 'react';
 import { HardDrive, Plus, Trash2 } from 'lucide-react';
-import { createVolumeSchema } from '@ploy/shared';
+import { createVolumeSchema, type ApplicationDto } from '@ploy/shared';
 import { useConfirm, Dialog } from '../../components/Dialog.tsx';
+import { Card } from '../../components/Frame.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
-import { Button, Callout, EmptyState, Field, Input, SkeletonRows } from '../../components/ui.tsx';
+import { Button, Callout, Field, Input, SkeletonRows } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useVolumes } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
-import { useAppContext } from './AppLayout.tsx';
 
-export function StorageTab() {
-  const app = useAppContext();
+export function VolumesCard({ app }: { app: ApplicationDto }) {
   const { m } = useI18n();
   const confirm = useConfirm();
   const volumes = useVolumes(app.id);
@@ -31,18 +31,20 @@ export function StorageTab() {
   const remove = useAction((input: { id: string; removeData: boolean }) => api.delete(`/api/applications/${app.id}/volumes/${input.id}?removeData=${input.removeData}`), { success: m.storage.removed, invalidate });
 
   return (
-    <div className="stack">
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <p className="muted">{m.storage.hint}</p>
-        <Button variant="primary" icon={<Plus />} onClick={() => setAdding(true)}>
+    <Card
+      title={m.storage.title}
+      description={m.storage.hint}
+      actions={
+        <Button icon={<Plus />} onClick={() => setAdding(true)}>
           {m.storage.add}
         </Button>
-      </div>
+      }
+    >
       {app.replicas > 1 && (volumes.data ?? []).length > 0 && <Callout tone="work">{m.storage.replicaWarning}</Callout>}
       {volumes.isPending ? (
         <SkeletonRows rows={2} />
       ) : volumes.data!.length === 0 ? (
-        <EmptyState icon={<HardDrive />}>{m.storage.empty}</EmptyState>
+        <p className="muted" style={{ fontSize: 'var(--text-sm)' }}>{m.storage.empty}</p>
       ) : (
         <div className="list">
           {volumes.data!.map((volume) => (
@@ -102,6 +104,6 @@ export function StorageTab() {
           </Field>
         </div>
       </Dialog>
-    </div>
+    </Card>
   );
 }

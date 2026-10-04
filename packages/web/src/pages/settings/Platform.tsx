@@ -75,7 +75,6 @@ export function PlatformPage() {
         save.mutate(payload, { onError: (error) => setErrors(fieldErrors(m, error)) });
       }}
     >
-      <p className="muted" style={{ marginBottom: 8 }}>{m.platform.subtitle}</p>
       <SettingsSection title={m.platform.domains} hint={m.platform.domainsHint}>
         <Field label={m.platform.platformDomain} hint={t(m.platform.platformDomainHint, { ip })} error={errors.platformDomain}>
           <Input mono {...text('platformDomain')} placeholder="deploy.example.uz" spellCheck={false} />

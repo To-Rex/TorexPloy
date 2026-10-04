@@ -8,7 +8,7 @@ import { projectNetwork } from '../../docker/naming.ts';
 import { notFound } from '../../lib/errors.ts';
 import type { ProjectRecord } from '../../store/index.ts';
 import { audit, body, requireTeam, type Ctx, type Env } from '../core.ts';
-import { applicationDto, deploymentDto, projectDto, serviceDto } from '../dto.ts';
+import { applicationDto, projectDto, serviceDto, teamDeploymentDtos } from '../dto.ts';
 
 export function loadProject(ctx: Context, c: Ctx, role: 'viewer' | 'developer' | 'admin', id: string = c.req.param('id')!): ProjectRecord {
   const auth = requireTeam(c, role);
@@ -25,10 +25,9 @@ export function registerProjectRoutes(app: Hono<Env>, ctx: Context): void {
     const apps = stores.applications.listForTeam(auth.teamId);
     const services = stores.services.listForTeam(auth.teamId);
     const servers = stores.servers.listForTeam(auth.teamId);
-    const projects = new Map(stores.projects.listForTeam(auth.teamId).map((project) => [project.id, project]));
-    const appById = new Map(apps.map((application) => [application.id, application]));
+    const projects = stores.projects.listForTeam(auth.teamId);
     const overview: OverviewDto = {
-      projects: projects.size,
+      projects: projects.length,
       applications: {
         total: apps.length,
         running: apps.filter((application) => application.status === 'running').length,
@@ -37,11 +36,7 @@ export function registerProjectRoutes(app: Hono<Env>, ctx: Context): void {
       },
       services: { total: services.length, running: services.filter((service) => service.status === 'running').length },
       servers: { total: servers.length, ready: servers.filter((server) => server.status === 'ready').length },
-      recentDeployments: stores.deployments.recentForTeam(auth.teamId, 12).map((deployment) => ({
-        ...deploymentDto(deployment, appById.get(deployment.applicationId)),
-        applicationName: appById.get(deployment.applicationId)?.name ?? '—',
-        projectName: projects.get(deployment.projectId)?.name ?? '—',
-      })),
+      recentDeployments: teamDeploymentDtos(ctx, stores.deployments.recentForTeam(auth.teamId, 12)),
     };
     return c.json(overview);
   });
@@ -84,6 +79,11 @@ export function registerProjectRoutes(app: Hono<Env>, ctx: Context): void {
     const servers = new Set<string>();
     for (const application of stores.applications.listForProject(project.id)) {
       servers.add(application.serverId);
+      // Previews first: the cascade would delete their rows but leave their containers running.
+      for (const preview of stores.applications.listPreviews(application.id)) {
+        await ctx.deployer.destroy(preview, true);
+        stores.metrics.deleteOwner(preview.id);
+      }
       await ctx.deployer.destroy(application, removeData);
       stores.metrics.deleteOwner(application.id);
     }

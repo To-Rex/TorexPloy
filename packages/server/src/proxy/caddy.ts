@@ -16,12 +16,20 @@
 
 export interface ProxyRoute {
   host: string;
+  /** Path prefix; '/' (the default) routes the whole host. */
+  path?: string;
+  /** Remove the prefix before proxying (`/api/users` reaches the app as `/users`). */
+  stripPath?: boolean;
   https: boolean;
   /** `container:port` dial addresses. Empty means "nothing healthy is serving". */
   upstreams: string[];
   /** Shown on the 503 page when there are no upstreams. */
   label: string;
+  /** Redirect-only route: answer 308 to this origin, keeping path and query. */
+  redirectTo?: string | null;
 }
+
+const prefixOf = (route: ProxyRoute): string => route.path ?? '/';
 
 export interface CaddyConfigInput {
   acmeEmail: string | null;
@@ -55,6 +63,11 @@ function hostMatch(hosts: string[]): Json[] {
   return [{ host: hosts }];
 }
 
+function routeMatch(route: ProxyRoute): Json[] {
+  const prefix = prefixOf(route);
+  return prefix === '/' ? hostMatch([route.host]) : [{ host: [route.host], path: [prefix, `${prefix}/*`] }];
+}
+
 function proxyHandler(upstreams: string[]): Json {
   return {
     handler: 'reverse_proxy',
@@ -82,10 +95,20 @@ function unavailableHandler(label: string): Json {
 }
 
 function routeFor(route: ProxyRoute): Json {
+  const hsts = route.https ? [{ handler: 'headers', response: { set: { 'Strict-Transport-Security': ['max-age=31536000'] } } }] : [];
+  if (route.redirectTo != null) {
+    return {
+      match: routeMatch(route),
+      handle: [...hsts, { handler: 'static_response', status_code: 308, headers: { Location: [`${route.redirectTo}{http.request.uri}`] } }],
+      terminal: true,
+    };
+  }
+  const prefix = prefixOf(route);
   return {
-    match: hostMatch([route.host]),
+    match: routeMatch(route),
     handle: [
-      ...(route.https ? [{ handler: 'headers', response: { set: { 'Strict-Transport-Security': ['max-age=31536000'] } } }] : []),
+      ...hsts,
+      ...(route.stripPath === true && prefix !== '/' && route.upstreams.length > 0 ? [{ handler: 'rewrite', strip_path_prefix: prefix }] : []),
       route.upstreams.length > 0 ? proxyHandler(route.upstreams) : unavailableHandler(route.label),
     ],
     terminal: true,
@@ -105,16 +128,18 @@ const NOT_FOUND = {
 };
 
 export function buildCaddyConfig(input: CaddyConfigInput): Json {
-  // Stable ordering keeps the generated JSON (and its hash) deterministic.
-  const routes = [...input.routes].sort((a, b) => a.host.localeCompare(b.host));
+  // Stable ordering keeps the generated JSON (and its hash) deterministic; within a host the
+  // most specific path prefix must come first, because routes are terminal.
+  const routes = [...input.routes].sort((a, b) => a.host.localeCompare(b.host) || prefixOf(b).length - prefixOf(a).length || prefixOf(a).localeCompare(prefixOf(b)));
   const httpsRoutes = routes.filter((route) => route.https);
   const httpRoutes = routes.filter((route) => !route.https);
+  const httpsHosts = [...new Set(httpsRoutes.map((route) => route.host))];
 
   const redirects = httpsRoutes.length === 0
     ? []
     : [
         {
-          match: hostMatch(httpsRoutes.map((route) => route.host)),
+          match: hostMatch(httpsHosts),
           handle: [
             {
               handler: 'static_response',
@@ -159,7 +184,7 @@ export function buildCaddyConfig(input: CaddyConfigInput): Json {
   if (httpsRoutes.length > 0 && input.acmeEmail !== null) {
     (config.apps as Json).tls = {
       automation: {
-        policies: [{ subjects: httpsRoutes.map((route) => route.host), issuers: [{ module: 'acme', email: input.acmeEmail }] }],
+        policies: [{ subjects: httpsHosts, issuers: [{ module: 'acme', email: input.acmeEmail }] }],
       },
     };
   }

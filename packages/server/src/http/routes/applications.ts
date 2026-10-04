@@ -3,8 +3,10 @@
  */
 import type { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import { z } from 'zod';
 import {
   createApplicationSchema,
+  composeServiceSchema,
   createCronJobSchema,
   createDomainSchema,
   createLinkSchema,
@@ -13,24 +15,27 @@ import {
   LIMITS,
   METRIC_RANGE_WINDOWS,
   paginationSchema,
+  portSchema,
   putVariablesSchema,
   updateApplicationSchema,
   updateCronJobSchema,
   updateDomainSchema,
+  type ContainerDto,
   type SourceInput,
   type VariablesDto,
 } from '@ploy/shared';
 import { emit, type Context } from '../../context.ts';
 import { resolveAppEnv } from '../../deploy/env.ts';
+import { generateDomain } from '../../domains/generate.ts';
 import { logPath, readLog, removeLog } from '../../deploy/logs.ts';
-import { appVolume, idPart } from '../../docker/naming.ts';
+import { appVolume } from '../../docker/naming.ts';
 import { generateToken } from '../../lib/crypto.ts';
 import { CronError, nextRunFor } from '../../lib/cron.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
 import { generateKeyPair } from '../../servers/ssh.ts';
-import type { ApplicationPatch, ApplicationRecord, ProjectRecord } from '../../store/index.ts';
+import type { ApplicationPatch, ApplicationRecord } from '../../store/index.ts';
 import { audit, body, query, requireTeam, type Ctx, type Env } from '../core.ts';
-import { applicationDto, cronJobDto, cronRunDto, deploymentDto, domainDto, linkDto, volumeDto } from '../dto.ts';
+import { applicationDto, cronJobDto, cronRunDto, deploymentDto, domainDto, linkDto, teamCronJobDto, volumeDto } from '../dto.ts';
 import { loadProject } from './projects.ts';
 import { rangeQuery } from './servers.ts';
 
@@ -74,25 +79,6 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     return { sourceType: 'image', githubInstallationId: null, repository: null, gitUrl: null, branch: null, image: source.image };
   };
 
-  /** A ready-to-use URL for a new web app: `<app>-<project>.<apps domain>`, or sslip.io on the server's IP. */
-  const generateDomain = (application: ApplicationRecord, project: ProjectRecord): void => {
-    const { appsDomain } = stores.settings.platform();
-    const server = stores.servers.get(application.serverId);
-    let host: string | null = null;
-    let https = true;
-    if (appsDomain !== null) {
-      host = `${`${application.slug}-${project.slug}`.slice(0, 50).replace(/-+$/, '')}.${appsDomain}`;
-      if (stores.domains.findByHost(host) !== undefined) host = `${application.slug.slice(0, 40)}-${idPart(application.id, 6)}.${appsDomain}`;
-    } else if (server?.publicIp != null && /^\d+\.\d+\.\d+\.\d+$/.test(server.publicIp)) {
-      // Shared wildcard DNS; certificates for it would hit public rate limits, so plain HTTP.
-      host = `${application.slug.slice(0, 40)}-${idPart(application.id, 6)}.${server.publicIp.replace(/\./g, '-')}.sslip.io`;
-      https = false;
-    }
-    if (host === null || stores.domains.findByHost(host) !== undefined) return;
-    const domain = stores.domains.create({ applicationId: application.id, teamId: application.teamId, host, https, port: null, isGenerated: true });
-    ctx.domains.followUp(domain.id);
-  };
-
   // ------------------------------------------------------------------ CRUD
 
   app.get('/api/applications', (c) => {
@@ -125,7 +111,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
       const keys = await generateKeyPair(`torexploy-${application.slug}`);
       stores.applications.setDeployKey(application.id, ctx.secrets.seal(keys.privateKey, 'ssh'), keys.publicKey);
     }
-    if (application.kind === 'web') generateDomain(application, project);
+    if (application.kind === 'web') generateDomain(ctx, application, project);
     stores.projects.touch(project.id);
     audit(ctx, c, 'application.created', { type: 'application', id: application.id, name: application.name }, { source: source.sourceType });
     changed(application);
@@ -142,13 +128,24 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const application = loadApp(ctx, c, 'developer');
     const auth = requireTeam(c, 'developer');
     const input = await body(c, updateApplicationSchema);
-    const { source, ...rest } = input;
+    const { source, previewEnv, ...rest } = input;
     const patch: ApplicationPatch = { ...rest };
     if (source !== undefined) Object.assign(patch, sourceColumns(auth.teamId, source));
+    // Previews deploy pull requests of a GitHub web application; a preview has none of its own.
+    const previewable = application.parentApplicationId === null && (patch.kind ?? application.kind) === 'web' && (patch.sourceType ?? application.sourceType) === 'github';
+    if (patch.previewsEnabled === true && !previewable) {
+      const reason = application.parentApplicationId !== null ? 'preview' : (patch.kind ?? application.kind) !== 'web' ? 'not_web' : 'not_github';
+      throw new AppError('validation_failed', 'Previews need a GitHub web application', {
+        issues: [{ path: 'previewsEnabled', code: 'custom', message: 'Only GitHub web applications can have previews', params: { reason } }],
+      });
+    }
+    // Switching to another source or kind turns previews off rather than failing the edit.
+    if (!previewable && application.previewsEnabled && patch.previewsEnabled === undefined) patch.previewsEnabled = false;
     if (patch.replicas !== undefined && patch.replicas > 1 && stores.volumes.listForApplication(application.id).length > 0 && application.strategy === 'recreate') {
       // Allowed, but the UI warns; nothing to enforce here.
     }
     const updated = stores.applications.update(application.id, patch);
+    if (previewEnv !== undefined) stores.applications.setPreviewEnv(application.id, previewEnv.trim().length === 0 ? null : ctx.secrets.seal(previewEnv, 'env'));
     if (source?.type === 'git' && source.url.startsWith('git@') && updated.deployKey === null) {
       const keys = await generateKeyPair(`torexploy-${updated.slug}`);
       stores.applications.setDeployKey(updated.id, ctx.secrets.seal(keys.privateKey, 'ssh'), keys.publicKey);
@@ -162,18 +159,9 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
   app.delete('/api/applications/:id', async (c) => {
     const application = loadApp(ctx, c, 'admin');
     const removeData = c.req.query('removeData') === 'true';
-    await ctx.deployer.destroy(application, removeData);
-    const deploymentIds = stores.db.all('SELECT id FROM deployments WHERE application_id = ?', application.id).map((row) => String(row.id));
-    const runIds = stores.db
-      .all('SELECT r.id FROM cron_runs r JOIN cron_jobs j ON j.id = r.cron_job_id WHERE j.application_id = ?', application.id)
-      .map((row) => String(row.id));
-    stores.applications.delete(application.id);
-    stores.metrics.deleteOwner(application.id);
-    for (const id of deploymentIds) await removeLog(logPath(ctx.config.dataDir, 'deployments', id));
-    for (const id of runIds) await removeLog(logPath(ctx.config.dataDir, 'cron', id));
-    await ctx.proxy.requestSync(application.serverId).catch(() => undefined);
+    // Its pull request previews go first, containers and all.
+    await ctx.deployer.remove(application, removeData);
     audit(ctx, c, 'application.deleted', { type: 'application', id: application.id, name: application.name }, { removeData });
-    emit(ctx, application.teamId, { type: 'application.deleted', id: application.id, projectId: application.projectId });
     return c.json({ ok: true });
   });
 
@@ -188,9 +176,15 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     return c.json(deploymentDto(deployment, application), 202);
   });
 
-  app.post('/api/applications/:id/restart', (c) => {
+  app.post('/api/applications/:id/restart', async (c) => {
     const application = loadApp(ctx, c, 'developer');
     const auth = requireTeam(c, 'developer');
+    if (application.kind === 'compose') {
+      // A stack restarts in place: every container, no rebuild (deploy for that).
+      await ctx.compose.restart(application);
+      audit(ctx, c, 'application.restart', { type: 'application', id: application.id, name: application.name });
+      return c.json(applicationDto(ctx, stores.applications.get(application.id)!), 202);
+    }
     const deployment = ctx.deployer.restart(application, auth.user.id);
     audit(ctx, c, 'application.restart', { type: 'application', id: application.id, name: application.name });
     return c.json(deploymentDto(deployment, application), 202);
@@ -209,6 +203,49 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const deployment = await ctx.deployer.start(application, auth.user.id);
     audit(ctx, c, 'application.start', { type: 'application', id: application.id, name: application.name });
     return c.json({ application: applicationDto(ctx, stores.applications.get(application.id)!), deploymentId: deployment?.id ?? null });
+  });
+
+  app.get('/api/applications/:id/containers', async (c) => {
+    const application = loadApp(ctx, c, 'viewer');
+    if (application.kind === 'compose') {
+      const stack = await ctx.compose.containers(application);
+      return c.json(
+        stack.map((container, replica): ContainerDto => ({
+          replica,
+          name: container.name,
+          service: container.service,
+          state: container.state,
+          health: container.health,
+          startedAt: container.startedAt,
+          restartCount: container.restartCount,
+          exitCode: container.exitCode,
+          oomKilled: false,
+        })),
+      );
+    }
+    const active = application.activeDeploymentId === null ? undefined : stores.deployments.get(application.activeDeploymentId);
+    const names = active?.containers ?? [];
+    if (names.length === 0) return c.json([]);
+    const docker = await ctx.connections.docker(application.serverId);
+    const containers: ContainerDto[] = await Promise.all(
+      names.map(async (name, replica) => {
+        const inspect = await docker.inspectContainer(name);
+        if (inspect === null) return { replica, name, service: null, state: 'missing', health: null, startedAt: null, restartCount: 0, exitCode: null, oomKilled: false };
+        const running = inspect.State.Running;
+        return {
+          replica,
+          name,
+          service: null,
+          state: inspect.State.Status,
+          health: inspect.State.Health?.Status ?? null,
+          startedAt: running && !inspect.State.StartedAt.startsWith('0001') ? inspect.State.StartedAt : null,
+          restartCount: inspect.RestartCount,
+          exitCode: running ? null : inspect.State.ExitCode,
+          oomKilled: inspect.State.OOMKilled,
+        };
+      }),
+    );
+    return c.json(containers);
   });
 
   app.post('/api/applications/:id/hook/rotate', (c) => {
@@ -268,10 +305,24 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const application = loadApp(ctx, c, 'developer');
     const input = await body(c, createDomainSchema);
     if (stores.domains.listForApplication(application.id).length >= LIMITS.domainsPerApp) throw new AppError('conflict', 'Too many domains for one application');
-    if (stores.domains.findByHost(input.host) !== undefined || stores.settings.platform().platformDomain === input.host) {
+    // A host belongs to one team: another team may not hang a path off someone else's domain.
+    const sameHost = stores.domains.findByHost(input.host);
+    if (stores.domains.findRoute(input.host, input.path) !== undefined || (sameHost !== undefined && sameHost.teamId !== application.teamId) || stores.settings.platform().platformDomain === input.host) {
       throw new AppError('domain_taken', 'This domain is already in use', { params: { host: input.host } });
     }
-    const domain = stores.domains.create({ applicationId: application.id, teamId: application.teamId, host: input.host, https: input.https, port: input.port ?? null, isGenerated: false });
+    if (input.serviceName != null && application.kind !== 'compose') throw new AppError('validation_failed', 'Only compose apps route to a service', { issues: [{ path: 'serviceName', code: 'custom', message: 'Compose only' }] });
+    const domain = stores.domains.create({
+      applicationId: application.id,
+      teamId: application.teamId,
+      host: input.host,
+      https: input.https,
+      port: input.port ?? null,
+      isGenerated: false,
+      path: input.path,
+      stripPath: input.stripPath,
+      serviceName: input.serviceName ?? null,
+      redirectTo: input.redirectTo ?? null,
+    });
     await ctx.proxy.requestSync(application.serverId).catch(() => undefined);
     ctx.domains.followUp(domain.id);
     void ctx.domains.check(domain.id);
@@ -283,12 +334,15 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
   app.post('/api/applications/:id/domains/generate', async (c) => {
     const application = loadApp(ctx, c, 'developer');
     const project = stores.projects.get(application.projectId)!;
+    // Compose: the address is for one service (and port) of the stack.
+    const target = await body(c, z.object({ serviceName: composeServiceSchema.optional(), port: portSchema.nullable().optional() }));
     const before = stores.domains.listForApplication(application.id).length;
-    generateDomain(application, project);
+    const created = generateDomain(ctx, application, project);
     const after = stores.domains.listForApplication(application.id);
-    if (after.length === before) throw new AppError('conflict', 'Set an apps domain in platform settings to generate domains', { params: { reason: 'no_apps_domain' } });
+    if (after.length === before || created === null) throw new AppError('conflict', 'Set an apps domain in platform settings to generate domains', { params: { reason: 'no_apps_domain' } });
+    if (target.serviceName !== undefined || target.port != null) stores.domains.update(created.id, { serviceName: target.serviceName ?? null, port: target.port ?? null });
     await ctx.proxy.requestSync(application.serverId).catch(() => undefined);
-    return c.json(after.map((domain) => domainDto(ctx, domain)), 201);
+    return c.json(stores.domains.listForApplication(application.id).map((domain) => domainDto(ctx, domain)), 201);
   });
 
   const loadDomain = (c: Ctx, role: Role) => {
@@ -399,6 +453,12 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
 
   // ------------------------------------------------------------------ cron
 
+  /** Every scheduled job of the team, by project, application and name. */
+  app.get('/api/cron', (c) => {
+    const auth = requireTeam(c);
+    return c.json(stores.cron.listForTeam(auth.teamId).map((job) => teamCronJobDto(ctx, job)));
+  });
+
   app.get('/api/applications/:id/cron', (c) => {
     const application = loadApp(ctx, c, 'viewer');
     return c.json(stores.cron.listForApplication(application.id).map((job) => cronJobDto(ctx, job)));
@@ -488,12 +548,16 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const application = loadApp(ctx, c, 'viewer');
     const tail = Math.min(2_000, Math.max(10, Number(c.req.query('tail') ?? 300) || 300));
     const active = application.activeDeploymentId === null ? undefined : stores.deployments.get(application.activeDeploymentId);
-    const containers = active?.containers ?? [];
+    // Compose: every container of the stack, labelled with its service (optionally just one service).
+    const wanted = c.req.query('service');
+    const stack = application.kind === 'compose' ? (await ctx.compose.containers(application)).filter((container) => wanted === undefined || container.service === wanted) : null;
+    const containers = stack === null ? (active?.containers ?? []) : stack.map((container) => container.name);
+    const sources = stack === null ? null : stack.map((container) => container.service);
     const docker = await ctx.connections.docker(application.serverId);
     return streamSSE(c, async (stream) => {
       const controller = new AbortController();
       stream.onAbort(() => controller.abort());
-      await stream.writeSSE({ event: 'meta', data: JSON.stringify({ deploymentId: active?.id ?? null, replicas: containers.length }) });
+      await stream.writeSSE({ event: 'meta', data: JSON.stringify({ deploymentId: active?.id ?? null, replicas: containers.length, sources }) });
       let seq = 0;
       const follows = containers.map(async (name, replica) => {
         try {
@@ -506,7 +570,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
               seq += 1;
               await stream.writeSSE({
                 event: 'line',
-                data: JSON.stringify({ seq, t: Number.isNaN(t) ? Date.now() : t, stream: chunk.stream, text: Number.isNaN(t) ? raw : raw.slice(space + 1), replica }),
+                data: JSON.stringify({ seq, t: Number.isNaN(t) ? Date.now() : t, stream: chunk.stream, text: Number.isNaN(t) ? raw : raw.slice(space + 1), replica, ...(sources === null ? {} : { source: sources[replica] }) }),
               });
             }
           }

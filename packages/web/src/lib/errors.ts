@@ -18,6 +18,7 @@ export function issueText(m: Messages, issue: ValidationIssue): string {
   const params = issue.params ?? {};
   const v = m.validation;
   if (params.reason === 'duplicate') return v.duplicate;
+  if (params.reason === 'domain_required') return v.domainRequired;
   switch (issue.code) {
     case 'too_small':
       if (params.origin === 'string' && params.minimum === 1) return v.required;

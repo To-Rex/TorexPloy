@@ -13,6 +13,8 @@
  * - Generated Dockerfiles read them from a BuildKit secret mount, so they are
  *   absent from image layers and `docker history` entirely.
  */
+import { prepareCliConfig } from '../docker/cli.ts';
+import type { CliAuths } from '../docker/registry.ts';
 import { mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { LABEL_APP, LABEL_DEPLOYMENT, LABEL_MANAGED } from '../docker/naming.ts';
@@ -30,6 +32,8 @@ export interface BuildRequest {
   applicationId: string;
   deploymentId: string;
   buildEnv: Record<string, string>;
+  /** The team's registry logins, so `FROM` can name private images. */
+  registryAuths: CliAuths;
   noCache: boolean;
   timeoutMs: number;
   signal?: AbortSignal;
@@ -59,7 +63,7 @@ export async function buildImage(request: BuildRequest): Promise<{ durationMs: n
     DOCKER_BUILDKIT: '1',
     BUILDKIT_PROGRESS: 'plain',
     DOCKER_CLI_HINTS: 'false',
-    // The CLI must not pick up an operator's personal contexts or config.
+    // The CLI must not pick up an operator's personal contexts or config; this one is the deployment's own.
     DOCKER_CONFIG: join(request.scratchDir, 'docker-config'),
   };
 
@@ -81,7 +85,7 @@ export async function buildImage(request: BuildRequest): Promise<{ durationMs: n
   }
   args.push(request.contextDir);
 
-  await mkdir(env.DOCKER_CONFIG!, { recursive: true, mode: 0o700 });
+  await prepareCliConfig(env.DOCKER_CONFIG!, request.registryAuths);
   await mkdir(dirname(secretPath), { recursive: true });
 
   let pending = '';
@@ -118,6 +122,7 @@ export async function buildImage(request: BuildRequest): Promise<{ durationMs: n
     throw error;
   } finally {
     await rm(secretPath, { force: true });
+    await rm(env.DOCKER_CONFIG!, { recursive: true, force: true });
   }
   return { durationMs: Date.now() - started };
 }

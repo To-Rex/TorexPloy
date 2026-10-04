@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,6 +37,8 @@ class FakeDocker {
   readonly unhealthy = new Set<string>();
   /** Every container of these deployments never answers. */
   readonly unhealthyDeployments = new Set<string>();
+  /** Image pulls with the `X-Registry-Auth` header each one carried. */
+  readonly pulls: { image: string; auth: string | null }[] = [];
 
   private isDown(host: string): boolean {
     const container = this.find(host);
@@ -59,7 +61,7 @@ class FakeDocker {
     return Buffer.concat([header, body]);
   }
 
-  handle(method: string, rawUrl: string, body: Buffer): { status: number; json?: unknown; raw?: Buffer } {
+  handle(method: string, rawUrl: string, body: Buffer, headers: IncomingHttpHeaders = {}): { status: number; json?: unknown; raw?: Buffer } {
     const url = new URL(rawUrl, 'http://docker');
     const path = url.pathname.replace(/^\/v1\.\d+/, '');
     const parsed = body.length > 0 && !path.endsWith('/archive') ? (JSON.parse(body.toString('utf8')) as Record<string, unknown>) : {};
@@ -87,6 +89,8 @@ class FakeDocker {
 
     if (path === '/images/create') {
       this.images.add(`${url.searchParams.get('fromImage')}:${url.searchParams.get('tag')}`);
+      const auth = headers['x-registry-auth'];
+      this.pulls.push({ image: `${url.searchParams.get('fromImage')}:${url.searchParams.get('tag')}`, auth: typeof auth === 'string' ? auth : null });
       return { status: 200, raw: Buffer.from(`${JSON.stringify({ status: 'Pull complete' })}\n`) };
     }
     const image = /^\/images\/(.+)\/(json|tag)$/.exec(path);
@@ -205,7 +209,7 @@ class FakeDocker {
       const chunks: Buffer[] = [];
       req.on('data', (chunk: Buffer) => chunks.push(chunk));
       req.on('end', () => {
-        const result = this.handle(req.method ?? 'GET', req.url ?? '/', Buffer.concat(chunks));
+        const result = this.handle(req.method ?? 'GET', req.url ?? '/', Buffer.concat(chunks), req.headers);
         res.statusCode = result.status;
         if (result.json !== undefined) {
           res.setHeader('content-type', 'application/json');
@@ -418,6 +422,33 @@ test('stop shows the unavailable page and start brings the same containers back'
     await ctx.deployer.start(ctx.stores.applications.get(app.id)!, null);
     assert.equal(ctx.stores.applications.get(app.id)!.status, 'running');
     assert.equal(docker.running('ploy-web-').length, 1);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('a private image pulls with the team registry login; other images pull anonymously', async () => {
+  const { ctx, docker, cleanup } = await setup();
+  try {
+    const { app } = createApp(ctx, 'ghcr.io/acme/web:1.0');
+    ctx.stores.registries.create(app.teamId, { name: 'GitHub', serverAddress: 'ghcr.io', username: 'robot', password: 'ghp_registry_secret_1' });
+    // Another team's login for the same host must never be used.
+    const rival = ctx.stores.teams.create('Rival');
+    ctx.stores.registries.create(rival.id, { name: 'Rival', serverAddress: 'ghcr.io', username: 'rival', password: 'rival_registry_secret' });
+
+    const first = ctx.deployer.enqueue({ app, trigger: 'manual', createdBy: null });
+    assert.equal(await settle(ctx, first.id), 'succeeded', ctx.stores.deployments.get(first.id)!.errorMessage ?? '');
+    const pull = docker.pulls.find((candidate) => candidate.image === 'ghcr.io/acme/web:1.0')!;
+    assert.ok(pull.auth !== null, 'the pull carried credentials');
+    assert.deepEqual(JSON.parse(Buffer.from(pull.auth, 'base64url').toString('utf8')), { username: 'robot', password: 'ghp_registry_secret_1', serveraddress: 'ghcr.io' });
+    const log = await import('node:fs/promises').then((fs) => fs.readFile(join(ctx.config.dataDir, 'logs', 'deployments', `${first.id}.log`), 'utf8'));
+    assert.match(log, /signed in to ghcr\.io as robot/);
+    assert.ok(!log.includes('ghp_registry_secret_1'));
+
+    ctx.stores.applications.update(app.id, { image: 'nginx:alpine' });
+    const second = ctx.deployer.enqueue({ app: ctx.stores.applications.get(app.id)!, trigger: 'manual', createdBy: null });
+    assert.equal(await settle(ctx, second.id), 'succeeded');
+    assert.deepEqual(docker.pulls.at(-1), { image: 'nginx:alpine', auth: null }, 'no stored login for Docker Hub: anonymous pull');
   } finally {
     await cleanup();
   }

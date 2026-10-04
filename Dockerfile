@@ -20,7 +20,7 @@ RUN npm --workspace @ploy/web run build
 
 FROM node:26-alpine AS runtime
 # docker CLI + buildx drive BuildKit builds; git fetches sources; openssh reaches remote servers.
-RUN apk add --no-cache docker-cli docker-cli-buildx git openssh-client tini ca-certificates
+RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose git openssh-client tini ca-certificates
 WORKDIR /app
 ENV NODE_ENV=production \
     PLOY_DATA_DIR=/var/lib/torexploy \

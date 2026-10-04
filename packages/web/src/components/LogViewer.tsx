@@ -154,7 +154,11 @@ export function LogViewer({ lines, height = 'calc(100dvh - 330px)', showReplica 
                   style={{ transform: `translateY(${item.start}px)`, ...(wrap ? {} : { height: 20 }) }}
                 >
                   <span className="logline__time">{time(line.t)}</span>
-                  {showReplica && line.replica !== undefined && <span className="logline__replica">{t(m.logs.replica, { n: line.replica + 1 })}</span>}
+                  {line.source !== undefined ? (
+                    <span className="logline__replica">{line.source}</span>
+                  ) : (
+                    showReplica && line.replica !== undefined && <span className="logline__replica">{t(m.logs.replica, { n: line.replica + 1 })}</span>
+                  )}
                   <span className="logline__text">{renderText(line.text)}</span>
                 </div>
               );

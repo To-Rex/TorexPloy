@@ -234,11 +234,13 @@ export const CATALOG: Record<ServiceType, CatalogEntry> = {
     memoryMb: 512,
     credentials: () => ({ username: `ploy${randomId(10)}`, password: password(), database: null }),
     container: (version, c) => ({
-      image: `minio/minio:${version}`,
+      // MinIO Inc. stopped publishing community images (Docker Hub and Quay); pgsty/minio is the maintained drop-in fork.
+      // It ships curl but not mc, so the health check uses MinIO's own liveness endpoint.
+      image: `pgsty/minio:${version}`,
       env: { MINIO_ROOT_USER: c.username!, MINIO_ROOT_PASSWORD: c.password },
       cmd: ['server', '/data', '--console-address', ':9001'],
       mountPath: '/data',
-      healthcheck: ['mc', 'ready', 'local'],
+      healthcheck: ['curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:9000/minio/health/live'],
     }),
     connection: (c, host, port) => {
       const url = `http://${host}:${port}`;

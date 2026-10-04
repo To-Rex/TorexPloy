@@ -1,10 +1,13 @@
 /*
  * Design tokens.
  *
- * Palette drawn from Samarkand tilework: lapis for action, turquoise for
- * health, saffron for work in progress, pomegranate for failure, on cool
- * paper (light) or lapis night (dark). Status is never conveyed by colour
- * alone — every status pairs a colour with a shape and a word.
+ * Neutral zinc in both themes, the way Dokploy (shadcn) draws a control
+ * panel: white or near-black surfaces, hairline borders, a primary that is
+ * simply the ink colour, and colour reserved for status — green for
+ * healthy, amber for work in progress, red for failure. `--lapis` keeps its
+ * name as "the primary" so components need not change. Status is never
+ * conveyed by colour alone — every status pairs a colour with a shape and
+ * a word.
  */
 
 @layer tokens {
@@ -30,13 +33,14 @@
 
     /* Radii follow hierarchy: small controls are tighter than surfaces. */
     --r-xs: 4px;
-    --r-sm: 7px;
-    --r-md: 10px;
-    --r-lg: 14px;
+    --r-sm: 6px;
+    --r-md: 8px;
+    --r-lg: 12px;
     --r-full: 999px;
 
-    --sidebar-width: 236px;
-    --content-max: 1180px;
+    --sidebar-width: 252px;
+    --sidebar-rail: 56px;
+    --content-max: 1240px;
     --topbar-height: 52px;
 
     --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -50,116 +54,174 @@
     --z-menu: 60;
     --z-toast: 70;
 
-    /* Light — cool paper */
-    --bg: #f3f5f8;
+    /* Light — zinc paper, as Dokploy and shadcn draw it: white surfaces,
+       hairline zinc borders, a near-black primary. */
+    --bg: #ffffff;
     --surface: #ffffff;
     --surface-raised: #ffffff;
-    --surface-sunken: #eceff5;
-    --surface-hover: #f5f7fb;
-    --line: #dfe3eb;
-    --line-strong: #c9d0dc;
-    --ink: #131a2d;
-    --ink-2: #485267;
-    --ink-3: #646d82;
-    --ink-inverse: #ffffff;
+    --surface-sunken: #f4f4f5;
+    --surface-hover: #f4f4f5;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --ink: #09090b;
+    --ink-2: #52525b;
+    --ink-3: #71717a;
+    --ink-inverse: #fafafa;
 
-    --lapis: #2746c7;
-    --lapis-hover: #1f3aa8;
-    --lapis-soft: #e9eefc;
-    --lapis-ink: #1d3596;
+    /* Chrome around content: the sidebar and the frame pages sit in. */
+    --chrome: #fafafa;
+    --chrome-line: #e4e4e7;
+    --muted: #f4f4f5;
+    --tab-active: #ffffff;
 
-    --ok: #0c9a8a;
-    --ok-soft: #e1f4f1;
-    --ok-ink: #08695e;
-    --work: #d18a00;
-    --work-soft: #fdf2db;
-    --work-ink: #8a5a00;
-    --bad: #c73340;
-    --bad-soft: #fbe8ea;
-    --bad-ink: #9d1f2b;
-    --idle: #8a93a6;
-    --idle-soft: #edf0f5;
+    --lapis: #18181b;
+    --lapis-hover: #27272a;
+    --lapis-soft: #f4f4f5;
+    --lapis-ink: #18181b;
+    --link: #09090b;
 
-    --focus: color-mix(in srgb, var(--lapis) 45%, transparent);
-    --shadow-float: 0 12px 32px -12px rgb(19 26 45 / 0.28), 0 2px 6px rgb(19 26 45 / 0.08);
-    --overlay: rgb(19 26 45 / 0.38);
-    --code-bg: #0f1628;
-    --code-ink: #d9def0;
-    --code-dim: #7f8aa6;
+    --ok: #16a34a;
+    --ok-soft: #dcfce7;
+    --ok-ink: #15803d;
+    --work: #d97706;
+    --work-soft: #fef3c7;
+    --work-ink: #b45309;
+    --bad: #dc2626;
+    --bad-soft: #fee2e2;
+    --bad-ink: #b91c1c;
+    --idle: #a1a1aa;
+    --idle-soft: #f4f4f5;
+    --info: #2563eb;
+    --info-soft: #eff6ff;
+    --info-ink: #1d4ed8;
+
+    --focus: rgb(24 24 27 / 0.22);
+    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
+    --shadow-card: 0 1px 3px rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+    --shadow-float: 0 12px 32px -12px rgb(9 9 11 / 0.24), 0 2px 6px rgb(9 9 11 / 0.06);
+    --overlay: rgb(9 9 11 / 0.45);
+    --code-bg: #09090b;
+    --code-ink: #e4e4e7;
+    --code-dim: #85858d;
     --code-err: #ff8a92;
-    --code-sys: #8fb2ff;
+    --code-sys: #a9a9b2;
+
+    /* The sign-in aside stays dark in both themes. */
+    --aside-bg: #09090b;
+    --aside-ink: #e9e9eb;
+    --aside-ink-2: #a8a8ae;
+    --aside-ink-3: #85858d;
+    --brand-tile: #18181b;
 
     color-scheme: light;
   }
 
-  /* Dark — lapis night. Also the default before JavaScript runs when the OS prefers dark. */
+  /* Dark — graphite. Also the default before JavaScript runs when the OS prefers dark. */
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) {
-      --bg: #0d1322;
-      --surface: #131b2e;
-      --surface-raised: #182238;
-      --surface-sunken: #0a1020;
-      --surface-hover: #1a2440;
-      --line: #232d46;
-      --line-strong: #31405f;
-      --ink: #e7ebf4;
-      --ink-2: #a8b2c7;
-      --ink-3: #8590a8;
-      --ink-inverse: #0d1322;
-      --lapis: #7891ff;
-      --lapis-hover: #95a8ff;
-      --lapis-soft: #1b2655;
-      --lapis-ink: #b4c2ff;
-      --ok: #2fcdb8;
-      --ok-soft: #0f2f33;
-      --ok-ink: #6fe3d2;
-      --work: #f2b544;
-      --work-soft: #332611;
-      --work-ink: #f7cc78;
-      --bad: #ff6f78;
-      --bad-soft: #3a1820;
-      --bad-ink: #ff9aa1;
-      --idle: #6f7a94;
-      --idle-soft: #1c2438;
-      --focus: color-mix(in srgb, var(--lapis) 55%, transparent);
-      --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.35);
-      --overlay: rgb(4 7 15 / 0.62);
-      --code-bg: #080d1a;
+      --bg: #09090b;
+      --surface: #0c0c0e;
+      --surface-raised: #18181b;
+      --surface-sunken: #141416;
+      --surface-hover: #1c1c1f;
+      --line: #27272a;
+      --line-strong: #3f3f46;
+      --ink: #fafafa;
+      --ink-2: #a1a1aa;
+      --ink-3: #8b8b93;
+      --ink-inverse: #09090b;
+      --chrome: #111113;
+      --chrome-line: #222225;
+      --muted: #1f1f23;
+      --tab-active: #09090b;
+      --lapis: #fafafa;
+      --lapis-hover: #e4e4e7;
+      --lapis-soft: #1f1f23;
+      --lapis-ink: #fafafa;
+      --link: #fafafa;
+      --ok: #22c55e;
+      --ok-soft: #0d2617;
+      --ok-ink: #4ade80;
+      --work: #f59e0b;
+      --work-soft: #2b1f08;
+      --work-ink: #fbbf24;
+      --bad: #ef4444;
+      --bad-soft: #2d1013;
+      --bad-ink: #f87171;
+      --idle: #71717a;
+      --idle-soft: #1f1f23;
+      --info: #60a5fa;
+      --info-soft: #0f1b2e;
+      --info-ink: #93c5fd;
+      --focus: rgb(250 250 250 / 0.28);
+      --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+      --shadow-card: 0 1px 3px rgb(0 0 0 / 0.5);
+      --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
+      --overlay: rgb(0 0 0 / 0.7);
+      --code-bg: #050506;
+      --code-ink: #e4e4e7;
+      --code-dim: #85858d;
+      --code-err: #ff8a92;
+      --code-sys: #a9a9b2;
+      --aside-bg: #000000;
+      --aside-ink: #e9e9eb;
+      --aside-ink-2: #a8a8ae;
+      --aside-ink-3: #85858d;
+      --brand-tile: #27272a;
       color-scheme: dark;
     }
   }
 
   :root[data-theme='dark'] {
-    --bg: #0d1322;
-    --surface: #131b2e;
-    --surface-raised: #182238;
-    --surface-sunken: #0a1020;
-    --surface-hover: #1a2440;
-    --line: #232d46;
-    --line-strong: #31405f;
-    --ink: #e7ebf4;
-    --ink-2: #a8b2c7;
-    --ink-3: #8590a8;
-    --ink-inverse: #0d1322;
-    --lapis: #7891ff;
-    --lapis-hover: #95a8ff;
-    --lapis-soft: #1b2655;
-    --lapis-ink: #b4c2ff;
-    --ok: #2fcdb8;
-    --ok-soft: #0f2f33;
-    --ok-ink: #6fe3d2;
-    --work: #f2b544;
-    --work-soft: #332611;
-    --work-ink: #f7cc78;
-    --bad: #ff6f78;
-    --bad-soft: #3a1820;
-    --bad-ink: #ff9aa1;
-    --idle: #6f7a94;
-    --idle-soft: #1c2438;
-    --focus: color-mix(in srgb, var(--lapis) 55%, transparent);
-    --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.35);
-    --overlay: rgb(4 7 15 / 0.62);
-    --code-bg: #080d1a;
+    --bg: #09090b;
+    --surface: #0c0c0e;
+    --surface-raised: #18181b;
+    --surface-sunken: #141416;
+    --surface-hover: #1c1c1f;
+    --line: #27272a;
+    --line-strong: #3f3f46;
+    --ink: #fafafa;
+    --ink-2: #a1a1aa;
+    --ink-3: #8b8b93;
+    --ink-inverse: #09090b;
+    --chrome: #111113;
+    --chrome-line: #222225;
+    --muted: #1f1f23;
+    --tab-active: #09090b;
+    --lapis: #fafafa;
+    --lapis-hover: #e4e4e7;
+    --lapis-soft: #1f1f23;
+    --lapis-ink: #fafafa;
+    --link: #fafafa;
+    --ok: #22c55e;
+    --ok-soft: #0d2617;
+    --ok-ink: #4ade80;
+    --work: #f59e0b;
+    --work-soft: #2b1f08;
+    --work-ink: #fbbf24;
+    --bad: #ef4444;
+    --bad-soft: #2d1013;
+    --bad-ink: #f87171;
+    --idle: #71717a;
+    --idle-soft: #1f1f23;
+    --info: #60a5fa;
+    --info-soft: #0f1b2e;
+    --info-ink: #93c5fd;
+    --focus: rgb(250 250 250 / 0.28);
+    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-card: 0 1px 3px rgb(0 0 0 / 0.5);
+    --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
+    --overlay: rgb(0 0 0 / 0.7);
+    --code-bg: #050506;
+    --code-ink: #e4e4e7;
+    --code-dim: #85858d;
+    --code-err: #ff8a92;
+    --code-sys: #a9a9b2;
+    --aside-bg: #000000;
+    --aside-ink: #e9e9eb;
+    --aside-ink-2: #a8a8ae;
+    --aside-ink-3: #85858d;
+    --brand-tile: #27272a;
     color-scheme: dark;
   }
 }

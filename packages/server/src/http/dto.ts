@@ -3,26 +3,33 @@
  * credentials and sealed values are either omitted or exposed only through
  * dedicated, audited "reveal" endpoints.
  */
-import type {
-  ApiTokenDto,
-  ApplicationDto,
-  AuditEntryDto,
-  BackupDto,
-  CronJobDto,
-  CronRunDto,
-  DeploymentDto,
-  DeploymentSummaryDto,
-  DomainDto,
-  InvitationDto,
-  LinkDto,
-  MemberDto,
-  ProjectDto,
-  ServerDto,
-  ServiceDto,
-  SourceDto,
-  TeamDto,
-  UserDto,
-  VolumeDto,
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  imageRegistryHost,
+  type ApiTokenDto,
+  type ApplicationDto,
+  type AuditEntryDto,
+  type BackupDto,
+  type CronJobDto,
+  type CronRunDto,
+  type DeploymentDto,
+  type DeploymentSummaryDto,
+  type DomainDto,
+  type InvitationDto,
+  type LinkDto,
+  type MemberDto,
+  type PreviewDto,
+  type ProjectDto,
+  type RegistryDto,
+  type ServerDto,
+  type ServiceDto,
+  type SourceDto,
+  type TeamCronJobDto,
+  type TeamDeploymentDto,
+  type TeamDto,
+  type UserDto,
+  type VolumeDto,
 } from '@ploy/shared';
 import type { Context } from '../context.ts';
 import { publicBaseUrl } from '../github/app.ts';
@@ -40,9 +47,12 @@ import type {
   LinkRecord,
   MemberRecord,
   MembershipRecord,
+  ProjectRecord,
   ProjectWithStats,
+  RegistryRecord,
   ServerRecord,
   ServiceRecord,
+  TeamCronJobRecord,
   UserRecord,
   VolumeRecord,
 } from '../store/index.ts';
@@ -167,6 +177,7 @@ export function sourceDto(app: ApplicationRecord): SourceDto {
     return { type: 'github', installationId: app.githubInstallationId ?? 0, repository: app.repository ?? '', branch: app.branch ?? 'main' };
   }
   if (app.sourceType === 'git') return { type: 'git', url: app.gitUrl ?? '', branch: app.branch ?? 'main' };
+  if (app.sourceType === 'raw') return { type: 'raw' };
   return { type: 'image', image: app.image ?? '' };
 }
 
@@ -203,12 +214,27 @@ export function deploymentDto(deployment: DeploymentRecord, app: ApplicationReco
   };
 }
 
+/** Deployments from across a team, each with its application and project (looked up once per list). */
+export function teamDeploymentDtos(ctx: Context, deployments: DeploymentRecord[]): TeamDeploymentDto[] {
+  const apps = new Map<string, ApplicationRecord | undefined>();
+  const projects = new Map<string, ProjectRecord | undefined>();
+  return deployments.map((deployment) => {
+    if (!apps.has(deployment.applicationId)) apps.set(deployment.applicationId, ctx.stores.applications.get(deployment.applicationId));
+    if (!projects.has(deployment.projectId)) projects.set(deployment.projectId, ctx.stores.projects.get(deployment.projectId));
+    const app = apps.get(deployment.applicationId);
+    return {
+      ...deploymentDto(deployment, app),
+      applicationName: app?.name ?? '—',
+      applicationKind: app?.kind ?? 'web',
+      projectName: projects.get(deployment.projectId)?.name ?? '—',
+    };
+  });
+}
+
 export function applicationDto(ctx: Context, app: ApplicationRecord): ApplicationDto {
   const { stores } = ctx;
   const active = app.activeDeploymentId === null ? undefined : stores.deployments.get(app.activeDeploymentId);
   const latest = stores.deployments.latestForApplication(app.id);
-  const domains = stores.domains.listForApplication(app.id);
-  const primary = domains.find((domain) => !domain.isGenerated) ?? domains[0];
   const base = publicBaseUrl(ctx);
   const hookToken = app.deployHookToken === null ? null : ctx.secrets.open(app.deployHookToken, 'hook');
   return {
@@ -238,13 +264,41 @@ export function applicationDto(ctx: Context, app: ApplicationRecord): Applicatio
     healthCheckTimeoutSec: app.healthCheckTimeoutSec,
     strategy: app.strategy,
     autoDeploy: app.autoDeploy,
-    url: primary === undefined ? null : `${primary.https ? 'https' : 'http'}://${primary.host}`,
+    url: stores.domains.primaryUrl(app.id),
+    // Containers join the project network under the app's slug (see the deployer).
+    internalUrl: app.kind === 'web' && active?.port != null ? `http://${app.slug}:${active.port}` : null,
+    templateId: app.templateId,
+    composePath: app.kind === 'compose' && app.sourceType !== 'raw' ? app.composePath : null,
+    hostAccess: app.hostAccess,
     activeDeployment: active === undefined ? null : deploymentSummary(active),
     latestDeployment: latest === undefined ? null : deploymentSummary(latest),
     pendingChanges: active !== undefined && app.configUpdatedAt > (active.startedAt ?? active.createdAt),
     deployHookUrl: base === null || hookToken === null ? null : `${base}/api/hooks/deploy/${app.id}/${hookToken}`,
+    previewsEnabled: app.previewsEnabled,
+    previewLimit: app.previewLimit,
+    parentApplicationId: app.parentApplicationId,
+    pullRequest:
+      app.previewPrNumber === null ? null : { number: app.previewPrNumber, title: app.previewPrTitle ?? '', url: app.previewPrUrl ?? '', author: app.previewPrAuthor },
     createdAt: app.createdAt,
     updatedAt: app.updatedAt,
+  };
+}
+
+/** A pull request preview, as its parent application lists it. */
+export function previewDto(ctx: Context, preview: ApplicationRecord): PreviewDto {
+  const latest = ctx.stores.deployments.latestForApplication(preview.id);
+  return {
+    id: preview.id,
+    number: preview.previewPrNumber ?? 0,
+    title: preview.previewPrTitle ?? '',
+    url: preview.previewPrUrl ?? '',
+    author: preview.previewPrAuthor,
+    branch: preview.branch ?? '',
+    status: preview.status,
+    appUrl: ctx.stores.domains.primaryUrl(preview.id),
+    latestDeployment: latest === undefined ? null : deploymentSummary(latest),
+    createdAt: preview.createdAt,
+    updatedAt: preview.updatedAt,
   };
 }
 
@@ -255,8 +309,12 @@ export function domainDto(ctx: Context, domain: DomainRecord): DomainDto {
     id: domain.id,
     applicationId: domain.applicationId,
     host: domain.host,
+    path: domain.path,
+    stripPath: domain.stripPath,
     https: domain.https,
     port: domain.port,
+    serviceName: domain.serviceName,
+    redirectTo: domain.redirectTo,
     isGenerated: domain.isGenerated,
     dns: { status: domain.dnsStatus, records: domain.dnsRecords, expected: server?.publicIp ?? null, checkedAt: domain.dnsCheckedAt },
     tls: { status: domain.tlsStatus, issuer: domain.tlsIssuer, expiresAt: domain.tlsExpiresAt, message: domain.tlsMessage },
@@ -304,11 +362,37 @@ export function cronJobDto(ctx: Context, job: CronJobRecord): CronJobDto {
   };
 }
 
+export function teamCronJobDto(ctx: Context, job: TeamCronJobRecord): TeamCronJobDto {
+  return {
+    ...cronJobDto(ctx, job),
+    applicationName: job.applicationName,
+    projectId: job.projectId,
+    projectName: job.projectName,
+    serverName: job.serverName ?? '—',
+  };
+}
+
+/** The password never leaves the server. `teamApps` lets a list share one lookup of the team's applications. */
+export function registryDto(ctx: Context, registry: RegistryRecord, teamApps: ApplicationRecord[] = ctx.stores.applications.listForTeam(registry.teamId)): RegistryDto {
+  return {
+    id: registry.id,
+    name: registry.name,
+    serverAddress: registry.serverAddress,
+    username: registry.username,
+    applications: teamApps
+      .filter((app) => app.sourceType === 'image' && app.image !== null && imageRegistryHost(app.image) === registry.serverAddress)
+      .map((app) => ({ id: app.id, name: app.name })),
+    createdAt: registry.createdAt,
+    updatedAt: registry.updatedAt,
+  };
+}
+
 export function serviceDto(ctx: Context, service: ServiceRecord): ServiceDto {
   const linked = ctx.stores.links
     .listForService(service.id)
     .map((link) => ctx.stores.applications.get(link.applicationId))
-    .filter((app): app is ApplicationRecord => app !== undefined)
+    // Previews share their parent's databases; the parent stands for them.
+    .filter((app): app is ApplicationRecord => app !== undefined && app.parentApplicationId === null)
     .map((app) => ({ id: app.id, name: app.name }));
   return {
     id: service.id,
@@ -329,13 +413,15 @@ export function serviceDto(ctx: Context, service: ServiceRecord): ServiceDto {
     memoryLimitMb: service.memoryLimitMb,
     backupSchedule: service.backupSchedule,
     backupRetention: service.backupRetention,
+    backupDestinationId: service.backupDestinationId,
     linkedApplications: linked,
     createdAt: service.createdAt,
     updatedAt: service.updatedAt,
   };
 }
 
-export function backupDto(backup: BackupRecord): BackupDto {
+export function backupDto(ctx: Context, backup: BackupRecord): BackupDto {
+  const destination = backup.remoteDestinationId === null ? undefined : ctx.stores.s3.get(backup.remoteDestinationId);
   return {
     id: backup.id,
     serviceId: backup.serviceId,
@@ -345,5 +431,7 @@ export function backupDto(backup: BackupRecord): BackupDto {
     errorMessage: backup.errorMessage,
     startedAt: backup.startedAt,
     finishedAt: backup.finishedAt,
+    remote: backup.remoteDestinationId === null || backup.remoteKey === null ? null : { destinationId: backup.remoteDestinationId, destinationName: destination?.name ?? null, key: backup.remoteKey },
+    onServer: backup.filePath !== null && existsSync(join(ctx.config.dataDir, 'backups', backup.serviceId, backup.filePath)),
   };
 }

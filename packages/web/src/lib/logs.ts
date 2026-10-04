@@ -10,6 +10,8 @@ import type { LogLine } from '@ploy/shared';
 
 export interface StreamLine extends LogLine {
   replica?: number;
+  /** Compose service that printed the line. */
+  source?: string;
 }
 
 export type StreamState = 'connecting' | 'streaming' | 'ended' | 'error';

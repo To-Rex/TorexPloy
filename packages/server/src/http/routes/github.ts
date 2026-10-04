@@ -6,7 +6,7 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 import { githubManifestSchema, type GithubInstallationDto, type GithubStatusDto } from '@ploy/shared';
 import type { Context } from '../../context.ts';
-import { publicBaseUrl } from '../../github/app.ts';
+import { isPublicOrigin, publicBaseUrl } from '../../github/app.ts';
 import { AppError, errorMessage, notFound } from '../../lib/errors.ts';
 import { audit, body, query, requestOrigin, requireInstanceAdmin, requireTeam, type Ctx, type Env } from '../core.ts';
 
@@ -29,13 +29,13 @@ export function registerGithubRoutes(app: Hono<Env>, ctx: Context): void {
   app.get('/api/github', (c) => {
     const auth = requireTeam(c);
     const credentials = github.credentials();
-    const base = credentials?.baseUrl ?? publicBaseUrl(ctx);
+    const base = github.webhookBase();
     const status: GithubStatusDto = {
       configured: credentials !== null,
       app: credentials === null ? null : { id: credentials.appId, slug: credentials.slug, name: credentials.name, htmlUrl: credentials.htmlUrl, owner: credentials.owner },
       installations: stores.installations.listForTeam(auth.teamId).map(installationDto),
       webhookUrl: base === null ? null : `${base}/api/webhooks/github`,
-      publicUrlReady: base !== null && !/^https?:\/\/(localhost|127\.|10\.|192\.168\.)/.test(base),
+      publicUrlReady: isPublicOrigin(base),
     };
     return c.json(status);
   });

@@ -80,8 +80,16 @@ export interface DomainRecord {
   applicationId: string;
   teamId: string;
   host: string;
+  /** Path prefix routed by this domain; '/' is the whole host. */
+  path: string;
+  /** Remove the prefix before the request reaches the app. */
+  stripPath: boolean;
   https: boolean;
   port: number | null;
+  /** Compose: the service that receives the traffic. */
+  serviceName: string | null;
+  /** Redirect-only domain: the origin requests are sent to (`https://example.uz`). */
+  redirectTo: string | null;
   isGenerated: boolean;
   dnsStatus: DnsStatus;
   dnsRecords: string[];
@@ -100,8 +108,12 @@ function mapDomain(row: Row): DomainRecord {
     applicationId: str(row.application_id),
     teamId: str(row.team_id),
     host: str(row.host),
+    path: str(row.path),
+    stripPath: bool(row.strip_path),
     https: bool(row.https),
     port: numOrNull(row.port),
+    serviceName: strOrNull(row.service_name),
+    redirectTo: strOrNull(row.redirect_to),
     isGenerated: bool(row.is_generated),
     dnsStatus: str(row.dns_status) as DnsStatus,
     dnsRecords: json<string[]>(row.dns_records, []),
@@ -122,18 +134,33 @@ export class DomainStore {
     this.db = db;
   }
 
-  create(input: { applicationId: string; teamId: string; host: string; https: boolean; port: number | null; isGenerated: boolean }): DomainRecord {
+  create(input: {
+    applicationId: string;
+    teamId: string;
+    host: string;
+    https: boolean;
+    port: number | null;
+    isGenerated: boolean;
+    path?: string;
+    stripPath?: boolean;
+    serviceName?: string | null;
+    redirectTo?: string | null;
+  }): DomainRecord {
     const id = newId('dom');
     const now = nowIso();
     this.db.run(
-      `INSERT INTO domains (id, application_id, team_id, host, https, port, is_generated, tls_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO domains (id, application_id, team_id, host, path, strip_path, https, port, service_name, redirect_to, is_generated, tls_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.applicationId,
       input.teamId,
       input.host.toLowerCase(),
+      input.path ?? '/',
+      int01(input.stripPath ?? false),
       int01(input.https),
       input.port,
+      input.serviceName ?? null,
+      input.redirectTo ?? null,
       int01(input.isGenerated),
       input.https ? 'pending' : 'disabled',
       now,
@@ -152,8 +179,15 @@ export class DomainStore {
     return row === undefined ? undefined : mapDomain(row);
   }
 
+  /** Any route on this host (any path). */
   findByHost(host: string): DomainRecord | undefined {
-    const row = this.db.get('SELECT * FROM domains WHERE host = ?', host.toLowerCase());
+    const row = this.db.get('SELECT * FROM domains WHERE host = ? ORDER BY path', host.toLowerCase());
+    return row === undefined ? undefined : mapDomain(row);
+  }
+
+  /** The route for exactly this host and path prefix. */
+  findRoute(host: string, path: string): DomainRecord | undefined {
+    const row = this.db.get('SELECT * FROM domains WHERE host = ? AND path = ?', host.toLowerCase(), path);
     return row === undefined ? undefined : mapDomain(row);
   }
 
@@ -165,24 +199,34 @@ export class DomainStore {
 
   listForServer(serverId: string): DomainRecord[] {
     return this.db
-      .all('SELECT d.* FROM domains d JOIN applications a ON a.id = d.application_id WHERE a.server_id = ? ORDER BY d.host', serverId)
+      .all('SELECT d.* FROM domains d JOIN applications a ON a.id = d.application_id WHERE a.server_id = ? ORDER BY d.host, d.path', serverId)
       .map(mapDomain);
+  }
+
+  /** The address an application is opened at: its first own domain, else a generated one. */
+  primaryUrl(applicationId: string): string | null {
+    const domains = this.listForApplication(applicationId);
+    const primary = domains.find((domain) => !domain.isGenerated) ?? domains[0];
+    return primary === undefined ? null : `${primary.https ? 'https' : 'http'}://${primary.host}`;
   }
 
   listAll(): DomainRecord[] {
     return this.db.all('SELECT * FROM domains ORDER BY host').map(mapDomain);
   }
 
-  update(id: string, patch: { https?: boolean; port?: number | null }): void {
+  update(id: string, patch: { https?: boolean; port?: number | null; stripPath?: boolean; serviceName?: string | null; redirectTo?: string | null }): void {
     const current = this.get(id);
     if (current === undefined) return;
     const https = patch.https ?? current.https;
     this.db.run(
-      `UPDATE domains SET https = ?, port = ?, updated_at = ?,
+      `UPDATE domains SET https = ?, port = ?, strip_path = ?, service_name = ?, redirect_to = ?, updated_at = ?,
               tls_status = CASE WHEN ? = 0 THEN 'disabled' WHEN tls_status = 'disabled' THEN 'pending' ELSE tls_status END
         WHERE id = ?`,
       int01(https),
       patch.port === undefined ? current.port : patch.port,
+      int01(patch.stripPath ?? current.stripPath),
+      patch.serviceName === undefined ? current.serviceName : patch.serviceName,
+      patch.redirectTo === undefined ? current.redirectTo : patch.redirectTo,
       nowIso(),
       int01(https),
       id,
@@ -302,6 +346,7 @@ export interface ServiceRecord {
   memoryLimitMb: number | null;
   backupSchedule: string | null;
   backupRetention: number;
+  backupDestinationId: string | null;
   containerName: string;
   volumeName: string;
   createdAt: string;
@@ -337,6 +382,7 @@ export class ServiceStore {
       memoryLimitMb: numOrNull(row.memory_limit_mb),
       backupSchedule: strOrNull(row.backup_schedule),
       backupRetention: num(row.backup_retention),
+      backupDestinationId: strOrNull(row.backup_destination_id),
       containerName: str(row.container_name),
       volumeName: str(row.volume_name),
       createdAt: str(row.created_at),
@@ -419,12 +465,12 @@ export class ServiceStore {
 
   update(
     id: string,
-    patch: Partial<Pick<ServiceRecord, 'name' | 'publicPort' | 'cpuLimit' | 'memoryLimitMb' | 'backupSchedule' | 'backupRetention'>>,
+    patch: Partial<Pick<ServiceRecord, 'name' | 'publicPort' | 'cpuLimit' | 'memoryLimitMb' | 'backupSchedule' | 'backupRetention' | 'backupDestinationId'>>,
   ): ServiceRecord {
     const current = this.get(id)!;
     const pick = <K extends keyof typeof patch>(key: K): ServiceRecord[K] => (patch[key] === undefined ? current[key] : (patch[key] as ServiceRecord[K]));
     this.db.run(
-      `UPDATE services SET name = ?, public_port = ?, cpu_limit = ?, memory_limit_mb = ?, backup_schedule = ?, backup_retention = ?, updated_at = ?
+      `UPDATE services SET name = ?, public_port = ?, cpu_limit = ?, memory_limit_mb = ?, backup_schedule = ?, backup_retention = ?, backup_destination_id = ?, updated_at = ?
         WHERE id = ?`,
       pick('name'),
       pick('publicPort'),
@@ -432,6 +478,7 @@ export class ServiceStore {
       pick('memoryLimitMb'),
       pick('backupSchedule'),
       pick('backupRetention'),
+      pick('backupDestinationId'),
       nowIso(),
       id,
     );
@@ -529,6 +576,8 @@ export interface BackupRecord {
   errorMessage: string | null;
   startedAt: string;
   finishedAt: string | null;
+  remoteDestinationId: string | null;
+  remoteKey: string | null;
 }
 
 function mapBackup(row: Row): BackupRecord {
@@ -542,6 +591,8 @@ function mapBackup(row: Row): BackupRecord {
     errorMessage: strOrNull(row.error_message),
     startedAt: str(row.started_at),
     finishedAt: strOrNull(row.finished_at),
+    remoteDestinationId: strOrNull(row.remote_destination_id),
+    remoteKey: strOrNull(row.remote_key),
   };
 }
 
@@ -599,6 +650,15 @@ export class BackupStore {
   delete(id: string): void {
     this.db.run('DELETE FROM backups WHERE id = ?', id);
   }
+
+  setRemote(id: string, destinationId: string, key: string): void {
+    this.db.run('UPDATE backups SET remote_destination_id = ?, remote_key = ? WHERE id = ?', destinationId, key, id);
+  }
+
+  /** A backup that succeeded on the server but carries a problem worth showing (a failed upload). */
+  setWarning(id: string, message: string): void {
+    this.db.run('UPDATE backups SET error_message = ? WHERE id = ?', message.slice(0, 2_000), id);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -616,6 +676,14 @@ export interface CronJobRecord {
   nextRunAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A cron job with the application, project and server it belongs to (team-wide lists). */
+export interface TeamCronJobRecord extends CronJobRecord {
+  applicationName: string;
+  projectId: string;
+  projectName: string;
+  serverName: string | null;
 }
 
 export interface CronRunRecord {
@@ -691,6 +759,28 @@ export class CronStore {
 
   listForApplication(applicationId: string): CronJobRecord[] {
     return this.db.all('SELECT * FROM cron_jobs WHERE application_id = ? ORDER BY created_at', applicationId).map(mapCron);
+  }
+
+  /** Every cron job of a team, ordered by project, application and job name. */
+  listForTeam(teamId: string): TeamCronJobRecord[] {
+    return this.db
+      .all(
+        `SELECT j.*, a.name AS application_name, a.project_id, p.name AS project_name, s.name AS server_name
+           FROM cron_jobs j
+           JOIN applications a ON a.id = j.application_id
+           JOIN projects p ON p.id = a.project_id
+           LEFT JOIN servers s ON s.id = a.server_id
+          WHERE a.team_id = ?
+          ORDER BY p.name COLLATE NOCASE, a.name COLLATE NOCASE, j.name COLLATE NOCASE, j.created_at`,
+        teamId,
+      )
+      .map((row) => ({
+        ...mapCron(row),
+        applicationName: str(row.application_name),
+        projectId: str(row.project_id),
+        projectName: str(row.project_name),
+        serverName: strOrNull(row.server_name),
+      }));
   }
 
   listDue(nowIsoValue: string): CronJobRecord[] {

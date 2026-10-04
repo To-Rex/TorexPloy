@@ -11,9 +11,12 @@ import type {
   AuditEntryDto,
   BackupDto,
   BootstrapDto,
+  ComposeDto,
+  ContainerDto,
   CronJobDto,
   CronRunDto,
   DeploymentDto,
+  DeploymentStatusFilter,
   DockerDiskUsageDto,
   DomainDto,
   GithubRepositoryDto,
@@ -24,16 +27,27 @@ import type {
   LinkDto,
   MemberDto,
   MetricRange,
+  NotificationChannelDto,
   OverviewDto,
   Page,
   PlatformSettingsDto,
+  PreviewDto,
+  PreviewSettingsDto,
   ProjectDto,
+  ProxyOverviewDto,
+  RegistryDto,
+  S3DestinationDto,
+  ServerContainerDto,
   ServerDto,
   ServiceCatalogEntryDto,
   ServiceCredentialsDto,
   ServiceDto,
   SessionDto,
+  TeamCronJobDto,
+  TeamDeploymentDto,
   TeamDto,
+  TeamRole,
+  TemplateDto,
   UserDto,
   VariablesDto,
   VolumeDto,
@@ -67,9 +81,20 @@ export const keys = {
   tokens: ['tokens'] as const,
   sessions: ['sessions'] as const,
   audit: ['audit'] as const,
+  notifications: ['notifications'] as const,
+  s3: ['s3-destinations'] as const,
+  registries: ['registries'] as const,
+  teamDeployments: ['team-deployments'] as const,
+  teamCron: ['team-cron'] as const,
 };
 
 export const useBootstrap = () => useQuery({ queryKey: keys.bootstrap, queryFn: () => api.get<BootstrapDto>('/api/bootstrap'), staleTime: 60_000 });
+
+/** The caller's role in the current team (null while loading or without a team). */
+export function useRole(): TeamRole | null {
+  const bootstrap = useBootstrap();
+  return bootstrap.data?.teams.find((team) => team.id === bootstrap.data?.currentTeamId)?.role ?? null;
+}
 
 export const useOverview = () => useQuery({ queryKey: keys.overview, queryFn: () => api.get<OverviewDto>('/api/overview') });
 
@@ -98,6 +123,9 @@ export const useDeployments = (appId: string) =>
 export const useDeployment = (id: string) =>
   useQuery({ queryKey: keys.deployment(id), queryFn: () => api.get<DeploymentDto & { applicationName: string }>(`/api/deployments/${id}`) });
 
+export const useAppContainers = (id: string) =>
+  useQuery({ queryKey: keys.appPart(id, 'containers'), queryFn: () => api.get<ContainerDto[]>(`/api/applications/${id}/containers`), refetchInterval: 15_000, retry: false });
+export const useCompose = (id: string, enabled = true) => useQuery({ queryKey: keys.appPart(id, 'compose'), queryFn: () => api.get<ComposeDto>(`/api/applications/${id}/compose`), enabled });
 export const useAppVariables = (id: string) => useQuery({ queryKey: keys.appPart(id, 'variables'), queryFn: () => api.get<VariablesDto>(`/api/applications/${id}/variables`) });
 export const useDomains = (id: string) => useQuery({ queryKey: keys.appPart(id, 'domains'), queryFn: () => api.get<DomainDto[]>(`/api/applications/${id}/domains`) });
 export const useVolumes = (id: string) => useQuery({ queryKey: keys.appPart(id, 'volumes'), queryFn: () => api.get<VolumeDto[]>(`/api/applications/${id}/volumes`) });
@@ -109,6 +137,10 @@ export const useCronRuns = (appId: string, cronId: string | null) =>
     queryFn: () => api.get<CronRunDto[]>(`/api/applications/${appId}/cron/${cronId}/runs`),
     enabled: cronId !== null,
   });
+export const usePreviewSettings = (id: string, enabled: boolean) =>
+  useQuery({ queryKey: keys.appPart(id, 'preview-settings'), queryFn: () => api.get<PreviewSettingsDto>(`/api/applications/${id}/preview-settings`), enabled });
+export const usePreviews = (id: string) =>
+  useQuery({ queryKey: keys.appPart(id, 'previews'), queryFn: () => api.get<PreviewDto[]>(`/api/applications/${id}/previews`), refetchInterval: 15_000 });
 export const useDeployKey = (id: string, enabled: boolean) =>
   useQuery({ queryKey: keys.appPart(id, 'deploy-key'), queryFn: () => api.get<{ publicKey: string | null }>(`/api/applications/${id}/deploy-key`), enabled });
 
@@ -132,6 +164,7 @@ export const useServiceMetrics = (id: string, range: MetricRange) =>
     placeholderData: keepPreviousData,
   });
 export const fetchServiceCredentials = (id: string) => api.get<ServiceCredentialsDto>(`/api/services/${id}/credentials`);
+export const useTemplates = (enabled = true) => useQuery({ queryKey: ['templates'], queryFn: () => api.get<TemplateDto[]>('/api/catalog/templates'), staleTime: Infinity, enabled });
 export const useCatalog = () => useQuery({ queryKey: keys.catalog, queryFn: () => api.get<ServiceCatalogEntryDto[]>('/api/catalog/services'), staleTime: Infinity });
 
 export const useServers = () => useQuery({ queryKey: keys.servers, queryFn: () => api.get<ServerDto[]>('/api/servers') });
@@ -146,7 +179,18 @@ export const useServerMetrics = (id: string, range: MetricRange) =>
 export const useServerDocker = (id: string, enabled: boolean) =>
   useQuery({ queryKey: keys.serverPart(id, 'docker'), queryFn: () => api.get<DockerDiskUsageDto>(`/api/servers/${id}/docker`), enabled, staleTime: 60_000, retry: false });
 
-export const useGithub = () => useQuery({ queryKey: keys.github, queryFn: () => api.get<GithubStatusDto>('/api/github') });
+export const useServerContainers = (id: string) =>
+  useQuery({ queryKey: keys.serverPart(id, 'containers'), queryFn: () => api.get<ServerContainerDto[]>(`/api/servers/${id}/containers`), refetchInterval: 15_000, retry: false });
+export const useServerContainerLogs = (serverId: string, containerId: string | null) =>
+  useQuery({
+    queryKey: keys.serverPart(serverId, 'containers', containerId, 'logs'),
+    queryFn: () => api.get<{ name: string; lines: { stream: 'stdout' | 'stderr'; text: string }[] }>(`/api/servers/${serverId}/containers/${containerId}/logs`),
+    enabled: containerId !== null,
+    retry: false,
+  });
+export const useServerProxy = (id: string) =>
+  useQuery({ queryKey: keys.serverPart(id, 'proxy'), queryFn: () => api.get<ProxyOverviewDto>(`/api/servers/${id}/proxy`), refetchInterval: 15_000, retry: false });
+export const useGithub = (enabled = true) => useQuery({ queryKey: keys.github, queryFn: () => api.get<GithubStatusDto>('/api/github'), enabled });
 export const useRepositories = (installationId: number | null) =>
   useQuery({
     queryKey: keys.repositories(installationId ?? 0),
@@ -169,6 +213,21 @@ export const useMembers = () => useQuery({ queryKey: keys.members, queryFn: () =
 export const useInvitations = (enabled: boolean) => useQuery({ queryKey: keys.invitations, queryFn: () => api.get<InvitationDto[]>('/api/team/invitations'), enabled });
 export const useTokens = () => useQuery({ queryKey: keys.tokens, queryFn: () => api.get<ApiTokenDto[]>('/api/tokens') });
 export const useSessions = () => useQuery({ queryKey: keys.sessions, queryFn: () => api.get<SessionDto[]>('/api/me/sessions') });
+export const useNotificationChannels = (enabled = true) => useQuery({ queryKey: keys.notifications, queryFn: () => api.get<NotificationChannelDto[]>('/api/notifications'), enabled });
+export const useS3Destinations = (enabled = true) => useQuery({ queryKey: keys.s3, queryFn: () => api.get<S3DestinationDto[]>('/api/s3-destinations'), enabled });
+export const useRegistries = (enabled = true) => useQuery({ queryKey: keys.registries, queryFn: () => api.get<RegistryDto[]>('/api/registries'), enabled });
+
+/** Every deployment of the team, newest first, optionally only one status (or `active`). */
+export const useTeamDeployments = (status: DeploymentStatusFilter | null) =>
+  useInfiniteQuery({
+    queryKey: [...keys.teamDeployments, status ?? 'all'],
+    queryFn: ({ pageParam }) => api.get<Page<TeamDeploymentDto>>(`/api/deployments${qs({ cursor: pageParam, limit: 30, status: status ?? undefined })}`),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+
+export const useTeamCron = () => useQuery({ queryKey: keys.teamCron, queryFn: () => api.get<TeamCronJobDto[]>('/api/cron') });
+
 export const useAudit = () =>
   useInfiniteQuery({
     queryKey: keys.audit,

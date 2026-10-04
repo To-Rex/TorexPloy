@@ -3,6 +3,7 @@ import { Database, Link2, Unlink } from 'lucide-react';
 import { createLinkSchema } from '@ploy/shared';
 import { Dialog } from '../../components/Dialog.tsx';
 import { EnvEditor } from '../../components/EnvEditor.tsx';
+import { Card } from '../../components/Frame.tsx';
 import { Button, Field, Input, Select, Skeleton } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
@@ -11,7 +12,7 @@ import { keys, useAppVariables, useLinks, useProject } from '../../lib/queries.t
 import { validate } from '../../lib/validate.ts';
 import { useAppContext } from './AppLayout.tsx';
 
-export function VariablesTab() {
+export function EnvironmentTab() {
   const app = useAppContext();
   const { m } = useI18n();
   const variables = useAppVariables(app.id);
@@ -39,61 +40,54 @@ export function VariablesTab() {
 
   return (
     <>
-      <div className="section">
-        <div className="section__intro">
-          <h2>{m.variables.title}</h2>
-          <p>{m.variables.hint}</p>
-          <p>{m.variables.referenceHint}</p>
-        </div>
+      <Card title={m.variables.title} description={`${m.variables.hint} ${m.variables.referenceHint}`}>
         {variables.data === undefined ? (
           <Skeleton height={160} />
         ) : (
           <EnvEditor variables={variables.data.variables} inherited={variables.data.inherited} onSave={(list) => save.mutateAsync(list)} saving={save.isPending} />
         )}
-      </div>
-      <div className="section">
-        <div className="section__intro">
-          <h2>{m.variables.links}</h2>
-          <p>{m.variables.linksHint}</p>
-        </div>
-        <div className="stack" style={{ gap: 12 }}>
-          {(links.data ?? []).length > 0 && (
-            <div className="list">
-              {links.data!.map((item) => (
-                <div key={item.id} className="list__row">
-                  <Database width={18} height={18} className="faint" aria-hidden="true" />
-                  <div className="grow">
-                    <div className="list__title">{item.serviceName}</div>
-                    <div className="list__meta">
-                      {item.keys.slice(0, 6).map((key) => (
-                        <code key={key}>{key}</code>
-                      ))}
-                      {item.keys.length > 6 && <span>+{item.keys.length - 6}</span>}
-                    </div>
+      </Card>
+      <Card
+        title={m.variables.links}
+        description={m.variables.linksHint}
+        actions={
+          <Button
+            icon={<Link2 />}
+            disabled={candidates.length === 0}
+            title={candidates.length === 0 ? m.variables.noServices : undefined}
+            onClick={() => {
+              setServiceId(candidates[0]?.id ?? '');
+              setLinking(true);
+            }}
+          >
+            {m.variables.link}
+          </Button>
+        }
+      >
+        {(links.data ?? []).length > 0 ? (
+          <div className="list">
+            {links.data!.map((item) => (
+              <div key={item.id} className="list__row">
+                <Database width={18} height={18} className="faint" aria-hidden="true" />
+                <div className="grow">
+                  <div className="list__title">{item.serviceName}</div>
+                  <div className="list__meta">
+                    {item.keys.slice(0, 6).map((key) => (
+                      <code key={key}>{key}</code>
+                    ))}
+                    {item.keys.length > 6 && <span>+{item.keys.length - 6}</span>}
                   </div>
-                  <Button size="sm" variant="ghost" icon={<Unlink />} onClick={() => unlink.mutate(item.id)}>
-                    {m.variables.unlink}
-                  </Button>
                 </div>
-              ))}
-            </div>
-          )}
-          <div>
-            <Button
-              icon={<Link2 />}
-              disabled={candidates.length === 0}
-              title={candidates.length === 0 ? m.variables.noServices : undefined}
-              onClick={() => {
-                setServiceId(candidates[0]?.id ?? '');
-                setLinking(true);
-              }}
-            >
-              {m.variables.link}
-            </Button>
-            {candidates.length === 0 && (links.data ?? []).length === 0 && <p className="field__hint" style={{ marginTop: 8 }}>{m.variables.noServices}</p>}
+                <Button size="sm" variant="ghost" icon={<Unlink />} onClick={() => unlink.mutate(item.id)}>
+                  {m.variables.unlink}
+                </Button>
+              </div>
+            ))}
           </div>
-        </div>
-      </div>
+        ) : (
+          <p className="muted" style={{ fontSize: 'var(--text-sm)' }}>{candidates.length === 0 ? m.variables.noServices : m.variables.noLinks}</p>
+        )}
+      </Card>
       <Dialog
         open={linking}
         onClose={() => setLinking(false)}

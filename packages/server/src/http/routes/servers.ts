@@ -3,9 +3,11 @@
  */
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { createServerSchema, METRIC_RANGE_WINDOWS, METRIC_RANGES, updateServerSchema, type DockerDiskUsageDto } from '@ploy/shared';
+import { createServerSchema, METRIC_RANGE_WINDOWS, METRIC_RANGES, updateServerSchema, type DockerDiskUsageDto, type ProxyOverviewDto, type ServerContainerDto } from '@ploy/shared';
 import type { Context } from '../../context.ts';
-import { forbidden, notFound } from '../../lib/errors.ts';
+import type { ContainerSummary } from '../../docker/client.ts';
+import { LABEL_APP, LABEL_MANAGED, LABEL_ROLE, LABEL_SERVICE, PROXY_CONTAINER } from '../../docker/naming.ts';
+import { AppError, forbidden, notFound } from '../../lib/errors.ts';
 import type { ServerRecord } from '../../store/index.ts';
 import { audit, body, query, requireTeam, type Ctx, type Env } from '../core.ts';
 import { serverDto } from '../dto.ts';
@@ -105,6 +107,113 @@ export function registerServerRoutes(app: Hono<Env>, ctx: Context): void {
       },
     };
     return c.json(usage);
+  });
+
+  // ------------------------------------------------------------ containers
+  // Admin only: the list spans every workload on the machine, not just the caller's.
+
+  const describeOwner = (teamId: string, container: ContainerSummary): ServerContainerDto['owner'] => {
+    const labels = container.Labels ?? {};
+    const name = container.Names[0]?.replace(/^\//, '') ?? '';
+    if (name === PROXY_CONTAINER) return { kind: 'proxy' };
+    if (name === 'ploy-control') return { kind: 'platform' };
+    if (labels[LABEL_MANAGED] !== 'true') return { kind: 'external' };
+    const role = labels[LABEL_ROLE];
+    if (role === 'app' || role === 'compose') {
+      const app = stores.applications.getForTeam(teamId, labels[LABEL_APP] ?? '');
+      return app === undefined ? { kind: 'other-team' } : { kind: app.kind === 'compose' ? 'compose' : 'application', id: app.id, name: app.name, projectId: app.projectId };
+    }
+    if (role === 'service') {
+      const service = stores.services.getForTeam(teamId, labels[LABEL_SERVICE] ?? '');
+      return service === undefined ? { kind: 'other-team' } : { kind: 'service', id: service.id, name: service.name, projectId: service.projectId };
+    }
+    if (role === 'cron') return { kind: 'cron' };
+    return { kind: 'build' };
+  };
+
+  app.get('/api/servers/:id/containers', async (c) => {
+    const server = load(c, true);
+    const auth = requireTeam(c, 'admin');
+    const docker = await ctx.connections.docker(server.id);
+    const list = await docker.listContainers({}, true);
+    const dto: ServerContainerDto[] = list
+      .map((container) => ({
+        id: container.Id.slice(0, 12),
+        name: container.Names[0]?.replace(/^\//, '') ?? container.Id.slice(0, 12),
+        image: container.Image,
+        state: container.State,
+        status: container.Status,
+        createdAt: new Date(container.Created * 1000).toISOString(),
+        ports: (container.Ports ?? []).filter((port) => port.PublicPort !== undefined).map((port) => `${port.IP?.includes(':') ? `[${port.IP}]` : (port.IP ?? '0.0.0.0')}:${port.PublicPort}→${port.PrivatePort}/${port.Type}`),
+        owner: describeOwner(auth.teamId, container),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return c.json(dto);
+  });
+
+  /** Resolve a container id from the listing; refuse anything that is not on this server. */
+  const loadContainer = async (c: Ctx) => {
+    const server = load(c, true);
+    const docker = await ctx.connections.docker(server.id);
+    const id = c.req.param('containerId') ?? '';
+    if (!/^[a-f0-9]{12,64}$/.test(id)) throw notFound('Container');
+    const inspect = await docker.inspectContainer(id);
+    if (inspect === null) throw notFound('Container');
+    return { server, docker, inspect };
+  };
+
+  for (const action of ['start', 'stop', 'restart'] as const) {
+    app.post(`/api/servers/:id/containers/:containerId/${action}`, async (c) => {
+      const { server, docker, inspect } = await loadContainer(c);
+      const name = inspect.Name.replace(/^\//, '');
+      // Stopping the proxy or the control plane from here would cut off the panel itself.
+      if (action === 'stop' && (name === PROXY_CONTAINER || name === 'ploy-control')) throw new AppError('bad_request', 'This container keeps the platform running and cannot be stopped from here');
+      if (action === 'start') await docker.startContainer(inspect.Id);
+      else if (action === 'stop') await docker.stopContainer(inspect.Id, 30);
+      else await docker.restartContainer(inspect.Id, 30);
+      audit(ctx, c, `server.container_${action}`, { type: 'server', id: server.id, name: server.name }, { container: name });
+      return c.json({ ok: true });
+    });
+  }
+
+  app.get('/api/servers/:id/containers/:containerId/logs', async (c) => {
+    const { docker, inspect } = await loadContainer(c);
+    const stream = await docker.containerLogs(inspect.Id, { follow: false, tail: 300, timestamps: true });
+    const lines: { stream: 'stdout' | 'stderr'; text: string }[] = [];
+    for await (const chunk of stream as AsyncIterable<{ stream: 'stdout' | 'stderr'; text: string }>) {
+      for (const text of chunk.text.split('\n')) if (text.length > 0) lines.push({ stream: chunk.stream, text });
+    }
+    return c.json({ name: inspect.Name.replace(/^\//, ''), lines: lines.slice(-300) });
+  });
+
+  // The proxy (Dokploy's "Traefik" screen): routes, the generated configuration, and a forced reload.
+  app.get('/api/servers/:id/proxy', (c) => {
+    const server = load(c, true);
+    const { routes, config, inSync } = ctx.proxy.overview(server.id);
+    const overview: ProxyOverviewDto = {
+      running: server.proxyInfo?.running ?? false,
+      version: server.proxyInfo?.version ?? null,
+      inSync,
+      routes: routes.map((route) => ({
+        host: route.host,
+        path: route.path ?? '/',
+        stripPath: route.stripPath ?? false,
+        https: route.https,
+        upstreams: route.upstreams,
+        redirectTo: route.redirectTo ?? null,
+        label: route.label,
+      })),
+      config,
+    };
+    return c.json(overview);
+  });
+
+  app.post('/api/servers/:id/proxy/reload', async (c) => {
+    const server = load(c, true);
+    if (server.status !== 'ready') throw new AppError('server_unreachable', 'The server is not ready');
+    await ctx.proxy.reload(server.id);
+    audit(ctx, c, 'proxy.reloaded', { type: 'server', id: server.id, name: server.name });
+    return c.json({ ok: true });
   });
 
   app.post('/api/servers/:id/cleanup', async (c) => {

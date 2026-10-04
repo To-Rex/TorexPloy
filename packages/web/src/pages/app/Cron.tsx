@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { CalendarClock, Ellipsis, Pencil, Play, Plus, ScrollText, Trash2 } from 'lucide-react';
 import { createCronJobSchema, type CronJobDto } from '@ploy/shared';
 import { useConfirm, Dialog } from '../../components/Dialog.tsx';
+import { Card } from '../../components/Frame.tsx';
 import { LogViewer } from '../../components/LogViewer.tsx';
 import { Menu, MenuItem, MenuSeparator } from '../../components/Menu.tsx';
 import { Status } from '../../components/Status.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
-import { Badge, Button, Callout, EmptyState, Field, Input, SkeletonRows, Switch } from '../../components/ui.tsx';
+import { Badge, Button, Callout, Field, Input, SkeletonRows, Switch } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
@@ -93,18 +94,20 @@ export function CronTab() {
   ];
 
   return (
-    <div className="stack">
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <p className="muted" style={{ maxWidth: '72ch' }}>{m.cron.hint}</p>
+    <Card
+      title={m.cron.title}
+      description={m.cron.hint}
+      actions={
         <Button variant="primary" icon={<Plus />} onClick={() => { setErrors({}); setDraft(empty); }}>
           {m.cron.add}
         </Button>
-      </div>
+      }
+    >
       {app.activeDeployment === null && <Callout tone="info">{m.cron.noDeployment}</Callout>}
       {jobs.isPending ? (
         <SkeletonRows rows={2} />
       ) : jobs.data!.length === 0 ? (
-        <EmptyState icon={<CalendarClock />}>{m.cron.empty}</EmptyState>
+        <p className="muted" style={{ fontSize: 'var(--text-sm)' }}>{m.cron.empty}</p>
       ) : (
         jobs.data!.map((job) => (
           <div key={job.id} className="panel">
@@ -214,6 +217,6 @@ export function CronTab() {
           </div>
         )}
       </Dialog>
-    </div>
+    </Card>
   );
 }

@@ -6,6 +6,7 @@
  * (the deployer needs GitHub tokens; the GitHub webhook needs the deployer).
  */
 import type { PlatformEvent } from '@ploy/shared';
+import type { ComposeEngine } from './compose/engine.ts';
 import type { Deployer } from './deploy/deployer.ts';
 import type { Reconciler } from './deploy/reconciler.ts';
 import type { DomainChecker } from './domains/checker.ts';
@@ -16,6 +17,8 @@ import type { AppConfig } from './lib/config.ts';
 import type { Logger } from './lib/logger.ts';
 import type { Secrets } from './lib/secrets.ts';
 import type { MetricsCollector } from './metrics/collector.ts';
+import type { Notifier } from './notifications/notifier.ts';
+import type { PreviewManager } from './previews/manager.ts';
 import type { ProxyManager } from './proxy/manager.ts';
 import type { EventBus } from './realtime/bus.ts';
 import type { ConnectionManager } from './servers/connections.ts';
@@ -33,6 +36,7 @@ export interface Context {
   proxy: ProxyManager;
   servers: ServerManager;
   deployer: Deployer;
+  compose: ComposeEngine;
   reconciler: Reconciler;
   services: ServiceManager;
   github: GithubApp;
@@ -40,6 +44,8 @@ export interface Context {
   domains: DomainChecker;
   cron: CronRunner;
   maintenance: Maintenance;
+  notifier: Notifier;
+  previews: PreviewManager;
   startedAt: number;
 }
 
