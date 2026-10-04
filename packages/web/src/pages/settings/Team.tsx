@@ -48,6 +48,15 @@ export function TeamPage() {
     onSuccess: (result) => setInviteLink(result.link ?? null),
   });
   const revokeInvite = useAction((id: string) => api.delete(`/api/team/invitations/${id}`), { invalidate: [keys.invitations] });
+  // A fresh link for a pending invitation (the token is stored hashed, so the old one cannot be shown again).
+  const relink = useAction((id: string) => api.post<InvitationDto>(`/api/team/invitations/${id}/link`), {
+    invalidate: [keys.invitations],
+    onSuccess: (result) => {
+      setInviteErrors({});
+      setInviteLink(result.link ?? null);
+      setInviting(true);
+    },
+  });
   const setRole = useAction((input: { userId: string; role: TeamRole }) => api.patch(`/api/team/members/${input.userId}`, { role: input.role }), { success: m.team.roleChanged, invalidate: [keys.members] });
   const removeMember = useAction((userId: string) => api.delete(`/api/team/members/${userId}`), {
     success: m.team.removed,
@@ -172,7 +181,10 @@ export function TeamPage() {
                     </span>
                   </div>
                 </div>
-                <Button size="sm" variant="ghost" icon={<Trash2 />} onClick={() => revokeInvite.mutate(invitation.id)}>
+                <Button size="sm" icon={<Link2 />} busy={relink.isPending && relink.variables === invitation.id} onClick={() => relink.mutate(invitation.id)}>
+                  {m.team.getLink}
+                </Button>
+                <Button size="sm" variant="ghost" iconOnly icon={<Trash2 />} onClick={() => revokeInvite.mutate(invitation.id)}>
                   {m.team.revokeInvitation}
                 </Button>
               </div>

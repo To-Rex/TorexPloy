@@ -266,6 +266,18 @@ export function registerAccountRoutes(app: Hono<Env>, ctx: Context): void {
     return c.json(invitationDto(invitation, `${base}/invite/${token}`), 201);
   });
 
+  // The token is stored hashed, so showing the link again means issuing a new one.
+  app.post('/api/team/invitations/:id/link', (c) => {
+    const auth = requireTeam(c, 'admin');
+    const invitation = stores.teams.getInvitation(c.req.param('id'));
+    if (invitation === undefined || invitation.teamId !== auth.teamId) throw notFound('Invitation');
+    if (invitation.role === 'owner' && auth.role !== 'owner') throw forbidden('Only an owner can issue links for owner invitations');
+    const { token, invitation: rotated } = stores.teams.rotateInvitationToken(invitation.id);
+    const base = publicBaseUrl(ctx) ?? requestOrigin(c);
+    audit(ctx, c, 'team.invitation_relinked', { type: 'invitation', id: invitation.id, name: invitation.email });
+    return c.json(invitationDto(rotated, `${base}/invite/${token}`));
+  });
+
   app.delete('/api/team/invitations/:id', (c) => {
     const auth = requireTeam(c, 'admin');
     const invitation = stores.teams.getInvitation(c.req.param('id'));

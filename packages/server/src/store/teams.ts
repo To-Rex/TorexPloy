@@ -156,6 +156,13 @@ export class TeamStore {
 
   // -- invitations ----------------------------------------------------------
 
+  /** A new link for a pending invitation: the previous token stops working and the 7 days start again. */
+  rotateInvitationToken(id: string): { token: string; invitation: InvitationRecord } {
+    const token = generateToken(32);
+    this.db.run('UPDATE invitations SET token_hash = ?, expires_at = ? WHERE id = ?', sha256(token), new Date(Date.now() + INVITATION_TTL_MS).toISOString(), id);
+    return { token, invitation: this.getInvitation(id)! };
+  }
+
   createInvitation(teamId: string, email: string, role: TeamRole, invitedBy: string): { token: string; invitation: InvitationRecord } {
     const token = generateToken(32);
     const id = newId('inv');

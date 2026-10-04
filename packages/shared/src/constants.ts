@@ -168,7 +168,7 @@ export const LIMITS = {
   cpuMax: 64,
   memoryMbMin: 32,
   memoryMbMax: 262_144,
-  passwordMin: 10,
+  passwordMin: 8,
   passwordMax: 256,
   composeFileMax: 256 * 1024,
   /** Pull request previews one application may run at once. */

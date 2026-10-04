@@ -10,13 +10,25 @@ export async function writeClipboard(value: string): Promise<boolean> {
     return true;
   } catch {
     // Clipboard API needs a secure context; fall back to a hidden textarea on plain-HTTP installs.
+    // While a modal <dialog> is open the rest of the page is inert, so the textarea must live inside it.
+    const host = document.querySelector<HTMLDialogElement>('dialog[open]') ?? document.body;
     const area = document.createElement('textarea');
     area.value = value;
+    area.setAttribute('readonly', '');
     area.style.position = 'fixed';
+    area.style.top = '0';
+    area.style.left = '0';
     area.style.opacity = '0';
-    document.body.appendChild(area);
+    host.appendChild(area);
+    area.focus();
     area.select();
-    const ok = document.execCommand('copy');
+    area.setSelectionRange(0, value.length);
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
     area.remove();
     return ok;
   }
