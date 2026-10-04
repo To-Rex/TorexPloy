@@ -104,9 +104,26 @@ export interface ContainerInspect {
     FinishedAt: string;
     Health?: { Status: string };
   };
-  Config: { Image: string; Labels: Record<string, string>; Env: string[] | null };
+  Config: {
+    Image: string;
+    Labels: Record<string, string>;
+    Env: string[] | null;
+    // The rest is what the self-updater copies onto a replacement container; absent in older daemons' answers.
+    Hostname?: string;
+    User?: string;
+    WorkingDir?: string;
+    Cmd?: string[] | null;
+    Entrypoint?: string[] | null;
+    ExposedPorts?: Record<string, unknown> | null;
+    Healthcheck?: Record<string, unknown> | null;
+    StopSignal?: string;
+    StopTimeout?: number;
+  };
   NetworkSettings: { Networks: Record<string, { IPAddress: string; Aliases: string[] | null; NetworkID: string }> };
-  HostConfig: { Memory: number; NanoCpus: number };
+  /** Everything `docker run` took, as the daemon stores it; a create request accepts it back verbatim. */
+  HostConfig: { Memory: number; NanoCpus: number; NetworkMode?: string; Binds?: string[] | null; PortBindings?: Record<string, { HostIp?: string; HostPort: string }[]> | null; RestartPolicy?: { Name: string; MaximumRetryCount?: number }; Mounts?: Record<string, unknown>[] | null } & Record<string, unknown>;
+  /** Resolved mounts, including anonymous volumes that only exist here (not in `HostConfig.Binds`). */
+  Mounts?: { Type: string; Name?: string; Source?: string; Destination: string; RW?: boolean }[];
 }
 
 export interface ImageInspect {
@@ -114,7 +131,16 @@ export interface ImageInspect {
   RepoTags: string[] | null;
   Size: number;
   Created: string;
-  Config: { ExposedPorts?: Record<string, unknown> | null; Labels?: Record<string, string> | null };
+  Config: {
+    ExposedPorts?: Record<string, unknown> | null;
+    Labels?: Record<string, string> | null;
+    Env?: string[] | null;
+    Cmd?: string[] | null;
+    Entrypoint?: string[] | null;
+    Healthcheck?: Record<string, unknown> | null;
+    WorkingDir?: string;
+    User?: string;
+  };
 }
 
 export interface ImageSummary {
@@ -616,6 +642,11 @@ export class DockerClient {
 
   async restartContainer(id: string, timeoutSec = 10): Promise<void> {
     await this.call('POST', `/containers/${encodeURIComponent(id)}/restart`, { query: { t: timeoutSec }, timeoutMs: (timeoutSec + 60) * 1000 });
+  }
+
+  /** Rename a container (running or not); its networks and aliases stay attached. */
+  async renameContainer(id: string, name: string): Promise<void> {
+    await this.call('POST', `/containers/${encodeURIComponent(id)}/rename`, { query: { name }, timeoutMs: 30_000 });
   }
 
   async removeContainer(id: string, options: { force?: boolean; volumes?: boolean } = {}): Promise<void> {

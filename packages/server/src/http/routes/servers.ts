@@ -119,6 +119,7 @@ export function registerServerRoutes(app: Hono<Env>, ctx: Context): void {
     if (name === 'ploy-control') return { kind: 'platform' };
     if (labels[LABEL_MANAGED] !== 'true') return { kind: 'external' };
     const role = labels[LABEL_ROLE];
+    if (role === 'updater') return { kind: 'platform' };
     if (role === 'app' || role === 'compose') {
       const app = stores.applications.getForTeam(teamId, labels[LABEL_APP] ?? '');
       return app === undefined ? { kind: 'other-team' } : { kind: app.kind === 'compose' ? 'compose' : 'application', id: app.id, name: app.name, projectId: app.projectId };

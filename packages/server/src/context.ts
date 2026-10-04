@@ -25,6 +25,7 @@ import type { ConnectionManager } from './servers/connections.ts';
 import type { ServerManager } from './servers/manager.ts';
 import type { ServiceManager } from './services/manager.ts';
 import type { Stores } from './store/index.ts';
+import type { UpdateChecker } from './updates/checker.ts';
 
 export interface Context {
   config: AppConfig;
@@ -46,6 +47,7 @@ export interface Context {
   maintenance: Maintenance;
   notifier: Notifier;
   previews: PreviewManager;
+  updates: UpdateChecker;
   startedAt: number;
 }
 

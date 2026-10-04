@@ -49,6 +49,7 @@ import type {
   TeamDto,
   TeamRole,
   TemplateDto,
+  UpdateStatusDto,
   UserDto,
   VariablesDto,
   VolumeDto,
@@ -87,6 +88,7 @@ export const keys = {
   registries: ['registries'] as const,
   teamDeployments: ['team-deployments'] as const,
   teamCron: ['team-cron'] as const,
+  updates: ['updates'] as const,
 };
 
 export const useBootstrap = () => useQuery({ queryKey: keys.bootstrap, queryFn: () => api.get<BootstrapDto>('/api/bootstrap'), staleTime: 60_000 });
@@ -218,6 +220,16 @@ export const useTokens = () => useQuery({ queryKey: keys.tokens, queryFn: () => 
 export const useSessions = () => useQuery({ queryKey: keys.sessions, queryFn: () => api.get<SessionDto[]>('/api/me/sessions') });
 export const useNotificationChannels = (enabled = true) => useQuery({ queryKey: keys.notifications, queryFn: () => api.get<NotificationChannelDto[]>('/api/notifications'), enabled });
 export const useS3Destinations = (enabled = true) => useQuery({ queryKey: keys.s3, queryFn: () => api.get<S3DestinationDto[]>('/api/s3-destinations'), enabled });
+/** The running version against the tracked branch; polls fast while an update runs. */
+export const useUpdateStatus = (enabled: boolean) =>
+  useQuery({
+    queryKey: keys.updates,
+    queryFn: () => api.get<UpdateStatusDto>('/api/updates'),
+    enabled,
+    staleTime: 60_000,
+    retry: false,
+    refetchInterval: (query) => (query.state.data?.state === 'updating' ? 3_000 : 30 * 60_000),
+  });
 export const useRegistries = (enabled = true) => useQuery({ queryKey: keys.registries, queryFn: () => api.get<RegistryDto[]>('/api/registries'), enabled });
 
 /** Every deployment of the team, newest first, optionally only one status (or `active`). */

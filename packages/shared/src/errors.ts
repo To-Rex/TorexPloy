@@ -34,6 +34,8 @@ export const ERROR_CODES = [
   'domain_taken',
   'registry_exists',
   'registry_auth_failed',
+  'update_unsupported',
+  'update_in_progress',
   'internal_error',
 ] as const;
 

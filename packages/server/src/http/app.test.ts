@@ -18,6 +18,7 @@ import {
   type BootstrapDto,
   type BuildPlanDto,
   type DeploymentDto,
+  type HealthDto,
   type OverviewDto,
   type Page,
   type PlatformEvent,
@@ -28,11 +29,14 @@ import {
   type ServerDto,
   type TeamCronJobDto,
   type TeamDeploymentDto,
+  type UpdateStatusDto,
 } from '@ploy/shared';
+import type { AppConfig } from '../lib/config.ts';
 import { generateToken, hmac } from '../lib/crypto.ts';
 import { runProcessOrThrow } from '../lib/process.ts';
 import { createContext } from '../main.ts';
 import type { ApplicationRecord } from '../store/index.ts';
+import { UpdateChecker } from '../updates/checker.ts';
 import { createHttpApp } from './app.ts';
 
 /** What the request handlers read from the Node binding: the peer address. */
@@ -40,7 +44,23 @@ const BINDINGS = { incoming: { socket: { remoteAddress: '127.0.0.1' } } } as unk
 
 const WEBHOOK_SECRET = 'webhook-secret-for-the-tests';
 
-async function harness(options: { docker?: boolean } = {}) {
+/** An inspect answer with what the self-updater reads: state, image, environment and the primary network. */
+function fakeInspect(name: string, options: { id?: string; running?: boolean; exitCode?: number; status?: string; image?: string; env?: string[]; networkMode?: string } = {}): Record<string, unknown> {
+  const running = options.running ?? true;
+  return {
+    Id: options.id ?? `${name.replace(/[^a-z0-9]/g, '')}0000000000000000`.slice(0, 64),
+    Name: `/${name}`,
+    Created: '',
+    RestartCount: 0,
+    Image: 'sha256:' + '1'.repeat(64),
+    State: { Status: options.status ?? (running ? 'running' : 'exited'), Running: running, Restarting: false, OOMKilled: false, ExitCode: options.exitCode ?? 0, Error: '', StartedAt: '', FinishedAt: '' },
+    Config: { Image: options.image ?? 'torexploy:latest', Labels: {}, Env: options.env ?? [] },
+    NetworkSettings: { Networks: { [options.networkMode ?? 'ploy']: { IPAddress: '10.0.0.5', Aliases: [name], NetworkID: 'n1' } } },
+    HostConfig: { Memory: 0, NanoCpus: 0, NetworkMode: options.networkMode ?? 'ploy' },
+  };
+}
+
+async function harness(options: { docker?: boolean; config?: Partial<AppConfig> } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ploy-http-'));
   const dockerSocket = join(dir, 'docker.sock');
   /** Logins the fake registry accepts (username → password). */
@@ -49,6 +69,12 @@ async function harness(options: { docker?: boolean } = {}) {
   /** Containers the daemon lists (label filters honoured), and the ids removed through it. */
   const containers: { Id: string; Names: string[]; Image: string; Labels: Record<string, string>; State: string; Status: string; Created: number }[] = [];
   const removedContainers: string[] = [];
+  /** Containers the daemon can inspect (by name), what it was asked to create, and the logs it serves (by id). */
+  const inspects = new Map<string, Record<string, unknown>>();
+  const created: { name: string; spec: Record<string, unknown> }[] = [];
+  const logs = new Map<string, string>();
+  const findInspect = (ref: string): Record<string, unknown> | undefined =>
+    inspects.get(ref) ?? [...inspects.values()].find((item) => String(item.Id) === ref || String(item.Id).startsWith(ref));
   const daemon = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -62,11 +88,44 @@ async function harness(options: { docker?: boolean } = {}) {
       }
       const container = /^\/containers\/([^/]+)$/.exec(path);
       if (container !== null && req.method === 'DELETE') {
-        const index = containers.findIndex((item) => item.Id === decodeURIComponent(container[1]!));
+        const ref = decodeURIComponent(container[1]!);
+        const index = containers.findIndex((item) => item.Id === ref);
         if (index !== -1) removedContainers.push(...containers.splice(index, 1).map((item) => item.Id));
+        for (const [name, item] of inspects) if (name === ref || item.Id === ref) inspects.delete(name);
         res.statusCode = 204;
         res.removeHeader('content-type');
         return void res.end();
+      }
+      const inspect = /^\/containers\/([^/]+)\/(json|start|logs)$/.exec(path);
+      if (inspect !== null) {
+        const found = findInspect(decodeURIComponent(inspect[1]!));
+        if (found === undefined) {
+          res.statusCode = 404;
+          return void res.end(JSON.stringify({ message: 'No such container' }));
+        }
+        if (inspect[2] === 'json') return void res.end(JSON.stringify(found));
+        if (inspect[2] === 'start') {
+          found.State = { ...(found.State as Record<string, unknown>), Status: 'running', Running: true };
+          res.statusCode = 204;
+          res.removeHeader('content-type');
+          return void res.end();
+        }
+        const text = Buffer.from(logs.get(String(found.Id)) ?? '', 'utf8');
+        const header = Buffer.alloc(8);
+        header[0] = 1;
+        header.writeUInt32BE(text.length, 4);
+        res.setHeader('content-type', 'application/octet-stream');
+        return void res.end(Buffer.concat([header, text]));
+      }
+      if (path === '/containers/create' && req.method === 'POST') {
+        const name = url.searchParams.get('name')!;
+        const spec = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
+        created.push({ name, spec });
+        const id = `c${String(created.length).padStart(11, '0')}${'0'.repeat(52)}`;
+        inspects.set(name, fakeInspect(name, { id, running: false, status: 'created', image: String(spec.Image), env: (spec.Env as string[]) ?? [] }));
+        containers.push({ Id: id, Names: [`/${name}`], Image: String(spec.Image), Labels: (spec.Labels as Record<string, string>) ?? {}, State: 'created', Status: '', Created: 0 });
+        res.statusCode = 201;
+        return void res.end(JSON.stringify({ Id: id }));
       }
       if (path === '/images/json') return void res.end('[]');
       if (path === '/version') return void res.end(JSON.stringify({ Version: '28.0.1', ApiVersion: '1.47', Os: 'linux', Arch: 'amd64' }));
@@ -84,12 +143,12 @@ async function harness(options: { docker?: boolean } = {}) {
   if (options.docker !== false) await new Promise<void>((resolve) => daemon.listen(dockerSocket, resolve));
 
   process.env.PLOY_RUN_DIR = join(dir, 'run');
-  const ctx = await createContext({ dataDir: join(dir, 'data'), databasePath: join(dir, 'data', 'test.db'), dockerSocket, logLevel: 'error' });
+  const ctx = await createContext({ dataDir: join(dir, 'data'), databasePath: join(dir, 'data', 'test.db'), dockerSocket, logLevel: 'error', ...options.config });
   const { stores } = ctx;
   const local = stores.servers.ensureLocal('local');
 
-  const member = (teamId: string, email: string, role: 'viewer' | 'developer' | 'admin' | 'owner'): string => {
-    const user = stores.users.create({ email, name: email.split('@')[0]!, passwordHash: null, isInstanceAdmin: false });
+  const member = (teamId: string, email: string, role: 'viewer' | 'developer' | 'admin' | 'owner', isInstanceAdmin = false): string => {
+    const user = stores.users.create({ email, name: email.split('@')[0]!, passwordHash: null, isInstanceAdmin });
     stores.teams.addMember(teamId, user.id, role);
     return stores.tokens.create({ userId: user.id, teamId, name: 'test', expiresAt: null, tokenPrefix: API_TOKEN_PREFIX }).token;
   };
@@ -134,6 +193,8 @@ async function harness(options: { docker?: boolean } = {}) {
     developer: member(teamA.id, 'dev@acme.uz', 'developer'),
     viewer: member(teamA.id, 'viewer@acme.uz', 'viewer'),
     rival: member(teamB.id, 'owner@rival.uz', 'owner'),
+    /** The instance administrator, who is also an owner of team A. */
+    instanceAdmin: member(teamA.id, 'root@acme.uz', 'owner', true),
   };
 
   const app = createHttpApp(ctx);
@@ -194,6 +255,9 @@ async function harness(options: { docker?: boolean } = {}) {
     authCalls,
     containers,
     removedContainers,
+    inspects,
+    created,
+    logs,
     application,
     githubApp,
     call,
@@ -912,5 +976,138 @@ test('POST /api/applications/:id/build-plan plans the branch head without buildi
     process.env.PATH = previousPath;
     await h.close();
     rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('updates: administrators see the status, only the instance administrator applies it, and viewers never learn of it', async () => {
+  const A = 'a'.repeat(40);
+  const B = 'b'.repeat(40);
+  const updates: AppConfig['updates'] = { enabled: true, repository: 'To-Rex/TorexPloy', branch: 'main', image: null, container: 'ploy-control', intervalMs: 3_600_000 };
+  const h = await harness({ config: { commit: A, builtAt: '2026-10-01T00:00:00Z', updates } });
+  try {
+    const { stores } = h.ctx;
+    /** GitHub with `head` at the top of main, two commits past A. */
+    const github = (head: string): typeof fetch => async (input) => {
+      const url = String(input);
+      const commit = (sha: string, index: number) => ({ sha, html_url: `https://github.com/To-Rex/TorexPloy/commit/${sha}`, commit: { message: `Change ${index}`, author: { name: 'Dev', date: '2026-10-02T00:00:00Z' }, committer: null }, author: { login: 'torex' } });
+      if (url.includes('/commits/')) return new Response(JSON.stringify(commit(head, 2)), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (url.includes('/compare/')) return new Response(JSON.stringify({ ahead_by: 2, total_commits: 2, commits: [commit('c'.repeat(40), 1), commit(head, 2)] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response('{}', { status: 404 });
+    };
+    const auditActions = () => stores.db.all("SELECT action FROM audit_log WHERE action LIKE 'platform.update_%' ORDER BY created_at").map((row) => String(row.action));
+
+    // On a developer's machine (not in Docker) nothing can be applied, whatever GitHub says.
+    h.ctx.updates = new UpdateChecker(h.ctx, { fetch: github(B), self: { inDocker: false } });
+    assert.equal((await h.call(h.tokens.viewer, 'GET', '/api/updates')).status, 403);
+    assert.equal((await h.call(h.tokens.developer, 'GET', '/api/updates')).status, 403);
+    const before = await h.call<UpdateStatusDto>(h.tokens.owner, 'GET', '/api/updates');
+    assert.equal(before.status, 200);
+    assert.deepEqual(before.body.current, { version: h.ctx.config.version, commit: A, builtAt: '2026-10-01T00:00:00Z' });
+    assert.equal(before.body.available, false, 'nothing is known before the first check');
+    assert.equal(before.body.checkedAt, null);
+    assert.equal(before.body.mode, 'manual');
+    assert.equal(before.body.state, 'idle');
+    assert.equal(before.body.canApply, false);
+    assert.deepEqual([before.body.repository, before.body.branch, before.body.image], ['To-Rex/TorexPloy', 'main', null]);
+
+    const checked = await h.call<UpdateStatusDto>(h.tokens.owner, 'POST', '/api/updates/check');
+    assert.equal(checked.status, 200);
+    assert.equal(checked.body.available, true);
+    assert.equal(checked.body.latest?.commit, B);
+    assert.deepEqual(checked.body.commits.map((commit) => commit.sha), [B, 'c'.repeat(40)]);
+    assert.equal(checked.body.checkError, null);
+    assert.equal(checked.body.canApply, false, 'a team owner cannot apply');
+    assert.deepEqual(auditActions(), ['platform.update_checked']);
+    assert.equal((await h.call(h.tokens.viewer, 'POST', '/api/updates/check')).status, 403);
+
+    // The dashboard flag: administrators only.
+    assert.equal((await h.call<BootstrapDto>(h.tokens.owner, 'GET', '/api/bootstrap')).body.features.updateAvailable, true);
+    assert.equal((await h.call<BootstrapDto>(h.tokens.instanceAdmin, 'GET', '/api/bootstrap')).body.features.updateAvailable, true);
+    assert.equal((await h.call<BootstrapDto>(h.tokens.developer, 'GET', '/api/bootstrap')).body.features.updateAvailable, false);
+    assert.equal((await h.call<BootstrapDto>(h.tokens.viewer, 'GET', '/api/bootstrap')).body.features.updateAvailable, false);
+    const health = await h.call<HealthDto>(h.tokens.viewer, 'GET', '/api/health');
+    assert.equal(health.body.commit, A, 'the dashboard watches /api/health for the new commit during an update');
+
+    assert.equal((await h.call(h.tokens.owner, 'POST', '/api/updates/apply')).status, 403);
+    const manual = await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
+    assert.equal(manual.status, 422);
+    assert.equal(manual.body.error.code, 'update_unsupported');
+    assert.equal(manual.body.error.params?.reason, 'not_in_docker');
+
+    // In Docker, but the container cannot be found: still manual.
+    h.ctx.updates = new UpdateChecker(h.ctx, { fetch: github(B), self: { inDocker: true, hostname: 'c0ffee000001', cacheMs: 0 } });
+    await h.ctx.updates.check();
+    const lost = await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
+    assert.equal(lost.status, 422);
+    assert.equal(lost.body.error.params?.reason, 'container_not_found');
+    assert.equal((await h.call<UpdateStatusDto>(h.tokens.instanceAdmin, 'GET', '/api/updates')).body.mode, 'manual');
+
+    // The control plane runs as ploy-control on the ploy network.
+    h.inspects.set('ploy-control', fakeInspect('ploy-control', { id: 'c0ffee000001' + '0'.repeat(52), env: ['PLOY_PORT=3000'] }));
+    const ready = await h.call<UpdateStatusDto>(h.tokens.instanceAdmin, 'GET', '/api/updates');
+    assert.equal(ready.body.mode, 'source');
+    assert.equal(ready.body.state, 'idle');
+    assert.equal(ready.body.canApply, true);
+    assert.equal((await h.call<UpdateStatusDto>(h.tokens.owner, 'GET', '/api/updates')).body.canApply, false);
+
+    // An updater already running: 409, and the status says so.
+    h.inspects.set('ploy-updater', fakeInspect('ploy-updater', { running: true }));
+    const busy = await h.call<UpdateStatusDto>(h.tokens.instanceAdmin, 'GET', '/api/updates');
+    assert.equal(busy.body.state, 'updating');
+    assert.equal(busy.body.canApply, false);
+    const conflict = await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
+    assert.equal(conflict.status, 409);
+    assert.equal(conflict.body.error.code, 'update_in_progress');
+
+    // A failed earlier run: its last lines are shown, and applying again replaces it.
+    const failed = fakeInspect('ploy-updater', { id: 'fa11ed000001' + '0'.repeat(52), running: false, exitCode: 1 });
+    h.inspects.set('ploy-updater', failed);
+    h.logs.set(String(failed.Id), Array.from({ length: 20 }, (_, index) => `${new Date().toISOString()} step ${index + 1}`).join('\n') + '\n');
+    const broken = await h.call<UpdateStatusDto>(h.tokens.instanceAdmin, 'GET', '/api/updates');
+    assert.equal(broken.body.state, 'failed');
+    assert.equal(broken.body.error?.split('\n').length, 15);
+    assert.match(broken.body.error ?? '', /step 20$/);
+    assert.equal(broken.body.canApply, true);
+
+    const applied = await h.call<{ ok: boolean }>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
+    assert.equal(applied.status, 202, JSON.stringify(applied.body));
+    assert.deepEqual(applied.body, { ok: true });
+    assert.ok(h.removedContainers.includes(String(failed.Id)) || !h.inspects.has(String(failed.Id)), 'the failed updater was removed');
+    assert.equal(h.created.length, 1);
+    const { name, spec } = h.created[0]!;
+    assert.equal(name, 'ploy-updater');
+    assert.equal(spec.Image, 'torexploy:latest', 'the updater runs from the control plane image');
+    assert.deepEqual(spec.Cmd, ['node', 'packages/server/src/updater.ts']);
+    assert.deepEqual(spec.Env, [
+      'PLOY_UPDATER_TARGET=ploy-control',
+      'PLOY_UPDATER_MODE=source',
+      'PLOY_UPDATER_REPO=To-Rex/TorexPloy',
+      'PLOY_UPDATER_BRANCH=main',
+      `PLOY_UPDATER_COMMIT=${B}`,
+      'PLOY_UPDATER_IMAGE=',
+      'PLOY_UPDATER_TAG=torexploy:latest',
+      'DOCKER_HOST=unix:///var/run/docker.sock',
+    ]);
+    assert.deepEqual(spec.Labels, { 'ploy.managed': 'true', 'ploy.role': 'updater' });
+    assert.deepEqual((spec.HostConfig as Record<string, unknown>).Binds, ['/var/run/docker.sock:/var/run/docker.sock']);
+    assert.equal((spec.HostConfig as Record<string, unknown>).NetworkMode, 'ploy');
+    assert.deepEqual(spec.NetworkingConfig, { EndpointsConfig: { ploy: {} } });
+    assert.deepEqual(auditActions(), ['platform.update_checked', 'platform.update_started']);
+    const running = await h.call<UpdateStatusDto>(h.tokens.instanceAdmin, 'GET', '/api/updates');
+    assert.equal(running.body.state, 'updating', 'the updater that was just started is running');
+    assert.equal((await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply')).status, 409);
+
+    // Up to date: nothing to apply.
+    h.inspects.delete('ploy-updater');
+    h.ctx.updates = new UpdateChecker(h.ctx, { fetch: github(A), self: { inDocker: true, hostname: 'c0ffee000001', cacheMs: 0 } });
+    const current = await h.call<UpdateStatusDto>(h.tokens.instanceAdmin, 'POST', '/api/updates/check');
+    assert.equal(current.body.available, false);
+    assert.equal(current.body.canApply, false);
+    assert.equal((await h.call<BootstrapDto>(h.tokens.owner, 'GET', '/api/bootstrap')).body.features.updateAvailable, false);
+    const upToDate = await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
+    assert.equal(upToDate.status, 400);
+    assert.equal(upToDate.body.error.params?.reason, 'up_to_date');
+  } finally {
+    await h.close();
   }
 });

@@ -9,6 +9,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
+  ArrowUpCircle,
   BellRing,
   CalendarClock,
   Check,
@@ -44,6 +45,7 @@ import { api } from '../lib/api.ts';
 import { useRealtime } from '../lib/realtime.ts';
 import { useTheme } from '../lib/theme.tsx';
 import { NewProjectDialog } from '../pages/projects/NewProjectDialog.tsx';
+import { UpdateDialog } from '../components/UpdateDialog.tsx';
 import { useToast } from '../components/Toast.tsx';
 
 const PROJECT_COLORS = ['#2563EB', '#16A34A', '#D97706', '#DC2626', '#7C3AED', '#0891B2', '#C2410C', '#4D7C0F'];
@@ -86,6 +88,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
   const [rail, setRail] = useState(readRail);
   const [palette, setPalette] = useState(false);
   const [newProject, setNewProject] = useState(false);
+  const [updates, setUpdates] = useState(false);
   const user = bootstrap.user!;
   const team = bootstrap.teams.find((candidate) => candidate.id === bootstrap.currentTeamId) ?? bootstrap.teams[0];
   const admin = team !== undefined && roleAtLeast(team.role, 'admin');
@@ -186,6 +189,15 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
         </nav>
 
         <div className="sidebar__foot">
+          {bootstrap.features.updateAvailable && (
+            <button type="button" className="sidebar__update" onClick={() => setUpdates(true)} title={m.updates.available}>
+              <ArrowUpCircle aria-hidden="true" />
+              <span className="sidebar__update-text">
+                <span>{m.updates.available}</span>
+                <small>{m.updates.availableHint}</small>
+              </span>
+            </button>
+          )}
           <Menu
             align="start"
             label={m.nav.profile}
@@ -283,6 +295,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} onNewProject={() => setNewProject(true)} />
       <NewProjectDialog open={newProject} onClose={() => setNewProject(false)} />
+      {admin && <UpdateDialog open={updates} onClose={() => setUpdates(false)} />}
     </div>
   );
 }

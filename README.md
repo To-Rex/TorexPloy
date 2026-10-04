@@ -42,7 +42,7 @@ sudo sh deploy/install.sh
 Skript kerak boʻlsa Docker’ni oʻrnatadi, control-plane image’ini yigʻadi va `ploy-control` konteynerini ishga tushiradi. Soʻng:
 
 1. `http://<server-ip>:3000` manzilini oching va administrator hisobini yarating.
-2. **Sozlamalar → Platforma** boʻlimida panel domenini kiriting (masalan, `deploy.example.uz`; A yozuvi serverga yoʻnaltirilgan boʻlishi kerak). Shundan keyin panel HTTPS orqali ochiladi.
+2. **Sozlamalar → Veb-server** boʻlimida panel domenini kiriting (masalan, `deploy.example.uz`; A yozuvi serverga yoʻnaltirilgan boʻlishi kerak). Shundan keyin panel HTTPS orqali ochiladi.
 3. Ixtiyoriy: ilovalar uchun wildcard domen (`*.apps.example.uz`) qoʻshing. Har bir yangi ilova avtomatik manzil oladi.
 4. **Sozlamalar → Git integratsiyasi** boʻlimida “GitHub App yaratish” tugmasini bosing. Ilova sizning nomingizdan yaratiladi, webhook avtomatik sozlanadi.
    GitHub App bu versiyadan oldin yaratilgan boʻlsa, PR preview uchun uning sozlamalarida **Pull requests: Read and write** ruxsatini va **Pull request** hodisasini yoqing, soʻng oʻrnatishda yangi ruxsatni tasdiqlang.
@@ -51,11 +51,20 @@ Domen sozlangandan keyin 3000-portni yopib qoʻyish mumkin: `sudo TORXPLOY_PORT=
 
 ### Yangilash
 
+Panel oʻzini oʻzi yangilaydi. Kuzatilayotgan branch (`main`) oldinga ketganini har 6 soatda GitHub orqali tekshiradi; yangi commit bor boʻlsa yon panelda **Yangilanish mavjud** tugmasi chiqadi, **Sozlamalar → Veb-server** boʻlimida esa oʻzgarishlar roʻyxati va **Yangilash** tugmasi (faqat instansiya administratori uchun). Bosilganda `ploy-updater` nomli vaqtinchalik konteyner ishga tushadi: u yangi image’ni tayyorlaydi, `ploy-control`ni xuddi shu portlar, disklar va tarmoqlar bilan qayta yaratadi, `/api/health` javob berishini kutadi va eskisini oʻchiradi. Yangi versiya koʻtarilmasa, eskisi qaytariladi va xato paneldagi holatda koʻrinadi. Ilovalar, bazalar va proxy bu vaqtda toʻxtamaydi; panelning oʻzi bir necha soniya ochilmaydi.
+
+Ikki rejim bor:
+
+- **Manbadan (default).** `install.sh` qaysi GitHub repozitoriya va branch’dan qurgan boʻlsa (`PLOY_UPDATE_REPO`, `PLOY_UPDATE_BRANCH`), yangilovchi shu branch’ning yangi commit’ini klon qilib, image’ni serverning oʻzida yigʻadi (`torexploy:latest`).
+- **Tayyor image.** Oʻrnatishda `TORXPLOY_IMAGE=ghcr.io/to-rex/torexploy:main` berilgan boʻlsa, yangilovchi shu image’ni qayta tortadi (`PLOY_UPDATE_IMAGE`). GHCR’dagi paket ochiq boʻlishi kerak (yopiq paket uchun serverda `docker login ghcr.io` qilingan boʻlishi kerak). Image har `main` push’ida GitHub Actions (`.github/workflows/image.yml`) orqali `linux/amd64` va `linux/arm64` uchun quriladi.
+
+Qoʻlda yangilash ham ishlaydi:
+
 ```sh
 git pull && sudo sh deploy/install.sh update
 ```
 
-Faqat control-plane konteyneri almashtiriladi. Ilovalar, bazalar va proxy toʻxtamaydi.
+Ikkala yoʻlda ham faqat control-plane konteyneri almashtiriladi. Docker’siz ishga tushirilgan panel (ishlab chiqish) `manual` rejimda: yangilanish haqida xabar beradi, lekin oʻzi qoʻllay olmaydi.
 
 ### Zaxira nusxa
 
@@ -119,3 +128,10 @@ Deploy funksiyalari uchun lokal Docker kerak (Docker Desktop, OrbStack yoki Coli
 | `PLOY_PROXY_IMAGE` | `caddy:2.11-alpine` | Proxy image’i |
 | `PLOY_LOG_LEVEL` | `info` (prod), `debug` (dev) | Log darajasi |
 | `PLOY_TIMEZONE` | `Asia/Tashkent` | Shablon ilovalarga beriladigan vaqt zonasi |
+| `PLOY_UPDATE_CHECK` | `true` | Yangilanishlarni GitHub orqali tekshirish |
+| `PLOY_UPDATE_REPO` | `To-Rex/TorexPloy` | Kuzatiladigan GitHub repozitoriya (`owner/name`) |
+| `PLOY_UPDATE_BRANCH` | `main` | Kuzatiladigan branch |
+| `PLOY_UPDATE_IMAGE` | — | Tayyor image; berilsa yangilanish manbadan emas, shu image’dan olinadi |
+| `PLOY_UPDATE_INTERVAL_SEC` | `21600` | Tekshirish oraligʻi (kamida 600) |
+| `PLOY_CONTAINER` | `ploy-control` | Panel konteynerining nomi (yangilovchi uni shu nom bilan topadi) |
+| `PLOY_COMMIT`, `PLOY_BUILT_AT` | image’dan | Build identifikatori (`Dockerfile` `ARG`lari); qoʻlda berilmaydi. Ishlab chiqishda commit checkout’ning `.git/HEAD`idan olinadi |

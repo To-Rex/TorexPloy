@@ -8,6 +8,7 @@ import { useAction } from '../../lib/mutate.ts';
 import { keys, useSettings } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 import { SettingsSection } from './SettingsLayout.tsx';
+import { UpdatesCard } from './UpdatesCard.tsx';
 
 interface Form {
   platformDomain: string;
@@ -102,6 +103,7 @@ export function PlatformPage() {
           </Field>
         </div>
       </SettingsSection>
+      <UpdatesCard />
       <SettingsSection title={m.platform.access}>
         <Switch checked={form.allowGithubSignup} onChange={(value) => setForm({ ...form, allowGithubSignup: value })} label={m.platform.allowGithubSignup} hint={m.platform.allowGithubSignupHint} />
       </SettingsSection>

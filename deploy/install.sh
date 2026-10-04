@@ -9,6 +9,9 @@
 #   TORXPLOY_REF      git ref to build when TORXPLOY_SOURCE is a URL (default: main)
 #   TORXPLOY_IMAGE    use a prebuilt image instead of building from source
 #   TORXPLOY_PORT     host port for the dashboard before a domain is configured (default 3000; 0 = do not publish)
+#
+# The panel updates itself afterwards (Settings → Platform): it follows the branch of the GitHub repository it was
+# installed from, or pulls TORXPLOY_IMAGE again when one was given.
 set -eu
 
 DATA_DIR=/var/lib/torexploy
@@ -18,6 +21,9 @@ PORT="${TORXPLOY_PORT:-3000}"
 IMAGE="${TORXPLOY_IMAGE:-}"
 REF="${TORXPLOY_REF:-main}"
 MODE="${1:-install}"
+UPDATE_REPO=To-Rex/TorexPloy
+UPDATE_IMAGE="$IMAGE"
+BUILD_ARGS=""
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 fail() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -58,8 +64,20 @@ if [ -z "$IMAGE" ]; then
       SOURCE="$WORK/src"
       ;;
   esac
-  say "Building the control-plane image"
-  DOCKER_BUILDKIT=1 docker build -t torexploy:latest "$SOURCE"
+  # A GitHub source is what the panel keeps following for updates (owner/name, without .git): the URL it was
+  # given, else the checkout's own origin.
+  ORIGIN="${TORXPLOY_SOURCE:-$(git -C "$SOURCE" remote get-url origin 2>/dev/null || true)}"
+  case "$ORIGIN" in
+    https://github.com/*|http://github.com/*|git@github.com:*)
+      UPDATE_REPO=$(printf '%s' "$ORIGIN" | sed -e 's#^https\{0,1\}://github.com/##' -e 's#^git@github.com:##' -e 's#\.git$##' -e 's#/$##')
+      ;;
+  esac
+  # The commit being built is stamped into the image so the panel can tell whether the branch moved on.
+  COMMIT=$(git -C "$SOURCE" rev-parse HEAD 2>/dev/null || true)
+  BUILD_ARGS="--build-arg PLOY_COMMIT=$COMMIT --build-arg PLOY_BUILT_AT=$(date -u +%FT%TZ)"
+  say "Building the control-plane image${COMMIT:+ ($(printf '%.7s' "$COMMIT"))}"
+  # shellcheck disable=SC2086 # BUILD_ARGS is intentionally split into flags.
+  DOCKER_BUILDKIT=1 docker build $BUILD_ARGS -t torexploy:latest "$SOURCE"
   IMAGE=torexploy:latest
 else
   say "Pulling $IMAGE"
@@ -77,15 +95,20 @@ fi
 
 PUBLISH=""
 [ "$PORT" = "0" ] || PUBLISH="-p $PORT:3000"
+# Where the panel looks for newer versions: the prebuilt image it was given, else the GitHub branch it was built from.
+UPDATE_ENV="-e PLOY_UPDATE_REPO=$UPDATE_REPO -e PLOY_UPDATE_BRANCH=$REF"
+[ -z "$UPDATE_IMAGE" ] || UPDATE_ENV="$UPDATE_ENV -e PLOY_UPDATE_IMAGE=$UPDATE_IMAGE"
 
 say "Starting TorexPloy"
-# shellcheck disable=SC2086 # PUBLISH is intentionally split into flags.
+# shellcheck disable=SC2086 # PUBLISH and UPDATE_ENV are intentionally split into flags.
 docker run -d \
   --name "$CONTAINER" \
   --restart unless-stopped \
   --network "$NETWORK" \
   --network-alias "$CONTAINER" \
   $PUBLISH \
+  $UPDATE_ENV \
+  -e PLOY_CONTAINER="$CONTAINER" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$DATA_DIR:/var/lib/torexploy" \
   --log-opt max-size=20m --log-opt max-file=5 \

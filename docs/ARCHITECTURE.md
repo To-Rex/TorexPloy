@@ -71,6 +71,8 @@ packages/
     src/jobs/       navbat, worker pool, scheduler, cron
     src/realtime/   event bus, SSE
     src/metrics/    host va konteyner sampler, retention
+    src/updates/    oʻz-oʻzini yangilash: GitHub tekshiruvi, oʻz konteynerini topish, updater'ni ishga tushirish, konteynerni almashtirish
+    src/updater.ts  yangilovchi konteynerning kirish nuqtasi (DB va sirlarsiz)
     src/http/       Hono app, auth middleware, route'lar
   web/      dashboard (React)
 deploy/     Dockerfile, install.sh
@@ -270,6 +272,55 @@ start buyrugʻi image'ning oʻzida.
   (`--filter` buyruqlari bilan), Django'da `STATIC_ROOT` yoʻq va hokazo. Ular deploy logida va reja oynasida
   koʻrsatiladi.
 
+### 5.8 Oʻz-oʻzini yangilash
+
+Dokploy uslubida: panel yangi versiya borligini oʻzi aytadi va bir bosishda almashadi. Kod `updates/` katalogida,
+yangilovchining oʻzi `updater.ts` (alohida kirish nuqtasi, `cli.ts` kabi).
+
+- **Kim ekanini bilish.** Image `PLOY_COMMIT` va `PLOY_BUILT_AT` bilan quriladi (`Dockerfile` `ARG` → `ENV` va OCI
+  label'lar; `install.sh` ularni `git rev-parse HEAD` dan, GitHub Actions `github.sha` dan beradi). `PLOY_COMMIT`
+  boʻlmasa (ishlab chiqish) commit checkout'ning `.git/HEAD`idan oʻqiladi, shunda dev server har doim "yangilanish
+  bor" demaydi. `config.commit` `/api/health` da va `GET /api/updates` (`current`) da koʻrinadi.
+- **Tekshirish (`updates/checker.ts`).** Ishga tushgach va har `PLOY_UPDATE_INTERVAL_SEC` (default 6 soat) da
+  `GET api.github.com/repos/<repo>/commits/<branch>` (ETag → 304, 10 s taymaut, `fetch` testda almashtiriladi).
+  Commit farq qilsa `compare/<joriy>...<yangi>` orqali oradagi commit'lar olinadi (yangisi birinchi, 30 tagacha).
+  Joriy commit noma'lum boʻlsa (`PLOY_COMMIT`siz qurilgan) har qanday head yangilanish hisoblanadi. Xato natijani
+  buzmaydi: `checkError` saqlanadi, oldingi javob qoladi; rate limit uchun tushunarli xabar. `PLOY_UPDATE_CHECK=false`
+  → tarmoqqa chiqmaydi.
+- **Rejim (`updates/self.ts`).** `/.dockerenv` yoki konteyner-id koʻrinishidagi hostname → Docker'da. Oʻz konteyneri
+  lokal soket orqali `PLOY_CONTAINER` nomi (boʻlmasa hostname id'si) bilan topiladi. Topilsa `source`
+  (`PLOY_UPDATE_IMAGE` berilgan boʻlsa `image`), topilmasa `manual` — panel faqat xabar beradi.
+- **Qoʻllash (`POST /api/updates/apply` → 202).** Panel oʻz jarayonini oʻzi almashtira olmaydi, shuning uchun oʻz
+  image'idan `ploy-updater` konteynerini ishga tushiradi (`updates/launcher.ts`): docker soketi, panel bilan bir
+  tarmoq, `ploy.role=updater`, muhitda faqat maqsad (`PLOY_UPDATER_TARGET`), rejim, repo, branch, tasdiqlangan
+  commit, image va teg. Ishlayotgan updater bor boʻlsa `409 update_in_progress`; Docker'da emas yoki konteyner
+  topilmasa `422 update_unsupported`; yangilik yoʻq boʻlsa `400 bad_request` (`up_to_date`).
+- **Yangilovchi (`updater.ts`, DB va sirlarsiz).** `source`: `git clone --depth 1 --branch <branch>`; HEAD
+  tasdiqlangan commit boʻlmasa aynan oʻsha commit `fetch` qilinadi (branch oldinga ketgan boʻlsa ham admin koʻrgan
+  narsa quriladi); `docker buildx build --load --tag torexploy:latest --tag torexploy:<sha7> --build-arg
+  PLOY_COMMIT=… --build-arg PLOY_BUILT_AT=…`. `image`: pull + tag. Soʻng `updates/replace.ts`: eski konteyner
+  `inspect` qilinadi va `<nom>-old` ga qayta nomlanadi, yangisi aynan shu `HostConfig` (portlar, bind va anonim
+  volume'lar, restart policy, log driver, security opt), tarmoqlar va alias'lar bilan yaratiladi; eski image'dan
+  meros boʻlgan CMD/ENTRYPOINT/ENV/label/HEALTHCHECK koʻchirilmaydi (aks holda eski `PLOY_COMMIT` yangi panelga oʻtib
+  qolardi). Host portini bittasi egallashi mumkin, shuning uchun eskisi yangisi yaratilgach toʻxtatiladi, yangisi
+  ishga tushiriladi va `/api/health` (IP orqali, yoki konteynerning oʻz HEALTHCHECK holati) 3 daqiqagacha kutiladi.
+  Muvaffaqiyat → `-old` oʻchiriladi, `✓ Updated to <sha>`, exit 0. Xato (chiqib ketdi, unhealthy, taymaut) → yangisi
+  oʻchiriladi, eskisi nomi bilan qaytariladi va ishga tushiriladi, exit 1. Oldingi qulagan urinishdan qolgan `-old`
+  avval tozalanadi.
+- **Holat (`GET /api/updates`).** `ploy-updater` ishlayotgan boʻlsa `updating`; nol boʻlmagan kod bilan chiqqan boʻlsa
+  `failed` va `error` = logining oxirgi 15 satri (keyingi urinishgacha qoladi); 0 bilan chiqqani oʻchirib yuboriladi
+  (`idle`). Panel yangilanish vaqtida `/api/health` ni soʻrab turadi va `commit` yangisiga teng boʻlgach sahifani
+  qayta yuklaydi. `BootstrapDto.features.updateAvailable` faqat jamoa admin/egasi va instansiya administratoriga
+  `true` — viewer va developer yangilanish borligini bilmaydi.
+- **Xavfsizlik.** Tekshirish va holat — jamoa admin yoki egasi; qoʻllash — faqat instansiya administratori.
+  Repozitoriya, branch va image soʻrovdan emas, muhitdan olinadi (`PLOY_UPDATE_*`, ishga tushishda tekshiriladi),
+  commit esa tekshiruv natijasidan — mijoz "qaysi koddan qurilsin" deya olmaydi. Updater panel kabi docker soketiga
+  ega (panelni almashtirishi kerak), lekin DB va `secret.key` ga tegmaydi. Audit: `platform.update_checked`,
+  `platform.update_started`.
+- **Ikki manba.** `install.sh` manbadan qursa `PLOY_UPDATE_REPO`/`PLOY_UPDATE_BRANCH` ni (GitHub URL yoki
+  checkout'ning `origin`idan), `TORXPLOY_IMAGE` bilan esa `PLOY_UPDATE_IMAGE` ni beradi. `.github/workflows/image.yml`
+  har `main` push va `v*` tegda `ghcr.io/<owner>/torexploy:main` (+`:sha-<short>`, `:X.Y.Z`) ni amd64/arm64 uchun quradi.
+
 ## 6. Xavfsizlik
 
 | Xavf | Chora |
@@ -293,6 +344,7 @@ start buyrugʻi image'ning oʻzida.
 | S3 | Kalitlar shifrlanadi; manzil saqlanishidan oldin yozib/o'chirib tekshiriladi; SigV4 AWS namunasi bilan tekshirilgan |
 | Registrlar | Faqat admin boshqaradi; parol shifrlangan, API'da qaytarilmaydi; saqlashdan oldin `POST /auth` bilan tekshiriladi; CLI config har deploy uchun alohida (0600) va keyin o'chiriladi |
 | Bildirishnomalar | Kanallarni faqat admin boshqaradi; manzil/token shifrlanadi; Discord/Slack uchun faqat rasmiy hostlar; webhook HMAC (`X-Ploy-Signature`), redirect'lar ta'qiqlangan, 10 s taymaut |
+| Oʻz-oʻzini yangilash | Faqat instansiya admini qoʻllaydi; repo/branch/image muhitdan, commit tekshiruv natijasidan (soʻrovdan emas); updater DB va sirlarsiz; health boʻlmasa eski versiya qaytariladi |
 
 ## 7. Realtime va observability
 
@@ -380,6 +432,10 @@ diagnostika esa yoʻqolmaydi.
 - PR preview: imzolangan `pull_request` webhook'lari HTTP orqali (yaratish va navbat, `synchronize`, `closed` bilan
   konteynerlarni o'chirish, fork, limit, preview yoqilmagan ilova), ro'yxatlardan chiqarish, sozlamalar validatsiyasi
   va rollar; v6 → v7 migratsiyasi ma'lumotlarni saqlaydi.
+- Oʻz-oʻzini yangilash: skriptlangan GitHub bilan tekshiruv (yangi head, 304, rate limit, uzilish, noma'lum commit,
+  oʻchirilgan tekshiruv); Engine API dublikati bilan konteyner almashtirish (portlar, volume'lar, restart policy va
+  tarmoqlar saqlanadi, image merosi tashlanadi, health boʻlmasa yoki chiqib ketsa rollback) va updater konteyneri;
+  HTTP orqali rollar, `manual` 422, band 409, `up_to_date` 400, bootstrap bayrogʻi faqat adminlarga.
 
 ## 9. Ijro rejasi
 

@@ -1,0 +1,64 @@
+# Control-plane image for installs that pull instead of build (TORXPLOY_IMAGE / PLOY_UPDATE_IMAGE).
+#
+# Every push to main publishes ghcr.io/<owner>/torexploy:main (and :sha-<short>); a v* tag adds :<version>.
+# The commit and build time are stamped in (PLOY_COMMIT, PLOY_BUILT_AT), which is how a running panel knows
+# which commit it is on. The package must be public, or the server logged in to GHCR, for pulls to work.
+name: image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image name
+        id: image
+        # GHCR wants a lowercase repository path; GitHub owners may not be.
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/torexploy" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+          labels: |
+            org.opencontainers.image.title=TorexPloy
+            org.opencontainers.image.description=Self-hosted PaaS control plane
+
+      - name: Build time
+        id: now
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PLOY_COMMIT=${{ github.sha }}
+            PLOY_BUILT_AT=${{ steps.now.outputs.at }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

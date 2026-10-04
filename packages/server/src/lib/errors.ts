@@ -36,6 +36,8 @@ const STATUS: Record<ErrorCode, number> = {
   domain_taken: 409,
   registry_exists: 409,
   registry_auth_failed: 422,
+  update_unsupported: 422,
+  update_in_progress: 409,
   internal_error: 500,
 };
 

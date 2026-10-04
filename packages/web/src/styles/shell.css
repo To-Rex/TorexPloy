@@ -159,6 +159,52 @@
     padding: 8px 10px 10px;
     border-top: 1px solid var(--chrome-line);
   }
+  .sidebar__update {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--line));
+    border-radius: var(--r-md);
+    background: var(--ok-soft);
+    color: var(--ok-ink);
+    text-align: left;
+  }
+  .sidebar__update:hover {
+    border-color: var(--ok);
+  }
+  .sidebar__update > svg {
+    width: 18px;
+    height: 18px;
+    flex: none;
+  }
+  .sidebar__update-text {
+    display: grid;
+    min-width: 0;
+    line-height: 16px;
+  }
+  .sidebar__update-text span {
+    font-weight: 600;
+    font-size: var(--text-sm);
+    white-space: nowrap;
+  }
+  .sidebar__update-text small {
+    font-size: 11px;
+    color: var(--ok-ink);
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .shell[data-rail] .sidebar__update {
+    justify-content: center;
+    padding: 8px 0;
+  }
+  .shell[data-rail] .sidebar__update-text {
+    display: none;
+  }
   .sidebar__version {
     padding: 4px 8px 0;
     font-size: 11px;
@@ -330,6 +376,13 @@
     .shell[data-rail] .user-button__text,
     .shell[data-rail] .sidebar__version {
       display: block;
+    }
+    .shell[data-rail] .sidebar__update {
+      justify-content: flex-start;
+      padding: 8px 10px;
+    }
+    .shell[data-rail] .sidebar__update-text {
+      display: grid;
     }
     .shell[data-rail] .team-switch > svg:last-child,
     .shell[data-rail] .user-button > svg:last-child {

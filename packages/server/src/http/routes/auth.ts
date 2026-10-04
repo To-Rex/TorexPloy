@@ -9,6 +9,7 @@ import { dummyPasswordDigest, generateToken, hashPassword, passwordNeedsRehash, 
 import { AppError } from '../../lib/errors.ts';
 import { audit, body, clearSessionCookie, limit, RateLimiter, requireAuth, setSessionCookie, type Ctx, type Env } from '../core.ts';
 import { teamDto, userDto } from '../dto.ts';
+import { canSeeUpdates } from './updates.ts';
 
 const TICKET_TTL_MS = 5 * 60_000;
 const TICKET_ATTEMPTS = 5;
@@ -28,7 +29,12 @@ export function bootstrapDto(ctx: Context, c: Ctx): BootstrapDto {
     user: user === null ? null : userDto(user, ctx.stores.users.getIdentityLogin(user.id, 'github')),
     teams: user === null ? [] : ctx.stores.teams.listForUser(user.id).map(teamDto),
     currentTeamId: auth?.teamId ?? null,
-    features: { githubLogin: ctx.github.credentials() !== null, builders: availableBuilders() },
+    features: {
+      githubLogin: ctx.github.credentials() !== null,
+      builders: availableBuilders(),
+      // Viewers and developers cannot act on it, so they are not told.
+      updateAvailable: canSeeUpdates(auth) && ctx.updates.available,
+    },
   };
 }
 

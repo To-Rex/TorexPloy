@@ -72,7 +72,49 @@ export interface BootstrapDto {
     githubLogin: boolean;
     /** Builders whose CLI is installed on the control plane (TorexBuilder, Dockerfile and static need none). */
     builders: BuildType[];
+    /** A newer TorexPloy is published (shown to administrators; details at `GET /api/updates`). */
+    updateAvailable: boolean;
   };
+}
+
+// ---------------------------------------------------------------------------
+// Self-update
+// ---------------------------------------------------------------------------
+
+/** How the panel replaces itself: build from the repository, pull a prebuilt image, or not at all (not in Docker). */
+export type UpdateMode = 'source' | 'image' | 'manual';
+export type UpdateState = 'idle' | 'checking' | 'updating' | 'failed';
+
+export interface UpdateCommitDto {
+  sha: string;
+  message: string;
+  date: string;
+  author: string | null;
+  url: string;
+}
+
+/** `GET /api/updates`: the running version against the tracked branch, and the updater's state. */
+export interface UpdateStatusDto {
+  current: { version: string; commit: string | null; builtAt: string | null };
+  latest: { commit: string; message: string; date: string; url: string } | null;
+  /** The tracked branch is ahead of the running commit (or the running commit is unknown). */
+  available: boolean;
+  checkedAt: string | null;
+  /** Why the last check failed, if it did. */
+  checkError: string | null;
+  /** Commits between the running one and the latest, newest first (at most 30). */
+  commits: UpdateCommitDto[];
+  mode: UpdateMode;
+  /** `owner/name` on GitHub and the branch followed. */
+  repository: string;
+  branch: string;
+  /** Prebuilt image reference in `image` mode. */
+  image: string | null;
+  state: UpdateState;
+  /** The updater's last output when it failed. */
+  error: string | null;
+  /** Only the instance administrator can start an update, and only when the panel runs in Docker. */
+  canApply: boolean;
 }
 
 export interface LoginResultDto {
@@ -707,6 +749,8 @@ export interface OverviewDto {
 export interface HealthDto {
   status: 'ok' | 'degraded';
   version: string;
+  /** Git commit the running build was made from (null for local or untagged builds). */
+  commit: string | null;
   uptimeSec: number;
   checks: Record<string, { ok: boolean; detail?: string }>;
 }

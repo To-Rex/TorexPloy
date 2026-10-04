@@ -19,6 +19,10 @@ ARG RAILPACK_SHA256_AMD64=2842de93e68713af9037e0bc0a398d7da78f3b96aa4804303a638d
 ARG RAILPACK_SHA256_ARM64=c24a064b586b8f4f8c2fab44dd5ef19253e4c6cc4e1df793b3ae19cd87f7a5d4
 ARG PACK_SHA256_AMD64=dc0ee1e931cf8a106d7555a01a214864f9acb60b77adf15d69b74df4404758e9
 ARG PACK_SHA256_ARM64=091ccb213823656c727731537ef8f1000eb4dc3ec61641506653e7f9d6da0c5e
+# Build identity: the git commit and time this image was made from. The panel compares the commit with the
+# tracked branch to offer updates; empty for an ad-hoc build (then any published commit counts as newer).
+ARG PLOY_COMMIT=
+ARG PLOY_BUILT_AT=
 
 FROM node:26-alpine AS deps
 WORKDIR /app
@@ -83,6 +87,15 @@ COPY packages/shared/src packages/shared/src
 COPY packages/server/src packages/server/src
 COPY --from=web /app/packages/web/dist packages/web/dist
 RUN find packages -name '*.test.ts' -delete && mkdir -p /var/lib/torexploy /run/torexploy && chmod 700 /var/lib/torexploy /run/torexploy
+
+ARG PLOY_COMMIT
+ARG PLOY_BUILT_AT
+ENV PLOY_COMMIT=${PLOY_COMMIT} \
+    PLOY_BUILT_AT=${PLOY_BUILT_AT}
+LABEL org.opencontainers.image.title="TorexPloy" \
+      org.opencontainers.image.source="https://github.com/To-Rex/TorexPloy" \
+      org.opencontainers.image.revision="${PLOY_COMMIT}" \
+      org.opencontainers.image.created="${PLOY_BUILT_AT}"
 
 VOLUME /var/lib/torexploy
 EXPOSE 3000

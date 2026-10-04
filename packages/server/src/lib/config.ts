@@ -42,6 +42,26 @@ export interface AppConfig {
   /** IANA time zone handed to template apps that need one. */
   timezone: string;
   version: string;
+  /** Git commit the running build was made from (`PLOY_COMMIT`, set by the image build); null for a checkout. */
+  commit: string | null;
+  /** When the image was built (`PLOY_BUILT_AT`, ISO 8601). */
+  builtAt: string | null;
+  updates: UpdateConfig;
+}
+
+/** How the panel learns about and installs newer versions of itself. */
+export interface UpdateConfig {
+  /** Periodically ask GitHub for the tracked branch's head (`PLOY_UPDATE_CHECK`). */
+  enabled: boolean;
+  /** `owner/name` on GitHub (`PLOY_UPDATE_REPO`). */
+  repository: string;
+  /** Branch followed (`PLOY_UPDATE_BRANCH`). */
+  branch: string;
+  /** Prebuilt image to pull instead of building from source (`PLOY_UPDATE_IMAGE`). */
+  image: string | null;
+  /** Name of the control-plane container, used to find ourselves (`PLOY_CONTAINER`). */
+  container: string | null;
+  intervalMs: number;
 }
 
 export class ConfigError extends Error {
@@ -63,6 +83,75 @@ function int(env: NodeJS.ProcessEnv, key: string, fallback: number, min: number,
     throw new ConfigError(`${key} must be an integer between ${min} and ${max} (got "${raw}")`);
   }
   return value;
+}
+
+function bool(env: NodeJS.ProcessEnv, key: string, fallback: boolean): boolean {
+  const raw = str(env, key)?.toLowerCase();
+  if (raw === undefined) return fallback;
+  if (['1', 'true', 'yes', 'on'].includes(raw)) return true;
+  if (['0', 'false', 'no', 'off'].includes(raw)) return false;
+  throw new ConfigError(`${key} must be true or false (got "${raw}")`);
+}
+
+/** Where updates come from. Exported so the values can be checked without a data directory. */
+export function updateConfig(env: NodeJS.ProcessEnv): UpdateConfig {
+  const repository = str(env, 'PLOY_UPDATE_REPO') ?? 'To-Rex/TorexPloy';
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new ConfigError('PLOY_UPDATE_REPO must be a GitHub repository such as owner/name');
+  const branch = str(env, 'PLOY_UPDATE_BRANCH') ?? 'main';
+  // A ref that could be read as an option, a path escape or a revision range is refused: it ends up on a git command line.
+  if (!/^[\w./-]+$/.test(branch) || branch.startsWith('-') || branch.includes('..') || branch.endsWith('/')) throw new ConfigError('PLOY_UPDATE_BRANCH is not a valid branch name');
+  const image = str(env, 'PLOY_UPDATE_IMAGE') ?? null;
+  if (image !== null && !/^[\w.\-/:@]+$/.test(image)) throw new ConfigError('PLOY_UPDATE_IMAGE must be an image reference');
+  return {
+    enabled: bool(env, 'PLOY_UPDATE_CHECK', true),
+    repository,
+    branch,
+    image,
+    container: str(env, 'PLOY_CONTAINER') ?? 'ploy-control',
+    intervalMs: int(env, 'PLOY_UPDATE_INTERVAL_SEC', 6 * 3_600, 600, 30 * 24 * 3_600) * 1000,
+  };
+}
+
+/**
+ * HEAD of a git checkout, read from `.git` without running git: a symbolic
+ * ref resolved through `refs/heads/…` or `packed-refs`, or a detached hash.
+ * Null when `root` is not a checkout (the production image carries no `.git`).
+ */
+export function gitHead(root: string): string | null {
+  let gitDir = join(root, '.git');
+  try {
+    // A worktree keeps a file pointing at the real directory; reading a directory throws, which is the usual case.
+    const entry = readFileSync(gitDir, 'utf8').trim();
+    if (entry.startsWith('gitdir: ')) gitDir = resolve(root, entry.slice('gitdir: '.length));
+  } catch {
+    // A directory, or no checkout at all; both are handled below.
+  }
+  try {
+    const head = readFileSync(join(gitDir, 'HEAD'), 'utf8').trim();
+    const ref = /^ref: (.+)$/.exec(head)?.[1];
+    if (ref === undefined) return /^[0-9a-f]{40}$/.test(head) ? head : null;
+    if (existsSync(join(gitDir, ref))) {
+      const sha = readFileSync(join(gitDir, ref), 'utf8').trim();
+      return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+    }
+    const packed = readFileSync(join(gitDir, 'packed-refs'), 'utf8');
+    const line = packed.split('\n').find((candidate) => candidate.endsWith(` ${ref}`));
+    const sha = line?.split(' ')[0];
+    return sha !== undefined && /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The commit this build was made from: what the image build passed, else the
+ * checkout a developer runs from. Anything else (an empty build arg, a
+ * placeholder) counts as unknown, and then any published commit is "newer".
+ */
+function buildCommit(env: NodeJS.ProcessEnv): string | null {
+  const raw = str(env, 'PLOY_COMMIT')?.toLowerCase();
+  if (raw !== undefined) return /^[0-9a-f]{7,40}$/.test(raw) ? raw : null;
+  return gitHead(repoRoot);
 }
 
 /**
@@ -184,6 +273,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     hostProc: str(env, 'PLOY_HOST_PROC') ?? '/proc',
     timezone: str(env, 'PLOY_TIMEZONE') ?? 'Asia/Tashkent',
     version: readVersion(),
+    commit: buildCommit(env),
+    builtAt: str(env, 'PLOY_BUILT_AT') ?? null,
+    updates: updateConfig(env),
     ...overrides,
   };
 }

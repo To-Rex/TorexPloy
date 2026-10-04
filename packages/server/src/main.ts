@@ -28,6 +28,7 @@ import { ServerManager } from './servers/manager.ts';
 import { ServiceManager } from './services/manager.ts';
 import { createStores } from './store/index.ts';
 import { TerminalGateway } from './terminal/gateway.ts';
+import { UpdateChecker } from './updates/checker.ts';
 import type { Context } from './context.ts';
 
 /** Upper bound for a graceful stop (deployments in flight get this long to wind down). */
@@ -59,6 +60,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   ctx.maintenance = new Maintenance(ctx);
   ctx.notifier = new Notifier(ctx);
   ctx.previews = new PreviewManager(ctx);
+  ctx.updates = new UpdateChecker(ctx);
   return ctx;
 }
 
@@ -109,6 +111,7 @@ async function start(): Promise<void> {
   })().catch((error) => logger.warn('Startup reconciliation failed', { error: errorMessage(error) }));
 
   const scheduler = schedule(ctx);
+  ctx.updates.start();
 
   let stopping = false;
   const shutdown = async (signal: string): Promise<void> => {
@@ -125,6 +128,7 @@ async function start(): Promise<void> {
       process.exit(1);
     }, SHUTDOWN_GRACE_MS).unref();
     scheduler.stop();
+    ctx.updates.stop();
     ctx.reconciler.stopAll();
     ctx.domains.stop();
     terminals.close();

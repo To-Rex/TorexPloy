@@ -56,6 +56,7 @@ export function registerPlatformRoutes(app: Hono<Env>, ctx: Context): void {
     const health: HealthDto = {
       status: Object.values(checks).every((check) => check.ok) ? 'ok' : 'degraded',
       version: ctx.config.version,
+      commit: ctx.config.commit,
       uptimeSec: Math.round((Date.now() - ctx.startedAt) / 1000),
       checks,
     };
