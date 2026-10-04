@@ -1,0 +1,165 @@
+/*
+ * Design tokens.
+ *
+ * Palette drawn from Samarkand tilework: lapis for action, turquoise for
+ * health, saffron for work in progress, pomegranate for failure, on cool
+ * paper (light) or lapis night (dark). Status is never conveyed by colour
+ * alone — every status pairs a colour with a shape and a word.
+ */
+
+@layer tokens {
+  :root {
+    --font-sans: 'Onest Variable', 'Onest', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    /* Type scale (px / line-height) */
+    --text-xs: 12px;
+    --lh-xs: 16px;
+    --text-sm: 13px;
+    --lh-sm: 18px;
+    --text-md: 14px;
+    --lh-md: 20px;
+    --text-lg: 16px;
+    --lh-lg: 24px;
+    --text-xl: 20px;
+    --lh-xl: 28px;
+    --text-2xl: 24px;
+    --lh-2xl: 30px;
+    --text-3xl: 32px;
+    --lh-3xl: 38px;
+
+    /* Radii follow hierarchy: small controls are tighter than surfaces. */
+    --r-xs: 4px;
+    --r-sm: 7px;
+    --r-md: 10px;
+    --r-lg: 14px;
+    --r-full: 999px;
+
+    --sidebar-width: 236px;
+    --content-max: 1180px;
+    --topbar-height: 52px;
+
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --dur-fast: 110ms;
+    --dur: 180ms;
+    --dur-slow: 320ms;
+
+    --z-sticky: 10;
+    --z-drawer: 40;
+    --z-dialog: 50;
+    --z-menu: 60;
+    --z-toast: 70;
+
+    /* Light — cool paper */
+    --bg: #f3f5f8;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --surface-sunken: #eceff5;
+    --surface-hover: #f5f7fb;
+    --line: #dfe3eb;
+    --line-strong: #c9d0dc;
+    --ink: #131a2d;
+    --ink-2: #485267;
+    --ink-3: #646d82;
+    --ink-inverse: #ffffff;
+
+    --lapis: #2746c7;
+    --lapis-hover: #1f3aa8;
+    --lapis-soft: #e9eefc;
+    --lapis-ink: #1d3596;
+
+    --ok: #0c9a8a;
+    --ok-soft: #e1f4f1;
+    --ok-ink: #08695e;
+    --work: #d18a00;
+    --work-soft: #fdf2db;
+    --work-ink: #8a5a00;
+    --bad: #c73340;
+    --bad-soft: #fbe8ea;
+    --bad-ink: #9d1f2b;
+    --idle: #8a93a6;
+    --idle-soft: #edf0f5;
+
+    --focus: color-mix(in srgb, var(--lapis) 45%, transparent);
+    --shadow-float: 0 12px 32px -12px rgb(19 26 45 / 0.28), 0 2px 6px rgb(19 26 45 / 0.08);
+    --overlay: rgb(19 26 45 / 0.38);
+    --code-bg: #0f1628;
+    --code-ink: #d9def0;
+    --code-dim: #7f8aa6;
+    --code-err: #ff8a92;
+    --code-sys: #8fb2ff;
+
+    color-scheme: light;
+  }
+
+  /* Dark — lapis night. Also the default before JavaScript runs when the OS prefers dark. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --bg: #0d1322;
+      --surface: #131b2e;
+      --surface-raised: #182238;
+      --surface-sunken: #0a1020;
+      --surface-hover: #1a2440;
+      --line: #232d46;
+      --line-strong: #31405f;
+      --ink: #e7ebf4;
+      --ink-2: #a8b2c7;
+      --ink-3: #8590a8;
+      --ink-inverse: #0d1322;
+      --lapis: #7891ff;
+      --lapis-hover: #95a8ff;
+      --lapis-soft: #1b2655;
+      --lapis-ink: #b4c2ff;
+      --ok: #2fcdb8;
+      --ok-soft: #0f2f33;
+      --ok-ink: #6fe3d2;
+      --work: #f2b544;
+      --work-soft: #332611;
+      --work-ink: #f7cc78;
+      --bad: #ff6f78;
+      --bad-soft: #3a1820;
+      --bad-ink: #ff9aa1;
+      --idle: #6f7a94;
+      --idle-soft: #1c2438;
+      --focus: color-mix(in srgb, var(--lapis) 55%, transparent);
+      --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.35);
+      --overlay: rgb(4 7 15 / 0.62);
+      --code-bg: #080d1a;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --bg: #0d1322;
+    --surface: #131b2e;
+    --surface-raised: #182238;
+    --surface-sunken: #0a1020;
+    --surface-hover: #1a2440;
+    --line: #232d46;
+    --line-strong: #31405f;
+    --ink: #e7ebf4;
+    --ink-2: #a8b2c7;
+    --ink-3: #8590a8;
+    --ink-inverse: #0d1322;
+    --lapis: #7891ff;
+    --lapis-hover: #95a8ff;
+    --lapis-soft: #1b2655;
+    --lapis-ink: #b4c2ff;
+    --ok: #2fcdb8;
+    --ok-soft: #0f2f33;
+    --ok-ink: #6fe3d2;
+    --work: #f2b544;
+    --work-soft: #332611;
+    --work-ink: #f7cc78;
+    --bad: #ff6f78;
+    --bad-soft: #3a1820;
+    --bad-ink: #ff9aa1;
+    --idle: #6f7a94;
+    --idle-soft: #1c2438;
+    --focus: color-mix(in srgb, var(--lapis) 55%, transparent);
+    --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.35);
+    --overlay: rgb(4 7 15 / 0.62);
+    --code-bg: #080d1a;
+    color-scheme: dark;
+  }
+}

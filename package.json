@@ -1,0 +1,29 @@
+{
+  "name": "torexploy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TorexPloy — self-hosted PaaS: git push → build → zero-downtime deploy → HTTPS",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/web"
+  ],
+  "engines": {
+    "node": ">=24.2.0"
+  },
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env packages/server/src/main.ts",
+    "dev:web": "npm --workspace @ploy/web run dev",
+    "build": "npm --workspace @ploy/web run build",
+    "start": "node packages/server/src/main.ts",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/web",
+    "test": "node --test --test-concurrency=4 --test-timeout=60000 'packages/shared/src/**/*.test.ts' 'packages/server/src/**/*.test.ts'",
+    "verify": "npm run typecheck && npm test && npm run build",
+    "admin": "node packages/server/src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^7.0.0"
+  }
+}

@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+data
+.git
+.freebuff
+packages/core
+*.log
+.env
+.env.*
