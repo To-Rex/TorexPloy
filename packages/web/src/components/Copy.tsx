@@ -4,7 +4,7 @@ import { Check, Copy, Eye, EyeOff } from 'lucide-react';
 import { useI18n } from '../i18n/index.tsx';
 import { Button } from './ui.tsx';
 
-async function writeClipboard(value: string): Promise<boolean> {
+export async function writeClipboard(value: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(value);
     return true;

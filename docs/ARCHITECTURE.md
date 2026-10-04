@@ -345,6 +345,12 @@ diagnostika esa yoʻqolmaydi.
   - Terminal dialog oynada ochiladi.
   - Eski manzillar (`/overview`, `/settings`, `/variables` va boshqalar) yangi tablarga yoʻnaltiriladi.
 - Baza tablari: Umumiy (ichki va tashqi ulanish, kirish maʼlumotlari), Loglar, Monitoring, Zaxira nusxalar, Kengaytirilgan.
+- Log koʻruvchisi (`components/LogViewer.tsx`) hamma joyda bitta: virtualizatsiya, ANSI ranglar, qidiruv (moslik
+  ajratib koʻrsatiladi), daraja boʻyicha filtr (`lib/logLevel.ts`: matndagi soʻzlar va HTTP status kodlaridan
+  taxminiy daraja), vaqt belgilari, pauza (yangi qatorlar sanaladi), nusxalash, `.txt` yuklab olish, oʻrash,
+  toʻliq ekran (Esc bilan chiqiladi), oxirini kuzatish. Jonli loglarda qatorlar soni (`tail`, 100…5000 yoki
+  hammasi) va vaqt oraligʻi (`since`, soniya) serverga `logWindow` orqali beriladi; replika va compose servis
+  boʻyicha filtr ham bor.
 - Ranglar shadcn'ning zinc palitrasida. Asosiy tugma siyoh rangida (yorugʻ temada qora, qorongʻida oq). Rang faqat holat uchun ishlatiladi: yashil, sariq va qizil.
 - Tezlik: route-level splitting, `staleTime`, skeleton (layout shift yo'q), optimistik mutatsiyalar.
 - Klaviatura: ⌘K command palette, ko'rinadigan fokus halqalari, to'liq tab-navigatsiya, `Esc` bilan yopish.

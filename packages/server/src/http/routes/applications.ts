@@ -36,7 +36,7 @@ import { CronError, nextRunFor } from '../../lib/cron.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
 import { generateKeyPair } from '../../servers/ssh.ts';
 import type { ApplicationPatch, ApplicationRecord } from '../../store/index.ts';
-import { audit, body, query, requireTeam, type Ctx, type Env } from '../core.ts';
+import { audit, body, logWindow, query, requireTeam, type Ctx, type Env } from '../core.ts';
 import { applicationDto, cronJobDto, cronRunDto, deploymentDto, domainDto, linkDto, teamCronJobDto, volumeDto } from '../dto.ts';
 import { loadProject } from './projects.ts';
 import { rangeQuery } from './servers.ts';
@@ -554,7 +554,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
 
   app.get('/api/applications/:id/logs', async (c) => {
     const application = loadApp(ctx, c, 'viewer');
-    const tail = Math.min(2_000, Math.max(10, Number(c.req.query('tail') ?? 300) || 300));
+    const { tail, since } = logWindow(c.req.query('tail'), c.req.query('since'));
     const active = application.activeDeploymentId === null ? undefined : stores.deployments.get(application.activeDeploymentId);
     // Compose: every container of the stack, labelled with its service (optionally just one service).
     const wanted = c.req.query('service');
@@ -569,7 +569,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
       let seq = 0;
       const follows = containers.map(async (name, replica) => {
         try {
-          const output = await docker.containerLogs(name, { follow: true, tail, timestamps: true, signal: controller.signal });
+          const output = await docker.containerLogs(name, { follow: true, tail, timestamps: true, ...(since === undefined ? {} : { since }), signal: controller.signal });
           for await (const chunk of output as AsyncIterable<{ stream: 'stdout' | 'stderr'; text: string }>) {
             for (const raw of chunk.text.split('\n')) {
               if (raw.length === 0) continue;

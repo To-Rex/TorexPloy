@@ -56,7 +56,7 @@ function RunsPanel({ appId, job }: { appId: string; job: CronJobDto }) {
           ))}
         </div>
       )}
-      {open !== null && <LogViewer lines={lines} height={280} />}
+      {open !== null && <LogViewer lines={lines} height={280} levels={false} name={`cron-${job.name}`} />}
     </div>
   );
 }

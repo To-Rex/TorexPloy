@@ -119,7 +119,7 @@ export function DeploymentPage() {
       )}
       {data.status === 'queued' && <Callout tone="work">{m.deployment.waiting}</Callout>}
 
-      <LogViewer lines={lines} height="calc(100dvh - 420px)" empty={m.deployment.logEmpty} live={running} />
+      <LogViewer lines={lines} height="calc(100dvh - 420px)" empty={m.deployment.logEmpty} live={running} name={`deploy-${deploymentId.slice(-6)}`} levels={false} />
       </div>
       </div>
       </section>

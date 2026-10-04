@@ -10,7 +10,7 @@ import { nextRunFor } from '../../lib/cron.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
 import { CATALOG, catalogEntry } from '../../services/catalog.ts';
 import type { ServiceRecord } from '../../store/index.ts';
-import { audit, body, query, requireTeam, type Ctx, type Env } from '../core.ts';
+import { audit, body, logWindow, query, requireTeam, type Ctx, type Env } from '../core.ts';
 import { backupDto, serviceDto } from '../dto.ts';
 import { loadProject } from './projects.ts';
 import { rangeQuery } from './servers.ts';
@@ -143,14 +143,14 @@ export function registerServiceRoutes(app: Hono<Env>, ctx: Context): void {
   app.get('/api/services/:id/logs', async (c) => {
     const service = load(c, 'viewer');
     const docker = await ctx.connections.docker(service.serverId);
-    const tail = Math.min(2_000, Math.max(10, Number(c.req.query('tail') ?? 300) || 300));
+    const { tail, since } = logWindow(c.req.query('tail'), c.req.query('since'));
     return streamSSE(c, async (stream) => {
       const controller = new AbortController();
       stream.onAbort(() => controller.abort());
       let seq = 0;
       const keepAlive = setInterval(() => void stream.writeSSE({ event: 'ping', data: '' }).catch(() => controller.abort()), 25_000);
       try {
-        const output = await docker.containerLogs(service.containerName, { follow: true, tail, timestamps: true, signal: controller.signal });
+        const output = await docker.containerLogs(service.containerName, { follow: true, tail, timestamps: true, ...(since === undefined ? {} : { since }), signal: controller.signal });
         for await (const chunk of output as AsyncIterable<{ stream: 'stdout' | 'stderr'; text: string }>) {
           for (const raw of chunk.text.split('\n')) {
             if (raw.length === 0) continue;

@@ -294,3 +294,11 @@ export class RateLimiter {
 export function limit(limiter: RateLimiter, c: Ctx, scope: string): void {
   if (!limiter.take(`${scope}:${c.get('ip')}`)) throw new AppError('rate_limited', 'Too many attempts. Wait a minute and try again.');
 }
+
+/** How much of a container log a stream starts with: the last `tail` lines (`all` for everything, capped) from the last `since` seconds. */
+export function logWindow(tailParam: string | undefined, sinceParam: string | undefined): { tail: number | 'all'; since?: number } {
+  const tail = tailParam === 'all' ? 'all' : Math.min(10_000, Math.max(10, Number(tailParam ?? 300) || 300));
+  const seconds = Number(sinceParam);
+  const since = sinceParam !== undefined && Number.isFinite(seconds) && seconds > 0 ? Math.floor(Date.now() / 1000) - Math.min(seconds, 30 * 24 * 3600) : undefined;
+  return since === undefined ? { tail } : { tail, since };
+}

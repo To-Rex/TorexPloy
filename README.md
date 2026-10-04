@@ -8,7 +8,7 @@ Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy 
 - **Ishlash:** uzilishsiz (rolling) yoki recreate strategiyasi, health-check, replikalar, avtomatik qayta ishga tushirish, bir bosishda rollback, self-heal.
 - **Tarmoq:** Caddy orqali avtomatik HTTPS (Let’s Encrypt), DNS va sertifikat holatini real tekshirish, avtomatik domenlar.
 - **Servislar:** PostgreSQL, MySQL, MariaDB, MongoDB, Redis, RabbitMQ, MinIO, ClickHouse. Ilovaga ulash, zaxira nusxa va tiklash.
-- **Kuzatuv:** real vaqtdagi build va runtime loglar, CPU/RAM/disk/tarmoq metrikalari, audit jurnali.
+- **Kuzatuv:** real vaqtdagi build va runtime loglar (qidiruv, daraja boʻyicha filtr, replika va vaqt oraligʻi tanlovi, pauza, nusxalash, yuklab olish, toʻliq ekran), CPU/RAM/disk/tarmoq metrikalari, audit jurnali.
 - **Jamoa:** rollar (egasi/admin/dasturchi/kuzatuvchi), taklifnomalar, 2FA (TOTP), API tokenlar, GitHub orqali kirish.
 - **Bir nechta server:** SSH orqali qoʻshiladi. Masofaviy serverga faqat Docker kerak, agent oʻrnatilmaydi.
 - **PR preview:** har bir pull request alohida manzilda vaqtinchalik nusxa sifatida ochiladi (`pr-7-web-…`): yangi push’da qayta joylashtiriladi, PR yopilganda oʻchiriladi, manzil PR’ga izoh sifatida yoziladi. Ota ilovaning sozlamalari, oʻzgaruvchilari va bazalari ishlatiladi, ustidan alohida preview oʻzgaruvchilari qoʻyiladi. Fork’dan kelgan PR’lar sirlar xavfsizligi uchun joylashtirilmaydi.
