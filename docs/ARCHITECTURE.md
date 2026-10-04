@@ -101,7 +101,8 @@ jobs · metrics_host · metrics_app · audit_log · settings
 ```
 QUEUED → (per-app serial; build semaphore = PLOY_MAX_CONCURRENT_BUILDS)
 FETCH     git: shallow clone, aniq commit SHA, GitHub App installation token (process ro'yxatida ko'rinmaydi)
-BUILD     Dockerfile | auto (Node/Bun/Python/Go/Rust/PHP/static aniqlanadi → optimallashtirilgan Dockerfile)
+BUILD     torex (TorexBuilder: Node/Bun/Python/Go/Rust/PHP/static aniqlanadi → optimallashtirilgan Dockerfile)
+          | dockerfile | nixpacks | railpack | heroku | paketo | static  (5.7-boʻlim)
           BuildKit layer cache + `RUN --mount=type=cache` (npm/pip/go kesh), `--progress=plain` log oqimi
 START     yangi konteynerlar: ploy-<app>-<deploy>-<n>, loyiha tarmog'ida, resource limitlar, log rotation
 HEALTH    web: port + ixtiyoriy HTTP yo'l (2xx/3xx); worker: barqarorlik oynasi (qayta ishga tushmasligi kerak)
@@ -209,6 +210,65 @@ ota ilovaning "PR preview" tabida turadi (`GET /api/applications/:id/previews`),
   `application.deleted`.
 - Yangi GitHub App manifestida `pull_requests: write` ruxsati va `pull_request` hodisasi bor. Avval yaratilgan App'da
   ularni GitHub sozlamalarida qo'shib, o'rnatishda yangi ruxsatni tasdiqlash kerak.
+
+### 5.7 Yigʻish usullari
+
+Ilova `buildType` bilan image'ni kim yasashini tanlaydi (`BUILD_TYPES`; migratsiya v8 `applications` jadvalini qayta
+quradi, eski `auto` → `torex`). `build/index.ts` (`runBuild`) bitta kirish nuqtasi: TorexBuilder, Dockerfile va statik
+sayt uchun `planBuild` + `docker buildx build` (`build/builder.ts`), tashqi yigʻuvchilar uchun ularning oʻz CLI'si.
+Deployer faqat `DeployPlan` koʻradi (`mode: dockerfile | generated | external`); `external` rejada Dockerfile yoʻq,
+start buyrugʻi image'ning oʻzida.
+
+| Tur | Nima qiladi | Buyruq |
+|---|---|---|
+| `torex` | TorexBuilder: stack aniqlanadi, optimallashtirilgan Dockerfile yoziladi; `systemPackages` (apt) image'ga qoʻshiladi | `docker buildx build --secret id=ploy_env,src=…` |
+| `dockerfile` | Repodagi Dockerfile; `buildStage` → `--target` | `docker buildx build --build-arg NOM` (qiymat muhitdan) |
+| `nixpacks` | Railway'ning birinchi yigʻuvchisi: `nixpacks.toml`ni oʻzi oʻqiydi, Dockerfile yozib `docker build` qiladi; panel buyruqlari `--install-cmd/--build-cmd/--start-cmd` | `nixpacks build <ctx> --name <tag> --label … --env NOM [--no-cache]` |
+| `railpack` | `railpack prepare` reja va info faylini yozadi, soʻng BuildKit Railpack frontend'i bilan quradi; frontend tegi CLI versiyasiga mos (`ghcr.io/railwayapp/railpack-frontend:v<versiya>`) | `railpack prepare <ctx> --plan-out … --info-out … --env NOM` → `docker buildx build --build-arg BUILDKIT_SYNTAX=<frontend> -f railpack-plan.json --secret id=NOM,env=NOM --build-arg secrets-hash=… --build-arg cache-key=<app>` |
+| `heroku` / `paketo` | Cloud Native Buildpacks (`pack`): builder `heroku/builder:24` yoki `paketobuildpacks/builder-jammy-base`, `buildpackBuilder` almashtiradi; `startCommand` Procfile'ga yoziladi; `pack`da `--label` yoʻq, shuning uchun image `FROM <tag>-cnb` Dockerfile bilan qayta label'lanadi va vaqtinchalik teg olib tashlanadi | `pack build <tag>-cnb --path <ctx> --builder <image> --pull-policy if-not-present --trust-builder --env NOM [--clear-cache]` |
+| `static` | Fayllar Caddy bilan beriladi (TorexBuilder orqali) | `docker buildx build` |
+
+- **Muhit.** Har bir CLI `DOCKER_HOST` (lokal soket yoki SSH tunnel) va deploy'ning oʻz `DOCKER_CONFIG`'i (jamoa
+  registr loginlari, ish tugagach oʻchiriladi) bilan ishlaydi: build maqsad serverning BuildKit'ida boʻladi.
+  Oʻzgaruvchilar faqat nomi bilan beriladi (`--env NOM`, `--secret id=NOM,env=NOM`), qiymatni CLI oʻz muhitidan
+  oʻqiydi — buyruq qatorida sir yoʻq. `PATH`, `DOCKER_*` kabi nomlar oʻtkazilmaydi. Farq: Railpack sirlarni BuildKit
+  secret sifatida oladi (qatlamga tushmaydi), Nixpacks esa ularni image'ga `ENV` qilib yozadi (uning dizayni, logda
+  aytiladi), `pack` faqat build vaqtida beradi.
+- **CLI mavjudligi.** `build/tools.ts` ishga tushganda PATH'da `nixpacks`, `railpack`, `pack` borligini tekshiradi;
+  `BootstrapDto.features.builders` shu roʻyxatni beradi, panel faqat shularni taklif qiladi. Yoʻq yigʻuvchi tanlansa
+  `422 validation_failed` (`buildType`, `reason: builder_unavailable`); deploy vaqtida CLI topilmasa
+  `docker_unavailable` (`reason: builder_missing`). Control-plane image'i uchala binarni pinned versiya va sha256 bilan
+  oʻrnatadi (`Dockerfile` boshidagi `ARG`lar; Railpack va pack checksum chiqaradi, Nixpacks'niki pin qilinganda hisoblangan).
+- **Reja koʻrish.** `POST /api/applications/:id/build-plan` (developer) manbani deploy'dagidek shallow clone qiladi
+  (GitHub token, deploy kaliti), build qilmasdan `BuildPlanDto` qaytaradi: `mode`, `stack`, `label`, Dockerfile matni
+  (repodagi yoki TorexBuilder yozadigani), commit va ogohlantirishlar (yigʻuvchi e'tiborsiz qoldiradigan sozlamalar,
+  topilmagan `buildStage`). Nixpacks uchun `nixpacks plan`, Railpack uchun `railpack prepare --info-out`, buildpack'lar
+  uchun faqat builder nomi. Bir ilova uchun bir vaqtda bitta (ikkinchisi `409 conflict`, `plan_in_progress`); image va
+  compose ilovalari `422`. Vaqtinchalik katalog har doim oʻchiriladi.
+- **Xatolar.** Build xatosi `bad_request` + `reason: build_failed` (stderr'ning oxirgi mazmunli satrlari bilan), vaqt
+  chegarasi `build_timeout`. Railpack rejalashtira olmasa chiqish kodi 0 boʻladi, shuning uchun info faylidagi
+  `success` tekshiriladi.
+
+**TorexBuilder** (`build/detect.ts` + `build/torex/*`, har bir stack oʻz faylida):
+
+- Stack'lar: Node/Bun (Next.js standalone va export, Nuxt, SvelteKit, Remix/React Router, Astro, Angular SSR, NestJS,
+  Vite/CRA/Gatsby/Docusaurus kabi statik freymvorklar, pnpm/yarn/npm/bun workspace'lar), Python (Django, FastAPI,
+  Flask, Litestar, Sanic, Celery worker; uv/Poetry/PDM/Pipenv/pip), Go, Rust (workspace'lar bilan), PHP/Laravel,
+  Ruby/Rails, Java (Maven/Gradle; Spring Boot, Quarkus, Micronaut), Clojure, .NET, Elixir/Phoenix, Gleam, Dart/Flutter,
+  Swift/Vapor, Crystal, Nim, Haskell, Deno, statik sayt.
+- Versiya manbalari: `.tool-versions`, `mise.toml`, `.nvmrc`/`.node-version`/`engines`/`packageManager`,
+  `.python-version`/`requires-python`, `go.mod` (`toolchain` bilan), `rust-toolchain.toml`, `.ruby-version`,
+  `.php-version`/`composer.json`, `pom.xml`/`build.gradle`/`.sdkmanrc`, `global.json` va boshqalar.
+- Har bir Dockerfile: avval manifest va lockfile'lar `COPY` qilinadi (install qatlami keshlanadi), dev
+  bogʻliqliklar runtime bosqichiga oʻtmaydi (prune), runtime foydalanuvchi root emas (PHP-apache'dan tashqari),
+  `ENV PORT` + `EXPOSE`, `LABEL torexploy.builder=torex torexploy.stack=<stack>`. Sirlar faqat
+  `--mount=type=secret,id=ploy_env` orqali, qatlamga tushmaydi.
+- `torexploy.json` (kontekst katalogida, ixtiyoriy): `installCommand`, `buildCommand`, `startCommand`,
+  `outputDirectory`, `systemPackages: []`, `runtime: { node, python, go, … }`. Ustunlik: panel sozlamalari > fayl >
+  aniqlash. Notoʻgʻri fayl → `bad_request` (`reason: config_invalid`).
+- `warnings[]`: lockfile yoʻq, start buyrugʻi taxmin qilingan, dev-server `start` skripti, EOL Node, monorepo
+  (`--filter` buyruqlari bilan), Django'da `STATIC_ROOT` yoʻq va hokazo. Ular deploy logida va reja oynasida
+  koʻrsatiladi.
 
 ## 6. Xavfsizlik
 

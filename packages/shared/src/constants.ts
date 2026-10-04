@@ -40,8 +40,23 @@ export type AppKind = (typeof APP_KINDS)[number] | 'compose';
 export const SOURCE_TYPES = ['github', 'git', 'image', 'raw'] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
-export const BUILD_TYPES = ['auto', 'dockerfile', 'static'] as const;
+/**
+ * How a repository becomes an image.
+ * - `torex`: TorexBuilder — the stack is detected and an optimized Dockerfile is generated.
+ * - `dockerfile`: the repository's own Dockerfile.
+ * - `nixpacks`, `railpack`: Railway's builders, run as CLIs on the control plane.
+ * - `heroku`, `paketo`: Cloud Native Buildpacks through `pack` with that vendor's builder.
+ * - `static`: files served by Caddy, optionally after a build step.
+ */
+export const BUILD_TYPES = ['torex', 'dockerfile', 'nixpacks', 'railpack', 'heroku', 'paketo', 'static'] as const;
 export type BuildType = (typeof BUILD_TYPES)[number];
+export const DEFAULT_BUILD_TYPE: BuildType = 'torex';
+
+/** Builders that need a CLI on the control plane (reported in `BootstrapDto.features.builders`). */
+export const EXTERNAL_BUILD_TYPES: readonly BuildType[] = ['nixpacks', 'railpack', 'heroku', 'paketo'];
+
+/** Debian/Ubuntu package names, as `apt-get install` accepts them. */
+export const APT_PACKAGE_RE = /^[a-z0-9][a-z0-9+.-]{0,99}$/;
 
 export const DEPLOY_STRATEGIES = ['rolling', 'recreate'] as const;
 export type DeployStrategy = (typeof DEPLOY_STRATEGIES)[number];
@@ -160,6 +175,7 @@ export const LIMITS = {
   previewsMax: 20,
   /** Preview variables, as `.env` text. */
   previewEnvMax: 32 * 1024,
+  systemPackagesMax: 50,
 } as const;
 
 // ---------------------------------------------------------------------------

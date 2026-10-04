@@ -23,8 +23,8 @@ import { keys, useAppContainers, useAppMetrics, useDeployKey, useDeployment, use
 import { validate } from '../../lib/validate.ts';
 import { TemplateMark } from '../projects/TemplatesDialog.tsx';
 import { useAppContext, useAppTerminal } from './AppLayout.tsx';
+import { BuildCard } from './BuildCard.tsx';
 import { ComposeFileCard } from './Compose.tsx';
-import { useAppForm } from './appForm.ts';
 
 /** The single most useful thing to do next, or nothing when all is well. */
 function NextStep({ app, containers }: { app: ApplicationDto; containers: ContainerDto[] | undefined }) {
@@ -354,54 +354,6 @@ function ProviderCard({ app }: { app: ApplicationDto }) {
         <Field label={m.newApp.image} hint={p.imageHint} error={errors['source.image']}>
           <Input mono value={draft.image} onChange={(event) => setDraft({ ...draft, image: event.target.value })} placeholder="ghcr.io/team/app:latest" spellCheck={false} />
         </Field>
-      )}
-    </Card>
-  );
-}
-
-/** How the code becomes an image: detected automatically, from a Dockerfile, or as a static site. */
-function BuildCard({ app }: { app: ApplicationDto }) {
-  const { m } = useI18n();
-  const b = m.build;
-  const { form, set, text, dirty, submit, reset, saving, errors } = useAppForm(app);
-  const types = ['auto', 'dockerfile', 'static'] as const;
-  return (
-    <Card title={b.title} description={b.description} footer={<SaveFooter dirty={dirty} saving={saving} onSave={submit} onReset={reset} />}>
-      <div className="radio-list" role="radiogroup" aria-label={b.title}>
-        {types.map((value) => (
-          <button key={value} type="button" role="radio" className="radio-item" aria-checked={form.buildType === value} onClick={() => set('buildType', value)}>
-            <span className="radio-item__dot" aria-hidden="true" />
-            <span>
-              <span className="radio-item__title">{m.appSettings.buildTypes[value]}</span>
-              <span className="radio-item__hint">{b.hints[value]}</span>
-            </span>
-          </button>
-        ))}
-      </div>
-      <div className="form-grid">
-        <Field label={m.appSettings.rootDirectory} hint={m.newApp.rootDirectoryHint} error={errors.rootDirectory}>
-          <Input mono {...text('rootDirectory')} placeholder="./" spellCheck={false} />
-        </Field>
-        {form.buildType !== 'static' && (
-          <Field label={m.appSettings.dockerfilePath} hint={form.buildType === 'auto' ? b.dockerfileAutoHint : undefined} error={errors.dockerfilePath}>
-            <Input mono {...text('dockerfilePath')} spellCheck={false} />
-          </Field>
-        )}
-      </div>
-      {form.buildType !== 'dockerfile' && (
-        <div className="form-grid">
-          <Field label={m.appSettings.installCommand} error={errors.installCommand}>
-            <Input mono {...text('installCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
-          </Field>
-          <Field label={m.appSettings.buildCommand} error={errors.buildCommand}>
-            <Input mono {...text('buildCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
-          </Field>
-          {form.buildType === 'static' && (
-            <Field label={m.appSettings.outputDirectory} hint={m.appSettings.outputDirectoryHint} error={errors.outputDirectory}>
-              <Input mono {...text('outputDirectory')} placeholder="dist" spellCheck={false} />
-            </Field>
-          )}
-        </div>
       )}
     </Card>
   );

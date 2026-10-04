@@ -20,6 +20,9 @@ export interface AppForm {
   buildCommand: string;
   startCommand: string;
   outputDirectory: string;
+  buildStage: string;
+  buildpackBuilder: string;
+  systemPackages: string;
   kind: ApplicationDto['kind'];
   port: string;
   replicas: string;
@@ -39,6 +42,9 @@ export function fromApp(app: ApplicationDto): AppForm {
     buildCommand: app.buildCommand ?? '',
     startCommand: app.startCommand ?? '',
     outputDirectory: app.outputDirectory ?? '',
+    buildStage: app.buildStage ?? '',
+    buildpackBuilder: app.buildpackBuilder ?? '',
+    systemPackages: app.systemPackages ?? '',
     kind: app.kind,
     port: app.port === null ? '' : String(app.port),
     replicas: String(app.replicas),
@@ -64,6 +70,9 @@ export function toPatch(app: ApplicationDto, form: AppForm): UpdateApplicationIn
   if (changed('buildCommand')) patch.buildCommand = orNull(form.buildCommand);
   if (changed('startCommand')) patch.startCommand = orNull(form.startCommand);
   if (changed('outputDirectory')) patch.outputDirectory = orNull(form.outputDirectory);
+  if (changed('buildStage')) patch.buildStage = orNull(form.buildStage);
+  if (changed('buildpackBuilder')) patch.buildpackBuilder = orNull(form.buildpackBuilder);
+  if (changed('systemPackages')) patch.systemPackages = orNull(form.systemPackages);
   if (changed('kind') && form.kind !== 'compose') patch.kind = form.kind;
   if (changed('port')) patch.port = numOrNull(form.port);
   if (changed('replicas')) patch.replicas = Number(form.replicas);

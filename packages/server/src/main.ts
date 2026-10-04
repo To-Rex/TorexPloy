@@ -3,6 +3,7 @@
  */
 import { serve, type ServerType } from '@hono/node-server';
 import type { Server } from 'node:http';
+import { detectBuilders } from './build/tools.ts';
 import { ComposeEngine } from './compose/engine.ts';
 import { openDatabase } from './db/database.ts';
 import { Deployer } from './deploy/deployer.ts';
@@ -41,6 +42,8 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   const bus = new EventBus();
   const connections = new ConnectionManager(config, stores, secrets, logger);
   const proxy = new ProxyManager(config, stores, connections, logger);
+  // Which builder CLIs this control plane has (nixpacks, railpack, pack) decides what the dashboard offers.
+  logger.debug('Builders available', { builders: await detectBuilders() });
 
   // Collaborators reference each other through the context, so it is assembled in two steps.
   const ctx = { config, logger, stores, secrets, bus, connections, proxy, startedAt: Date.now() } as Context;

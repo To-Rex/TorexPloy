@@ -18,9 +18,8 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isTerminalDeployment, type DeploymentTrigger } from '@ploy/shared';
-import { buildImage } from '../build/builder.ts';
-import { planBuild, type BuildPlan } from '../build/detect.ts';
 import { buildWorkDir, checkout, cloneUrl } from '../build/git.ts';
+import { runBuild, settingsOf, type DeployPlan } from '../build/index.ts';
 import { emit, type Context } from '../context.ts';
 import type { DockerClient } from '../docker/client.ts';
 import { cliAuths, registryAuthHeader } from '../docker/registry.ts';
@@ -353,7 +352,7 @@ export class Deployer {
 
       // ---------------------------------------------------------- image
       let image: string;
-      let plan: BuildPlan | null = null;
+      let plan: DeployPlan | null = null;
       if (queued.imageTag !== null) {
         image = queued.imageTag;
         if ((await docker.inspectImage(image)) === null) {
@@ -517,7 +516,7 @@ export class Deployer {
     workDir: string,
     scratchDir: string,
     signal: AbortSignal,
-  ): Promise<{ image: string; plan: BuildPlan }> {
+  ): Promise<{ image: string; plan: DeployPlan }> {
     const { stores, config, secrets } = this.ctx;
     const branch = app.branch ?? 'main';
     const url = cloneUrl(app);
@@ -547,33 +546,16 @@ export class Deployer {
     }
 
     const contextDir = app.rootDirectory.length > 0 ? join(workDir, app.rootDirectory) : workDir;
-    const plan = await planBuild({
-      contextDir,
-      buildType: app.buildType,
-      dockerfilePath: app.dockerfilePath,
-      installCommand: app.installCommand,
-      buildCommand: app.buildCommand,
-      startCommand: app.startCommand,
-      outputDirectory: app.outputDirectory,
-      kind: app.kind === 'worker' ? 'worker' : 'web',
-    });
-    log.stage('build', `Build plan: ${plan.label}`);
-    if (plan.dockerfile !== null) {
-      log.info('Generated Dockerfile:');
-      for (const line of plan.dockerfile.split('\n')) log.write(`  ${line}`, 'stdout');
-    }
-
     const image = makeImageTag(app, deployment.id);
     const resolved = resolveAppEnv(stores, app);
     log.mask(resolved.secrets);
-    // `FROM` may name private images: the build signs in to the team's registries.
+    // `FROM` and builder images may be private: the build signs in to the team's registries.
     const registries = stores.registries.listForTeam(app.teamId);
     log.mask(registries.map((registry) => registry.password));
-    log.info(`Building ${image}${deployment.options.clearCache === true ? ' (without cache)' : ''}`);
     stores.deployments.setStatus(deployment.id, 'building');
-    const { durationMs } = await buildImage({
+    const { plan, durationMs } = await runBuild({
+      settings: settingsOf(app),
       dockerHost: docker.dockerHost,
-      plan,
       contextDir,
       scratchDir,
       imageTag: image,
@@ -584,6 +566,14 @@ export class Deployer {
       noCache: deployment.options.clearCache === true,
       timeoutMs: config.buildTimeoutMs,
       signal,
+      onPlan: (planned) => {
+        log.stage('build', `Build plan: ${planned.label}`);
+        if (planned.dockerfile !== null) {
+          log.info('Generated Dockerfile:');
+          for (const line of planned.dockerfile.split('\n')) log.write(`  ${line}`, 'stdout');
+        }
+        log.info(`Building ${image}${deployment.options.clearCache === true ? ' (without cache)' : ''}`);
+      },
       onOutput: (line) => log.write(line, 'stdout'),
     });
     stores.deployments.setImage(deployment.id, image, durationMs);

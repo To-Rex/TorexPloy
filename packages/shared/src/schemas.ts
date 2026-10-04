@@ -9,6 +9,7 @@ import { z } from 'zod';
 import {
   APP_KINDS,
   BRANCH_RE,
+  APT_PACKAGE_RE,
   BUILD_TYPES,
   DEPLOY_STRATEGIES,
   DEPLOYMENT_STATUS_FILTERS,
@@ -269,6 +270,29 @@ export const updateComposeSchema = z
   .partial();
 export type UpdateComposeInput = z.infer<typeof updateComposeSchema>;
 
+/** A Docker image reference a builder can use (`heroku/builder:24`, `paketobuildpacks/builder-jammy-base`). */
+const builderImageSchema = z.string().trim().max(300).regex(IMAGE_RE);
+
+/** Space- or comma-separated apt package names installed into a TorexBuilder image. */
+export const systemPackagesSchema = z
+  .string()
+  .trim()
+  .max(2_000)
+  .superRefine((value, ctx) => {
+    const names = splitPackages(value);
+    if (names.length > LIMITS.systemPackagesMax) ctx.addIssue({ code: 'custom', message: `At most ${LIMITS.systemPackagesMax} packages`, params: { reason: 'too_many' } });
+    const bad = names.find((name) => !APT_PACKAGE_RE.test(name));
+    if (bad !== undefined) ctx.addIssue({ code: 'custom', message: `"${bad}" is not a package name`, params: { reason: 'bad_package', name: bad } });
+  });
+
+/** `systemPackages` text → package names. */
+export function splitPackages(value: string | null | undefined): string[] {
+  return (value ?? '')
+    .split(/[\s,]+/)
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+}
+
 export const buildSettingsSchema = z.object({
   buildType: z.enum(BUILD_TYPES),
   dockerfilePath: relativePathSchema.min(1),
@@ -277,6 +301,12 @@ export const buildSettingsSchema = z.object({
   buildCommand: optionalCommand,
   startCommand: optionalCommand,
   outputDirectory: relativePathSchema.nullable().optional(),
+  /** Dockerfile builds: the stage to build (`--target`). */
+  buildStage: z.string().trim().max(100).regex(/^[A-Za-z0-9_.-]+$/).nullable().optional(),
+  /** Buildpack builds: a builder image other than the vendor's default. */
+  buildpackBuilder: builderImageSchema.nullable().optional(),
+  /** TorexBuilder: extra apt packages for the image (ImageMagick, ffmpeg…). */
+  systemPackages: systemPackagesSchema.nullable().optional(),
 });
 
 export const runtimeSettingsSchema = z.object({

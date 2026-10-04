@@ -11,6 +11,7 @@ import type {
   AuditEntryDto,
   BackupDto,
   BootstrapDto,
+  BuildPlanDto,
   ComposeDto,
   ContainerDto,
   CronJobDto,
@@ -137,6 +138,8 @@ export const useCronRuns = (appId: string, cronId: string | null) =>
     queryFn: () => api.get<CronRunDto[]>(`/api/applications/${appId}/cron/${cronId}/runs`),
     enabled: cronId !== null,
   });
+/** What a deploy of the current branch would build; fetched on demand, never automatically. */
+export const fetchBuildPlan = (id: string) => api.post<BuildPlanDto>(`/api/applications/${id}/build-plan`);
 export const usePreviewSettings = (id: string, enabled: boolean) =>
   useQuery({ queryKey: keys.appPart(id, 'preview-settings'), queryFn: () => api.get<PreviewSettingsDto>(`/api/applications/${id}/preview-settings`), enabled });
 export const usePreviews = (id: string) =>

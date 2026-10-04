@@ -3,6 +3,7 @@
  */
 import type { Hono } from 'hono';
 import { acceptInvitationSchema, loginSchema, setupSchema, twoFactorLoginSchema, type BootstrapDto, type InvitationPreviewDto } from '@ploy/shared';
+import { availableBuilders } from '../../build/tools.ts';
 import type { Context } from '../../context.ts';
 import { dummyPasswordDigest, generateToken, hashPassword, passwordNeedsRehash, sha256, verifyPassword, verifyTotp } from '../../lib/crypto.ts';
 import { AppError } from '../../lib/errors.ts';
@@ -27,7 +28,7 @@ export function bootstrapDto(ctx: Context, c: Ctx): BootstrapDto {
     user: user === null ? null : userDto(user, ctx.stores.users.getIdentityLogin(user.id, 'github')),
     teams: user === null ? [] : ctx.stores.teams.listForUser(user.id).map(teamDto),
     currentTeamId: auth?.teamId ?? null,
-    features: { githubLogin: ctx.github.credentials() !== null },
+    features: { githubLogin: ctx.github.credentials() !== null, builders: availableBuilders() },
   };
 }
 

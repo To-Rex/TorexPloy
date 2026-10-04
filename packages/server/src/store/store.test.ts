@@ -201,6 +201,79 @@ test('the preview migration keeps every application, and previews live and die w
   }
 });
 
+test('the build-type rebuild maps auto to torex and keeps every application, its preview and its child rows', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ploy-migrate8-'));
+  const path = join(dir, 'v7.db');
+  try {
+    // A database as release 7 left it: an `auto` app with a deployment, a domain, a variable and a preview, and a Dockerfile app.
+    const raw = new DatabaseSync(path);
+    raw.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)');
+    for (const migration of MIGRATIONS.slice(0, 7)) {
+      raw.exec(`PRAGMA foreign_keys = ${migration.rebuildsTables === true ? 'OFF' : 'ON'}`);
+      raw.exec(migration.sql);
+      raw.prepare('INSERT INTO schema_migrations VALUES (?, ?, ?)').run(migration.version, migration.name, '2026-01-01T00:00:00.000Z');
+    }
+    raw.exec('PRAGMA foreign_keys = ON');
+    const t = '2026-01-01T00:00:00.000Z';
+    raw.exec(`INSERT INTO teams VALUES ('team_a', 'A', 'a', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO projects VALUES ('prj_a', 'team_a', 'P', 'p', NULL, '${t}', '${t}')`);
+    raw.exec(`INSERT INTO servers (id, team_id, name, kind, status, created_at, updated_at) VALUES ('srv_a', NULL, 'local', 'local', 'ready', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO applications (id, project_id, team_id, server_id, name, slug, source_type, github_installation_id, repository, branch, config_updated_at, created_at, updated_at)
+              VALUES ('app_a', 'prj_a', 'team_a', 'srv_a', 'Web', 'web', 'github', 42, 'acme/web', 'main', '${t}', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO applications (id, project_id, team_id, server_id, name, slug, source_type, git_url, branch, build_type, dockerfile_path, config_updated_at, created_at, updated_at)
+              VALUES ('app_b', 'prj_a', 'team_a', 'srv_a', 'Api', 'api', 'git', 'https://git.example.uz/api.git', 'main', 'dockerfile', 'docker/Dockerfile', '${t}', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO applications (id, project_id, team_id, server_id, name, slug, source_type, github_installation_id, repository, branch, parent_application_id, preview_pr_number, preview_pr_title, config_updated_at, created_at, updated_at)
+              VALUES ('app_p', 'prj_a', 'team_a', 'srv_a', 'Web-pr-5', 'web-pr-5', 'github', 42, 'acme/web', 'login', 'app_a', 5, 'Add login', '${t}', '${t}', '${t}')`);
+    assert.equal(raw.prepare("SELECT build_type FROM applications WHERE id = 'app_a'").get()!.build_type, 'auto');
+    raw.exec(`INSERT INTO deployments (id, application_id, project_id, team_id, server_id, status, trigger, created_at) VALUES ('dep_a', 'app_a', 'prj_a', 'team_a', 'srv_a', 'succeeded', 'push', '${t}')`);
+    raw.exec(`INSERT INTO deployments (id, application_id, project_id, team_id, server_id, status, trigger, created_at) VALUES ('dep_p', 'app_p', 'prj_a', 'team_a', 'srv_a', 'succeeded', 'push', '${t}')`);
+    raw.exec(`UPDATE applications SET active_deployment_id = 'dep_a', status = 'running' WHERE id = 'app_a'`);
+    raw.exec(`INSERT INTO domains (id, application_id, team_id, host, created_at, updated_at) VALUES ('dom_a', 'app_a', 'team_a', 'web.example.uz', '${t}', '${t}')`);
+    raw.exec(`INSERT INTO env_vars (id, application_id, key, value, created_at, updated_at) VALUES ('env_a', 'app_a', 'K', 'sealed', '${t}', '${t}')`);
+    raw.close();
+
+    const db = openDatabase(path);
+    assert.equal(db.schemaVersion, LATEST_SCHEMA_VERSION);
+    assert.ok(LATEST_SCHEMA_VERSION >= 8);
+    assert.equal(db.get('PRAGMA foreign_keys')!.foreign_keys, 1, 'foreign keys are back on');
+    assert.deepEqual(db.all('PRAGMA foreign_key_check'), []);
+    const stores = createStores(db, new Secrets('k'.repeat(48)));
+    const web = stores.applications.get('app_a')!;
+    assert.deepEqual([web.buildType, web.buildStage, web.buildpackBuilder, web.systemPackages, web.activeDeploymentId, web.status], ['torex', null, null, null, 'dep_a', 'running']);
+    assert.deepEqual([stores.applications.get('app_b')!.buildType, stores.applications.get('app_b')!.dockerfilePath], ['dockerfile', 'docker/Dockerfile']);
+    const preview = stores.applications.get('app_p')!;
+    assert.deepEqual([preview.parentApplicationId, preview.previewPrNumber, preview.previewPrTitle, preview.buildType], ['app_a', 5, 'Add login', 'torex']);
+    assert.equal(db.scalar('SELECT COUNT(*) FROM deployments'), 2, 'no cascade wiped the deployments');
+    assert.equal(db.scalar('SELECT COUNT(*) FROM domains'), 1);
+    assert.equal(db.scalar('SELECT COUNT(*) FROM env_vars'), 1);
+    assert.deepEqual(stores.applications.listPreviews('app_a').map((app) => app.id), ['app_p']);
+    const indexes = db.all("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'applications' AND name LIKE 'idx_%'").map((row) => String(row.name)).sort();
+    assert.deepEqual(indexes, ['idx_applications_preview', 'idx_applications_repo', 'idx_applications_server', 'idx_applications_team']);
+
+    // The new CHECK: every builder is accepted, `auto` no longer is.
+    for (const type of ['dockerfile', 'nixpacks', 'railpack', 'heroku', 'paketo', 'static', 'torex']) db.run('UPDATE applications SET build_type = ? WHERE id = ?', type, 'app_b');
+    assert.throws(() => db.run("UPDATE applications SET build_type = 'auto' WHERE id = 'app_b'"), /CHECK/);
+    assert.throws(() => db.run("INSERT INTO applications (id, project_id, team_id, server_id, name, slug, source_type, parent_application_id, config_updated_at, created_at, updated_at) VALUES ('app_x', 'prj_a', 'team_a', 'srv_a', 'x', 'x', 'github', 'app_a', ?, ?, ?)", t, t, t), /CHECK/, 'a preview still names its pull request');
+
+    // New applications default to TorexBuilder; the new settings are configuration (a redeploy applies them).
+    const created = stores.applications.create({ ...web, name: 'Shop', slug: 'shop', sealedHookToken: 'x' });
+    assert.deepEqual([created.buildType, created.buildStage, created.buildpackBuilder, created.systemPackages], ['torex', null, null, null]);
+    const tuned = stores.applications.update(created.id, { buildType: 'heroku', buildStage: 'runtime', buildpackBuilder: 'heroku/builder:22', systemPackages: 'ffmpeg imagemagick' });
+    assert.deepEqual([tuned.buildType, tuned.buildStage, tuned.buildpackBuilder, tuned.systemPackages], ['heroku', 'runtime', 'heroku/builder:22', 'ffmpeg imagemagick']);
+    assert.ok(tuned.configUpdatedAt >= created.configUpdatedAt);
+    assert.equal(stores.applications.update(created.id, { systemPackages: null }).systemPackages, null);
+
+    // Deleting the parent still takes the preview and every deployment with it.
+    stores.applications.delete('app_a');
+    assert.equal(stores.applications.get('app_p'), undefined, 'the preview row goes with its parent');
+    assert.equal(db.scalar('SELECT COUNT(*) FROM deployments'), 0);
+    assert.equal(db.scalar('SELECT COUNT(*) FROM domains'), 0);
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('emails are case-insensitive and teams get unique slugs', () => {
   const { stores } = setup();
   assert.ok(stores.users.getByEmail('owner@example.uz'));

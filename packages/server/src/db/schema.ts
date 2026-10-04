@@ -492,6 +492,85 @@ CREATE INDEX idx_domains_app ON domains(application_id);
 CREATE UNIQUE INDEX idx_domains_route ON domains(host COLLATE NOCASE, path);
 `;
 
+/**
+ * Every build type — TorexBuilder (`torex`, formerly `auto`), Dockerfile,
+ * Nixpacks, Railpack, Heroku and Paketo buildpacks, static — plus the
+ * per-builder settings. The CHECK on `build_type` can only change with a
+ * rebuild; the copy maps `auto` to `torex`, since the new CHECK rejects it.
+ */
+const BUILD_TYPES_V8 = /* sql */ `
+CREATE TABLE applications_v8 (
+  id                       TEXT PRIMARY KEY,
+  project_id               TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  team_id                  TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  server_id                TEXT NOT NULL REFERENCES servers(id) ON DELETE RESTRICT,
+  name                     TEXT NOT NULL,
+  slug                     TEXT NOT NULL,
+  description              TEXT,
+  kind                     TEXT NOT NULL DEFAULT 'web' CHECK (kind IN ('web','worker','compose')),
+  source_type              TEXT NOT NULL CHECK (source_type IN ('github','git','image','raw')),
+  github_installation_id   INTEGER,
+  repository               TEXT,
+  git_url                  TEXT,
+  branch                   TEXT,
+  image                    TEXT,
+  build_type               TEXT NOT NULL DEFAULT 'torex' CHECK (build_type IN ('torex','dockerfile','nixpacks','railpack','heroku','paketo','static')),
+  dockerfile_path          TEXT NOT NULL DEFAULT 'Dockerfile',
+  root_directory           TEXT NOT NULL DEFAULT '',
+  install_command          TEXT,
+  build_command            TEXT,
+  start_command            TEXT,
+  output_directory         TEXT,
+  -- Dockerfile builds: the stage to build (--target).
+  build_stage              TEXT,
+  -- Buildpack builds: the builder image instead of the vendor's default.
+  buildpack_builder        TEXT,
+  -- TorexBuilder: extra apt packages, as typed (space or comma separated).
+  system_packages          TEXT,
+  port                     INTEGER,
+  replicas                 INTEGER NOT NULL DEFAULT 1 CHECK (replicas BETWEEN 1 AND 20),
+  cpu_limit                REAL,
+  memory_limit_mb          INTEGER,
+  health_check_path        TEXT,
+  health_check_timeout_sec INTEGER NOT NULL DEFAULT 120,
+  strategy                 TEXT NOT NULL DEFAULT 'rolling' CHECK (strategy IN ('rolling','recreate')),
+  auto_deploy              INTEGER NOT NULL DEFAULT 1 CHECK (auto_deploy IN (0,1)),
+  deploy_hook_token        TEXT,
+  deploy_key               TEXT,
+  deploy_public_key        TEXT,
+  status                   TEXT NOT NULL DEFAULT 'idle'
+                           CHECK (status IN ('idle','queued','building','deploying','running','crashed','failed','stopped')),
+  active_deployment_id     TEXT REFERENCES deployments(id) ON DELETE SET NULL,
+  config_updated_at        TEXT NOT NULL,
+  created_at               TEXT NOT NULL,
+  updated_at               TEXT NOT NULL,
+  template_id              TEXT,
+  compose_file             TEXT,
+  compose_path             TEXT NOT NULL DEFAULT 'docker-compose.yml',
+  host_access              INTEGER NOT NULL DEFAULT 0 CHECK (host_access IN (0,1)),
+  parent_application_id    TEXT REFERENCES applications(id) ON DELETE CASCADE,
+  preview_pr_number        INTEGER CHECK ((parent_application_id IS NULL) = (preview_pr_number IS NULL)),
+  preview_pr_title         TEXT,
+  preview_pr_url           TEXT,
+  preview_pr_author        TEXT,
+  preview_head_sha         TEXT,
+  preview_comment_id       INTEGER,
+  previews_enabled         INTEGER NOT NULL DEFAULT 0 CHECK (previews_enabled IN (0,1)),
+  preview_limit            INTEGER NOT NULL DEFAULT 3 CHECK (preview_limit BETWEEN 1 AND 20),
+  preview_env_sealed       TEXT,
+  UNIQUE (project_id, slug),
+  CHECK (kind <> 'compose' OR source_type IN ('github','git','raw')),
+  CHECK (source_type <> 'raw' OR (kind = 'compose' AND compose_file IS NOT NULL))
+);
+INSERT INTO applications_v8 (id, project_id, team_id, server_id, name, slug, description, kind, source_type, github_installation_id, repository, git_url, branch, image, build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, port, replicas, cpu_limit, memory_limit_mb, health_check_path, health_check_timeout_sec, strategy, auto_deploy, deploy_hook_token, deploy_key, deploy_public_key, status, active_deployment_id, config_updated_at, created_at, updated_at, template_id, compose_file, compose_path, host_access, parent_application_id, preview_pr_number, preview_pr_title, preview_pr_url, preview_pr_author, preview_head_sha, preview_comment_id, previews_enabled, preview_limit, preview_env_sealed) SELECT id, project_id, team_id, server_id, name, slug, description, kind, source_type, github_installation_id, repository, git_url, branch, image, CASE WHEN build_type = 'auto' THEN 'torex' ELSE build_type END, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, port, replicas, cpu_limit, memory_limit_mb, health_check_path, health_check_timeout_sec, strategy, auto_deploy, deploy_hook_token, deploy_key, deploy_public_key, status, active_deployment_id, config_updated_at, created_at, updated_at, template_id, compose_file, compose_path, host_access, parent_application_id, preview_pr_number, preview_pr_title, preview_pr_url, preview_pr_author, preview_head_sha, preview_comment_id, previews_enabled, preview_limit, preview_env_sealed FROM applications;
+DROP TABLE applications;
+ALTER TABLE applications_v8 RENAME TO applications;
+CREATE INDEX idx_applications_team ON applications(team_id);
+CREATE INDEX idx_applications_server ON applications(server_id);
+CREATE INDEX idx_applications_repo ON applications(repository, branch) WHERE source_type = 'github';
+CREATE UNIQUE INDEX idx_applications_preview ON applications(parent_application_id, preview_pr_number) WHERE parent_application_id IS NOT NULL;
+`;
+
 /** Append-only. Never edit a released migration; add a new one. */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'initial', sql: INITIAL },
@@ -583,6 +662,7 @@ ALTER TABLE applications ADD COLUMN preview_env_sealed TEXT;
 CREATE UNIQUE INDEX idx_applications_preview ON applications(parent_application_id, preview_pr_number) WHERE parent_application_id IS NOT NULL;
 `,
   },
+  { version: 8, name: 'build-types', sql: BUILD_TYPES_V8, rebuildsTables: true },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

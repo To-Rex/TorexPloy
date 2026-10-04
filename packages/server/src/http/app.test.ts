@@ -8,13 +8,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { HttpBindings } from '@hono/node-server';
 import { createServer } from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import {
   API_TOKEN_PREFIX,
   type ApiErrorBody,
   type ApplicationDto,
+  type BootstrapDto,
+  type BuildPlanDto,
   type DeploymentDto,
   type OverviewDto,
   type Page,
@@ -28,6 +30,7 @@ import {
   type TeamDeploymentDto,
 } from '@ploy/shared';
 import { generateToken, hmac } from '../lib/crypto.ts';
+import { runProcessOrThrow } from '../lib/process.ts';
 import { createContext } from '../main.ts';
 import type { ApplicationRecord } from '../store/index.ts';
 import { createHttpApp } from './app.ts';
@@ -751,5 +754,163 @@ test('preview settings: GitHub web applications only, bounded, valid .env text, 
     assert.equal(moved.body.previewsEnabled, false);
   } finally {
     await h.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Build types and the build plan
+// ---------------------------------------------------------------------------
+
+/** Commit `files` on `main` of the repository at `dir` (created on the first call), usable as a `git` source. */
+async function commitFiles(dir: string, files: Record<string, string>, message: string): Promise<string> {
+  mkdirSync(dir, { recursive: true });
+  for (const [name, content] of Object.entries(files)) {
+    mkdirSync(join(dir, name, '..'), { recursive: true });
+    writeFileSync(join(dir, name), content);
+  }
+  const git = (...args: string[]) => runProcessOrThrow('git', ['-c', 'user.email=t@example.uz', '-c', 'user.name=Test', '-c', 'commit.gpgsign=false', '-c', 'init.defaultBranch=main', ...args], { cwd: dir, timeoutMs: 30_000 });
+  if (!existsSync(join(dir, '.git'))) await git('init', '--quiet');
+  await git('add', '-A');
+  await git('commit', '--quiet', '-m', message);
+  return dir;
+}
+
+/** A fake `nixpacks` whose `plan` answers like the real one; nothing else is on PATH, so railpack and pack are "not installed". */
+function fakeNixpacks(bin: string): void {
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(
+    join(bin, 'nixpacks'),
+    `#!${process.execPath}
+const args = process.argv.slice(2);
+if (args[0] !== 'plan') process.exit(1);
+process.stderr.write('warning: no lockfile found\\n');
+process.stdout.write(JSON.stringify({ providers: ['node'], phases: { setup: { nixPkgs: ['nodejs_22'] }, install: { cmds: ['npm i'] } }, start: { cmd: process.env.NIXPACKS_START_CMD ?? 'node server.js' } }));
+`,
+  );
+  chmodSync(join(bin, 'nixpacks'), 0o755);
+}
+
+test('POST /api/applications/:id/build-plan plans the branch head without building, for every builder on this control plane', async () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'ploy-plan-'));
+  const bin = join(scratch, 'bin');
+  fakeNixpacks(bin);
+  const previousPath = process.env.PATH;
+  process.env.PATH = [bin, previousPath].join(delimiter);
+  const h = await harness();
+  try {
+    const { stores } = h.ctx;
+    const repo = await commitFiles(
+      join(scratch, 'repo'),
+      { 'package.json': JSON.stringify({ name: 'shop', scripts: { start: 'node server.js' }, engines: { node: '22' } }), 'server.js': 'require("node:http").createServer().listen(3000)' },
+      'Initial import',
+    );
+    const shop = stores.projects.create(h.teamA.id, 'Shop', null);
+    const web = stores.applications.create({
+      projectId: shop.id,
+      teamId: h.teamA.id,
+      serverId: h.local.id,
+      name: 'Web',
+      slug: 'web',
+      kind: 'web',
+      sourceType: 'git',
+      githubInstallationId: null,
+      repository: null,
+      gitUrl: repo,
+      branch: 'main',
+      image: null,
+      sealedHookToken: h.ctx.secrets.seal(generateToken(), 'hook'),
+    });
+    const image = h.application(h.teamA.id, shop.id, 'Proxy', 'web', 'nginx:alpine');
+    const workDir = join(h.ctx.config.dataDir, 'builds', `plan-${web.id}`);
+
+    // The dashboard learns which builders exist here: the fake nixpacks, not railpack or pack.
+    const bootstrap = await h.call<BootstrapDto>(h.tokens.viewer, 'GET', '/api/bootstrap');
+    assert.deepEqual(bootstrap.body.features.builders, ['torex', 'dockerfile', 'nixpacks', 'static']);
+
+    // TorexBuilder: the generated Dockerfile, the stack and the commit it was planned from.
+    const torex = await h.call<BuildPlanDto>(h.tokens.developer, 'POST', `/api/applications/${web.id}/build-plan`);
+    assert.equal(torex.status, 200, JSON.stringify(torex.body));
+    assert.equal(torex.body.builder, 'torex');
+    assert.equal(torex.body.mode, 'generated');
+    assert.equal(torex.body.stack, 'node');
+    assert.match(torex.body.dockerfile ?? '', /^FROM /m);
+    assert.match(torex.body.commit?.sha ?? '', /^[0-9a-f]{40}$/);
+    assert.equal(torex.body.commit?.message, 'Initial import');
+    assert.ok(Array.isArray(torex.body.warnings));
+    assert.equal(existsSync(workDir), false, 'the checkout is removed');
+    assert.equal(existsSync(`${workDir}.ploy`), false);
+
+    // Repository Dockerfile: its text comes back, the plan follows the branch head, and a stage that does not exist is a warning.
+    await commitFiles(repo, { Dockerfile: 'FROM node:22-alpine AS build\nWORKDIR /app\nCOPY . .\nFROM build AS runtime\nCMD ["node", "server.js"]\n' }, 'Add Dockerfile');
+    assert.equal((await h.call(h.tokens.developer, 'PATCH', `/api/applications/${web.id}`, { buildType: 'dockerfile', buildStage: 'missing' })).status, 200);
+    const dockerfile = await h.call<BuildPlanDto>(h.tokens.developer, 'POST', `/api/applications/${web.id}/build-plan`);
+    assert.equal(dockerfile.status, 200);
+    assert.equal(dockerfile.body.mode, 'dockerfile');
+    assert.equal(dockerfile.body.stack, 'dockerfile');
+    assert.match(dockerfile.body.dockerfile ?? '', /^FROM build AS runtime$/m);
+    assert.equal(dockerfile.body.commit?.message, 'Add Dockerfile');
+    assert.notEqual(dockerfile.body.commit?.sha, torex.body.commit?.sha);
+    assert.deepEqual(dockerfile.body.warnings, ['Stage "missing" was not found in Dockerfile']);
+    assert.equal((await h.call(h.tokens.developer, 'PATCH', `/api/applications/${web.id}`, { buildStage: 'runtime' })).status, 200);
+    assert.deepEqual((await h.call<BuildPlanDto>(h.tokens.developer, 'POST', `/api/applications/${web.id}/build-plan`)).body.warnings, []);
+
+    // Nixpacks: its own plan, with the start command the panel set reaching it through the environment.
+    const switched = await h.call<ApplicationDto>(h.tokens.developer, 'PATCH', `/api/applications/${web.id}`, { buildType: 'nixpacks', startCommand: 'node server.js --port 3000' });
+    assert.equal(switched.status, 200);
+    assert.equal(switched.body.buildType, 'nixpacks');
+    const nixpacks = await h.call<BuildPlanDto>(h.tokens.developer, 'POST', `/api/applications/${web.id}/build-plan`);
+    assert.equal(nixpacks.status, 200, JSON.stringify(nixpacks.body));
+    assert.deepEqual(nixpacks.body, { builder: 'nixpacks', mode: 'external', stack: 'nixpacks', label: 'Nixpacks · node · nodejs_22', dockerfile: null, commit: dockerfile.body.commit, warnings: ['warning: no lockfile found', 'The build stage only applies to Dockerfile builds'] });
+
+    // Builders whose CLI is missing cannot be chosen, on create or on edit; the error names the field and the reason.
+    for (const buildType of ['railpack', 'heroku', 'paketo']) {
+      const rejected = await h.call<ApiErrorBody>(h.tokens.developer, 'PATCH', `/api/applications/${web.id}`, { buildType });
+      assert.equal(rejected.status, 422, buildType);
+      assert.equal(rejected.body.error.code, 'validation_failed');
+      assert.deepEqual(rejected.body.error.issues?.map((issue) => [issue.path, issue.params?.reason]), [['buildType', 'builder_unavailable']]);
+    }
+    const created = await h.call<ApiErrorBody>(h.tokens.developer, 'POST', `/api/projects/${shop.id}/applications`, { name: 'Api', serverId: h.local.id, source: { type: 'git', url: 'https://git.example.uz/acme/api.git', branch: 'main' }, build: { buildType: 'railpack' } });
+    assert.equal(created.status, 422, JSON.stringify(created.body));
+    assert.deepEqual(created.body.error.issues?.map((issue) => [issue.path, issue.params?.reason]), [['buildType', 'builder_unavailable']]);
+    assert.equal(stores.applications.listForProject(shop.id).length, 2, 'nothing was created');
+    assert.equal(stores.applications.get(web.id)!.buildType, 'nixpacks');
+
+    // The new settings round-trip through the DTO and are validated.
+    const tuned = await h.call<ApplicationDto>(h.tokens.developer, 'PATCH', `/api/applications/${web.id}`, { buildType: 'torex', buildStage: null, buildpackBuilder: 'heroku/builder:22', systemPackages: 'ffmpeg, imagemagick' });
+    assert.equal(tuned.status, 200);
+    assert.deepEqual([tuned.body.buildType, tuned.body.buildStage, tuned.body.buildpackBuilder, tuned.body.systemPackages], ['torex', null, 'heroku/builder:22', 'ffmpeg, imagemagick']);
+    assert.equal((await h.call<ApiErrorBody>(h.tokens.developer, 'PATCH', `/api/applications/${web.id}`, { systemPackages: 'Bad Package!' })).body.error.issues?.[0]?.path, 'systemPackages');
+    assert.equal((await h.call<ApiErrorBody>(h.tokens.developer, 'PATCH', `/api/applications/${web.id}`, { buildStage: 'two words' })).body.error.issues?.[0]?.path, 'buildStage');
+    assert.equal((await h.call<ApiErrorBody>(h.tokens.developer, 'PATCH', `/api/applications/${web.id}`, { buildpackBuilder: 'Not An Image' })).body.error.issues?.[0]?.path, 'buildpackBuilder');
+    assert.equal((await h.call<ApiErrorBody>(h.tokens.developer, 'PATCH', `/api/applications/${web.id}`, { buildType: 'auto' })).status, 422, 'auto is gone');
+
+    // Only applications built from a repository have a plan; only developers of the team may ask.
+    const notBuilt = await h.call<ApiErrorBody>(h.tokens.developer, 'POST', `/api/applications/${image.id}/build-plan`);
+    assert.equal(notBuilt.status, 422);
+    assert.deepEqual(notBuilt.body.error.issues?.map((issue) => [issue.path, issue.params?.reason]), [['source', 'not_built']]);
+    assert.equal((await h.call(h.tokens.viewer, 'POST', `/api/applications/${web.id}/build-plan`)).status, 403);
+    assert.equal((await h.call(h.tokens.rival, 'POST', `/api/applications/${web.id}/build-plan`)).status, 404);
+
+    // One plan per application at a time.
+    const [first, second] = await Promise.all([
+      h.call<BuildPlanDto | ApiErrorBody>(h.tokens.developer, 'POST', `/api/applications/${web.id}/build-plan`),
+      h.call<BuildPlanDto | ApiErrorBody>(h.tokens.developer, 'POST', `/api/applications/${web.id}/build-plan`),
+    ]);
+    assert.deepEqual([first.status, second.status].sort(), [200, 409]);
+    const conflict = (first.status === 409 ? first : second).body as ApiErrorBody;
+    assert.equal(conflict.error.code, 'conflict');
+    assert.equal(conflict.error.params?.reason, 'plan_in_progress');
+    assert.equal((await h.call(h.tokens.developer, 'POST', `/api/applications/${web.id}/build-plan`)).status, 200, 'the lock is released afterwards');
+
+    // A branch that does not exist is a git error, and still leaves nothing behind.
+    stores.applications.update(web.id, { branch: 'nope' });
+    const missing = await h.call<ApiErrorBody>(h.tokens.developer, 'POST', `/api/applications/${web.id}/build-plan`);
+    assert.equal(missing.status, 502);
+    assert.equal(missing.body.error.code, 'git_error');
+    assert.equal(existsSync(workDir), false);
+  } finally {
+    process.env.PATH = previousPath;
+    await h.close();
+    rmSync(scratch, { recursive: true, force: true });
   }
 });

@@ -1,14 +1,15 @@
 /**
  * Projects, applications and deployments.
  */
-import type {
-  AppKind,
-  AppStatus,
-  BuildType,
-  DeployStrategy,
-  DeploymentStatus,
-  DeploymentTrigger,
-  SourceType,
+import {
+  DEFAULT_BUILD_TYPE,
+  type AppKind,
+  type AppStatus,
+  type BuildType,
+  type DeployStrategy,
+  type DeploymentStatus,
+  type DeploymentTrigger,
+  type SourceType,
 } from '@ploy/shared';
 import type { Database } from '../db/database.ts';
 import { newId, nowIso, slugify, uniqueSlug } from '../lib/ids.ts';
@@ -174,6 +175,12 @@ export interface ApplicationRecord {
   buildCommand: string | null;
   startCommand: string | null;
   outputDirectory: string | null;
+  /** Dockerfile builds: the stage to build (`--target`). */
+  buildStage: string | null;
+  /** Buildpack builds: the builder image, or the vendor's default when null. */
+  buildpackBuilder: string | null;
+  /** TorexBuilder: extra apt packages, as typed. */
+  systemPackages: string | null;
   port: number | null;
   replicas: number;
   cpuLimit: number | null;
@@ -238,6 +245,9 @@ function mapApplication(row: Row): ApplicationRecord {
     buildCommand: strOrNull(row.build_command),
     startCommand: strOrNull(row.start_command),
     outputDirectory: strOrNull(row.output_directory),
+    buildStage: strOrNull(row.build_stage),
+    buildpackBuilder: strOrNull(row.buildpack_builder),
+    systemPackages: strOrNull(row.system_packages),
     port: numOrNull(row.port),
     replicas: num(row.replicas),
     cpuLimit: numOrNull(row.cpu_limit),
@@ -289,6 +299,9 @@ const APP_COLUMNS = {
   buildCommand: { column: 'build_command', config: true },
   startCommand: { column: 'start_command', config: true },
   outputDirectory: { column: 'output_directory', config: true },
+  buildStage: { column: 'build_stage', config: true },
+  buildpackBuilder: { column: 'buildpack_builder', config: true },
+  systemPackages: { column: 'system_packages', config: true },
   port: { column: 'port', config: true },
   replicas: { column: 'replicas', config: true },
   cpuLimit: { column: 'cpu_limit', config: true },
@@ -318,7 +331,12 @@ export type NewApplication = Pick<
   ApplicationRecord,
   'projectId' | 'teamId' | 'serverId' | 'name' | 'kind' | 'sourceType' | 'githubInstallationId' | 'repository' | 'gitUrl' | 'branch' | 'image'
 > &
-  Partial<Pick<ApplicationRecord, 'buildType' | 'dockerfilePath' | 'rootDirectory' | 'installCommand' | 'buildCommand' | 'startCommand' | 'outputDirectory' | 'port' | 'templateId' | 'composeFile' | 'composePath'>> & {
+  Partial<
+    Pick<
+      ApplicationRecord,
+      'buildType' | 'dockerfilePath' | 'rootDirectory' | 'installCommand' | 'buildCommand' | 'startCommand' | 'outputDirectory' | 'buildStage' | 'buildpackBuilder' | 'systemPackages' | 'port' | 'templateId' | 'composeFile' | 'composePath'
+    >
+  > & {
     slug: string;
     sealedHookToken: string;
     /** Creates a pull request preview of `parentApplicationId`. */
@@ -338,10 +356,11 @@ export class ApplicationStore {
     this.db.run(
       `INSERT INTO applications (
          id, project_id, team_id, server_id, name, slug, kind, source_type, github_installation_id, repository, git_url, branch, image,
-         build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, port,
+         build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory,
+         build_stage, buildpack_builder, system_packages, port,
          deploy_hook_token, template_id, compose_file, compose_path, parent_application_id, preview_pr_number, preview_pr_title,
          preview_pr_url, preview_pr_author, preview_head_sha, config_updated_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.projectId,
       input.teamId,
@@ -355,13 +374,16 @@ export class ApplicationStore {
       input.gitUrl,
       input.branch,
       input.image,
-      input.buildType ?? 'auto',
+      input.buildType ?? DEFAULT_BUILD_TYPE,
       input.dockerfilePath ?? 'Dockerfile',
       input.rootDirectory ?? '',
       input.installCommand ?? null,
       input.buildCommand ?? null,
       input.startCommand ?? null,
       input.outputDirectory ?? null,
+      input.buildStage ?? null,
+      input.buildpackBuilder ?? null,
+      input.systemPackages ?? null,
       input.port ?? null,
       input.sealedHookToken,
       input.templateId ?? null,

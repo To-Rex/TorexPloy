@@ -38,6 +38,8 @@ export interface BuildRequest {
   timeoutMs: number;
   signal?: AbortSignal;
   onOutput: (line: string) => void;
+  /** Repository Dockerfiles: the stage to build (`--target`); the last one when null. */
+  buildStage?: string | null;
 }
 
 const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -77,6 +79,7 @@ export async function buildImage(request: BuildRequest): Promise<{ durationMs: n
     args.push('--file', dockerfile, '--secret', `id=ploy_env,src=${secretPath}`);
   } else {
     args.push('--file', join(request.contextDir, request.plan.dockerfilePath));
+    if (request.buildStage) args.push('--target', request.buildStage);
     for (const [key, value] of Object.entries(request.buildEnv)) {
       if (!ENV_NAME_RE.test(key)) continue;
       args.push('--build-arg', key);

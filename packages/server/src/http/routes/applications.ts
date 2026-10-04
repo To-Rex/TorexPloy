@@ -24,6 +24,8 @@ import {
   type SourceInput,
   type VariablesDto,
 } from '@ploy/shared';
+import { previewBuildPlan } from '../../build/plan.ts';
+import { requireBuilder } from '../../build/tools.ts';
 import { emit, type Context } from '../../context.ts';
 import { resolveAppEnv } from '../../deploy/env.ts';
 import { generateDomain } from '../../domains/generate.ts';
@@ -94,6 +96,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     if (server === undefined) throw new AppError('validation_failed', 'Unknown server', { issues: [{ path: 'serverId', code: 'custom', message: 'Unknown server' }] });
 
     const source = sourceColumns(auth.teamId, input.source);
+    if (input.build?.buildType !== undefined) requireBuilder(input.build.buildType);
     const hookToken = generateToken(24);
     const application = stores.applications.create({
       projectId: project.id,
@@ -131,6 +134,8 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const { source, previewEnv, ...rest } = input;
     const patch: ApplicationPatch = { ...rest };
     if (source !== undefined) Object.assign(patch, sourceColumns(auth.teamId, source));
+    // A builder whose CLI is not on this control plane cannot be chosen; the dashboard lists the ones that can.
+    if (patch.buildType !== undefined) requireBuilder(patch.buildType);
     // Previews deploy pull requests of a GitHub web application; a preview has none of its own.
     const previewable = application.parentApplicationId === null && (patch.kind ?? application.kind) === 'web' && (patch.sourceType ?? application.sourceType) === 'github';
     if (patch.previewsEnabled === true && !previewable) {
@@ -259,6 +264,9 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const application = loadApp(ctx, c, 'developer');
     return c.json({ publicKey: application.deployPublicKey });
   });
+
+  /** What a build of the branch head would do (stack, Dockerfile, warnings), without building. */
+  app.post('/api/applications/:id/build-plan', async (c) => c.json(await previewBuildPlan(ctx, loadApp(ctx, c, 'developer'))));
 
   // ------------------------------------------------------------- variables
 

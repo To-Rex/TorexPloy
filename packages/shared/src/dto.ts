@@ -70,6 +70,8 @@ export interface BootstrapDto {
   currentTeamId: string | null;
   features: {
     githubLogin: boolean;
+    /** Builders whose CLI is installed on the control plane (TorexBuilder, Dockerfile and static need none). */
+    builders: BuildType[];
   };
 }
 
@@ -323,6 +325,12 @@ export interface ApplicationDto {
   buildCommand: string | null;
   startCommand: string | null;
   outputDirectory: string | null;
+  /** Dockerfile builds: the stage to build (`--target`), or the final one. */
+  buildStage: string | null;
+  /** Buildpack builds: the builder image, or the vendor's default when null. */
+  buildpackBuilder: string | null;
+  /** TorexBuilder: extra apt packages, as typed. */
+  systemPackages: string | null;
   port: number | null;
   replicas: number;
   cpuLimit: number | null;
@@ -355,6 +363,23 @@ export interface ApplicationDto {
   pullRequest: { number: number; title: string; url: string; author: string | null } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** `POST /api/applications/:id/build-plan`: what a build of the current branch would do, without building. */
+export interface BuildPlanDto {
+  builder: BuildType;
+  /** `dockerfile`: the repository's file; `generated`: TorexBuilder's; `external`: the builder CLI decides. */
+  mode: 'dockerfile' | 'generated' | 'external';
+  /** Stack id such as `node`, `python`, `go`. */
+  stack: string;
+  /** Human-readable summary, e.g. "Next.js · pnpm · Node 22". */
+  label: string;
+  /** The Dockerfile that would be used (null for external builders). */
+  dockerfile: string | null;
+  /** Commit the plan was made from. */
+  commit: { sha: string; message: string } | null;
+  /** Things worth fixing before deploying. */
+  warnings: string[];
 }
 
 /** `GET /api/applications/:id/preview-settings`. */

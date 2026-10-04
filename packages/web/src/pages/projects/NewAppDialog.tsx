@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Boxes, Container, GitBranch, Workflow } from 'lucide-react';
-import { createApplicationSchema, type ApplicationDto, type CreateApplicationInput } from '@ploy/shared';
+import { createApplicationSchema, DEFAULT_BUILD_TYPE, type ApplicationDto, type BuildType, type CreateApplicationInput } from '@ploy/shared';
+import { BuilderPicker } from '../../components/Builders.tsx';
 import { CopyButton } from '../../components/Copy.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
 import { RepoPicker } from '../../components/RepoPicker.tsx';
@@ -33,6 +34,7 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
   const [serverId, setServerId] = useState('');
   const [kind, setKind] = useState<'web' | 'worker'>('web');
   const [rootDirectory, setRootDirectory] = useState('');
+  const [buildType, setBuildType] = useState<BuildType>(DEFAULT_BUILD_TYPE);
   const [port, setPort] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -61,6 +63,7 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
     setName('');
     setNameTouched(false);
     setRootDirectory('');
+    setBuildType(DEFAULT_BUILD_TYPE);
     setPort('');
     setErrors({});
     setCreated(null);
@@ -105,7 +108,7 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
       serverId,
       kind,
       source: sourceInput,
-      ...(rootDirectory.trim().length > 0 ? { build: { rootDirectory: rootDirectory.trim() } } : {}),
+      ...(source === 'image' ? {} : { build: { buildType, ...(rootDirectory.trim().length > 0 ? { rootDirectory: rootDirectory.trim() } : {}) } }),
       ...(port.trim().length > 0 ? { port: Number(port) } : {}),
     };
     const result = validate(m, createApplicationSchema, payload);
@@ -255,6 +258,14 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
             ))}
           </div>
         </div>
+
+        {source !== 'image' && (
+          <div className="field">
+            <span className="field__label">{m.build.title}</span>
+            <BuilderPicker compact value={buildType} onChange={setBuildType} />
+            {errors['build.buildType'] !== undefined && <p className="field__error">{errors['build.buildType']}</p>}
+          </div>
+        )}
 
         {source !== 'image' &&
           (advanced ? (

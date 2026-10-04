@@ -701,3 +701,119 @@
     }
   }
 }
+
+@layer components {
+  /* ------------------------------------------------------- builder picker */
+  .builders {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  }
+  .builders--compact {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+  .builder {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    color: var(--ink);
+    text-align: left;
+    transition:
+      border-color var(--dur-fast) var(--ease),
+      box-shadow var(--dur-fast) var(--ease);
+  }
+  .builder:hover {
+    border-color: var(--line-strong);
+  }
+  .builder[aria-checked='true'] {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 1px var(--ink) inset;
+  }
+  .builder[aria-disabled='true'] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .builder__mark {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--surface-sunken);
+    color: var(--ink-2);
+    flex: none;
+  }
+  .builder[aria-checked='true'] .builder__mark {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--ink-inverse);
+  }
+  .builder__mark svg {
+    width: 15px;
+    height: 15px;
+  }
+  .builder__text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .builder__name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    line-height: var(--lh-md);
+  }
+  .builder__tag {
+    padding: 1px 6px;
+    border-radius: var(--r-full);
+    background: var(--ok-soft);
+    color: var(--ok-ink);
+    font-size: 11px;
+    font-weight: 560;
+    line-height: 16px;
+  }
+  .builder__tag--off {
+    background: var(--muted);
+    color: var(--ink-3);
+  }
+  .builder__hint {
+    color: var(--ink-3);
+    font-size: var(--text-sm);
+    line-height: var(--lh-sm);
+  }
+
+  /* The build plan: what a deploy would do, shown before doing it. */
+  .plan {
+    display: grid;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--surface-sunken);
+  }
+  .plan__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .plan__label {
+    font-weight: 600;
+  }
+  .plan__warnings {
+    display: grid;
+    gap: 6px;
+    padding-left: 18px;
+    list-style: disc;
+    color: var(--work-ink);
+    font-size: var(--text-sm);
+    line-height: var(--lh-sm);
+  }
+}

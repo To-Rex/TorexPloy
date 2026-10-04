@@ -3,7 +3,8 @@
 Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy uni yigʻadi, uzilishsiz joylashtiradi va HTTPS bilan domen beradi.
 
 - **Joylashtirish:** GitHub App (push → avtomatik deploy, commit status), istalgan Git URL (yopiq repo uchun deploy kaliti) yoki Docker image.
-- **Yigʻish:** Dockerfile yoki stack’ni avtomatik aniqlash (Node/Bun, Next.js, Vite SPA, Python, Go, Rust, PHP, Ruby, Deno, Java, statik sayt). BuildKit kesh, parallel build’lar.
+- **Yigʻish usullari:** TorexBuilder, repodagi Dockerfile (`--target` bosqichi bilan), Nixpacks, Railpack, Heroku yoki Paketo buildpack’lari, statik sayt. Sirlar buyruq qatoriga tushmaydi, build maqsad serverda boʻladi. Deploy’dan oldin yigʻish rejasini (stack, buyruqlar, Dockerfile, ogohlantirishlar) koʻrish mumkin.
+- **TorexBuilder:** stack’ni oʻzi aniqlab, kichik va xavfsiz image yigʻadi. Node/Bun (Next.js, Nuxt, SvelteKit, Remix, Astro, Angular, NestJS, Vite va boshqa SPA’lar, monorepo’lar), Python (Django, FastAPI, Flask, Celery), Go, Rust, PHP/Laravel, Ruby/Rails, Java (Spring Boot, Quarkus), Clojure, .NET, Elixir/Phoenix, Gleam, Dart/Flutter, Swift, Crystal, Nim, Haskell, Deno, statik sayt. Versiyalar `.tool-versions`, `.nvmrc`, `go.mod` kabi fayllardan olinadi; `torexploy.json` orqali buyruqlar, versiyalar va apt paketlar beriladi; dev bogʻliqliklar runtime’ga oʻtmaydi, konteyner root’siz ishlaydi.
 - **Ishlash:** uzilishsiz (rolling) yoki recreate strategiyasi, health-check, replikalar, avtomatik qayta ishga tushirish, bir bosishda rollback, self-heal.
 - **Tarmoq:** Caddy orqali avtomatik HTTPS (Let’s Encrypt), DNS va sertifikat holatini real tekshirish, avtomatik domenlar.
 - **Servislar:** PostgreSQL, MySQL, MariaDB, MongoDB, Redis, RabbitMQ, MinIO, ClickHouse. Ilovaga ulash, zaxira nusxa va tiklash.
