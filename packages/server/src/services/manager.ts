@@ -25,7 +25,7 @@ import { S3Client } from '../lib/s3.ts';
 import { createTar, tarSingleFile, type TarEntry } from '../lib/tar.ts';
 import type { BackupRecord, ProjectRecord, ServiceRecord } from '../store/index.ts';
 import { APP_CAPABILITIES } from '../deploy/deployer.ts';
-import { catalogEntry } from './catalog.ts';
+import { catalogEntry, credentialFields } from './catalog.ts';
 
 const HEALTH_TIMEOUT_MS = 4 * 60_000;
 
@@ -54,8 +54,26 @@ export class ServiceManager {
       });
     }
     const id = newId('svc');
+    // Generated credentials, with whatever the person chose on top; an engine without the field refuses it.
+    const credentials = entry.credentials();
+    const supported = credentialFields(input.type);
+    for (const [field, value] of Object.entries(input.credentials ?? {})) {
+      if (value === undefined) continue;
+      if (!supported.includes(field as (typeof supported)[number])) {
+        throw new AppError('validation_failed', `${entry.label} has no ${field}`, {
+          issues: [{ path: `credentials.${field}`, code: 'custom', message: `${entry.label} does not use this field`, params: { reason: 'unsupported' } }],
+        });
+      }
+      credentials[field as keyof typeof credentials] = value;
+    }
+    if (input.publicPort !== undefined) {
+      if ([22, 80, 443].includes(input.publicPort)) {
+        throw new AppError('validation_failed', 'This port is reserved', { issues: [{ path: 'publicPort', code: 'custom', message: 'Reserved port' }] });
+      }
+      if (stores.services.isPublicPortTaken(input.serverId, input.publicPort, id)) throw new AppError('conflict', 'Another service already uses this public port', { params: { reason: 'port_taken' } });
+    }
     const slug = stores.projects.uniqueResourceSlug(project.id, input.name, input.type);
-    const service = stores.services.create({
+    const created = stores.services.create({
       id,
       projectId: project.id,
       teamId: project.teamId,
@@ -64,12 +82,13 @@ export class ServiceManager {
       slug,
       type: input.type,
       version,
-      credentials: entry.credentials(),
+      credentials,
       internalPort: entry.port,
       containerName: serviceContainer({ id, slug }),
       volumeName: serviceVolume({ id }),
-      memoryLimitMb: entry.memoryMb,
+      memoryLimitMb: input.memoryLimitMb ?? entry.memoryMb,
     });
+    const service = input.publicPort === undefined ? created : stores.services.update(id, { publicPort: input.publicPort });
     void this.provision(service.id);
     return service;
   }

@@ -446,11 +446,32 @@ export type UpdateCronJobInput = z.infer<typeof updateCronJobSchema>;
 // Database services
 // ---------------------------------------------------------------------------
 
+/** Identifiers every engine accepts (MySQL caps user names at 32 characters). */
+export const SERVICE_USERNAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/;
+export const SERVICE_DATABASE_RE = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
+/** Passwords travel through environment variables, URLs and quoted shell arguments, so quotes, spaces, `$`, backticks and backslashes stay out. */
+export const SERVICE_PASSWORD_RE = /^[A-Za-z0-9!#%^*()_+=.,:;~@-]{8,128}$/;
+
+/** Credentials chosen by hand; anything left out is generated. Fields an engine lacks (a Redis user name) are refused. */
+export const serviceCredentialsInputSchema = z
+  .object({
+    username: z.string().trim().regex(SERVICE_USERNAME_RE),
+    password: z.string().regex(SERVICE_PASSWORD_RE),
+    database: z.string().trim().regex(SERVICE_DATABASE_RE),
+    rootPassword: z.string().regex(SERVICE_PASSWORD_RE),
+  })
+  .partial();
+export type ServiceCredentialsInput = z.infer<typeof serviceCredentialsInputSchema>;
+
 export const createServiceSchema = z.object({
   type: z.enum(SERVICE_TYPES),
   name: nameSchema,
   version: z.string().trim().max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/).optional(),
   serverId: z.string().min(1).max(64),
+  credentials: serviceCredentialsInputSchema.optional(),
+  /** Server port opened to the outside from the start; omitted keeps the service private. */
+  publicPort: portSchema.optional(),
+  memoryLimitMb: z.int().min(LIMITS.memoryMbMin).max(LIMITS.memoryMbMax).optional(),
 });
 export type CreateServiceInput = z.infer<typeof createServiceSchema>;
 

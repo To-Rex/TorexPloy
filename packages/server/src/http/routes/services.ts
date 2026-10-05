@@ -8,7 +8,7 @@ import { createServiceSchema, METRIC_RANGE_WINDOWS, SERVICE_TYPES, updateService
 import { emit, type Context } from '../../context.ts';
 import { nextRunFor } from '../../lib/cron.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
-import { CATALOG, catalogEntry } from '../../services/catalog.ts';
+import { CATALOG, credentialFields, catalogEntry } from '../../services/catalog.ts';
 import type { ServiceRecord } from '../../store/index.ts';
 import { audit, body, logWindow, query, requireTeam, type Ctx, type Env } from '../core.ts';
 import { backupDto, serviceDto } from '../dto.ts';
@@ -34,6 +34,8 @@ export function registerServiceRoutes(app: Hono<Env>, ctx: Context): void {
       defaultVersion: CATALOG[type].defaultVersion,
       port: CATALOG[type].port,
       supportsBackup: CATALOG[type].backup !== null,
+      memoryMb: CATALOG[type].memoryMb,
+      credentialFields: credentialFields(type),
     }));
     return c.json(entries);
   });

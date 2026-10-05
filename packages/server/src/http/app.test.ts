@@ -30,6 +30,8 @@ import {
   type ProjectDto,
   type RegistryDto,
   type ServerDto,
+  type ServiceCatalogEntryDto,
+  type ServiceDto,
   type TeamCronJobDto,
   type TeamDeploymentDto,
   type UpdateStatusDto,
@@ -278,6 +280,52 @@ async function harness(options: { docker?: boolean; config?: Partial<AppConfig> 
     },
   };
 }
+
+test('POST /api/projects/:id/services takes hand-chosen credentials, a public port and a memory limit, and refuses what the engine lacks', async () => {
+  const h = await harness();
+  try {
+    const { stores } = h.ctx;
+    const shop = stores.projects.create(h.teamA.id, 'Shop', null);
+    const base = { serverId: h.local.id };
+    const made = await h.call<ServiceDto>(h.tokens.developer, 'POST', `/api/projects/${shop.id}/services`, {
+      ...base,
+      type: 'mariadb',
+      name: 'Orders',
+      credentials: { username: 'orders_app', password: 'Secret-Pass.123', database: 'orders', rootPassword: 'Root-Pass.123' },
+      publicPort: 3307,
+      memoryLimitMb: 768,
+    });
+    assert.equal(made.status, 201, JSON.stringify(made.body));
+    const record = stores.services.get(made.body.id)!;
+    assert.deepEqual(record.credentials, { username: 'orders_app', password: 'Secret-Pass.123', database: 'orders', rootPassword: 'Root-Pass.123' });
+    assert.deepEqual([record.publicPort, record.memoryLimitMb], [3307, 768]);
+
+    // Anything left out is generated as before.
+    const partial = await h.call<ServiceDto>(h.tokens.developer, 'POST', `/api/projects/${shop.id}/services`, { ...base, type: 'postgres', name: 'Catalog', credentials: { password: 'Only-Pass.123' } });
+    assert.equal(partial.status, 201);
+    const generated = stores.services.get(partial.body.id)!;
+    assert.equal(generated.credentials.password, 'Only-Pass.123');
+    assert.match(generated.credentials.username!, /^u[a-z0-9]+$/);
+    assert.equal(generated.credentials.database, 'app');
+    assert.equal(generated.publicPort, null);
+
+    const refused = async (body: Record<string, unknown>) => (await h.call<ApiErrorBody>(h.tokens.developer, 'POST', `/api/projects/${shop.id}/services`, { ...base, ...body })).body.error;
+    assert.equal((await refused({ type: 'redis', name: 'Cache', credentials: { username: 'nope', password: 'Cache-Pass.123' } })).issues?.[0]?.path, 'credentials.username', 'Redis has no user name');
+    assert.equal((await refused({ type: 'postgres', name: 'Weak', credentials: { password: 'short' } })).code, 'validation_failed');
+    assert.equal((await refused({ type: 'postgres', name: 'Spaces', credentials: { password: 'has space in it' } })).code, 'validation_failed');
+    assert.equal((await refused({ type: 'postgres', name: 'Reserved', publicPort: 80 })).issues?.[0]?.path, 'publicPort');
+    assert.equal((await refused({ type: 'postgres', name: 'Taken', publicPort: 3307 })).code, 'conflict');
+    assert.equal(stores.services.listForProject(shop.id).length, 2, 'refused requests create nothing');
+    // The catalog tells the dashboard which fields each engine has.
+    const catalog = await h.call<ServiceCatalogEntryDto[]>(h.tokens.viewer, 'GET', '/api/catalog/services');
+    assert.deepEqual(catalog.body.find((entry) => entry.type === 'mysql')?.credentialFields, ['username', 'password', 'database', 'rootPassword']);
+    assert.deepEqual(catalog.body.find((entry) => entry.type === 'redis')?.credentialFields, ['password']);
+    // Provisioning fails fast against the fake daemon; let it settle before the database closes.
+    for (let i = 0; i < 300 && stores.db.all("SELECT 1 FROM services WHERE status = 'provisioning'").length > 0; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+  } finally {
+    await h.close();
+  }
+});
 
 test('deployment history: one finished deployment can be deleted, and a clean-up keeps the active and the newest', async () => {
   const h = await harness();

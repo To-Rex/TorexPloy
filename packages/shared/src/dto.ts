@@ -650,6 +650,8 @@ export interface TeamCronJobDto extends CronJobDto {
 // Database services
 // ---------------------------------------------------------------------------
 
+export type ServiceCredentialField = 'username' | 'password' | 'database' | 'rootPassword';
+
 export interface ServiceCatalogEntryDto {
   type: ServiceType;
   label: string;
@@ -657,6 +659,10 @@ export interface ServiceCatalogEntryDto {
   defaultVersion: string;
   port: number;
   supportsBackup: boolean;
+  /** Default memory ceiling of a new service, in MB. */
+  memoryMb: number;
+  /** Credentials this engine has, and so the ones that can be chosen by hand when creating it. */
+  credentialFields: ServiceCredentialField[];
 }
 
 export interface ServiceDto {

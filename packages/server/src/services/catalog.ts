@@ -10,7 +10,7 @@
  * process through environment variables, so they do not show up in `ps` on
  * the host.
  */
-import type { ServiceType } from '@ploy/shared';
+import type { ServiceCredentialField, ServiceType } from '@ploy/shared';
 import { generateToken } from '../lib/crypto.ts';
 import { randomId } from '../lib/ids.ts';
 
@@ -377,6 +377,17 @@ export const CATALOG: Record<ServiceType, CatalogEntry> = {
 
 export function catalogEntry(type: ServiceType): CatalogEntry {
   return CATALOG[type];
+}
+
+/** The credential fields an engine actually has (Redis has no user name or database; MySQL adds a root password). */
+export function credentialFields(type: ServiceType): ServiceCredentialField[] {
+  const sample = CATALOG[type].credentials();
+  const fields: ServiceCredentialField[] = [];
+  if (sample.username !== null) fields.push('username');
+  fields.push('password');
+  if (sample.database !== null) fields.push('database');
+  if (sample.rootPassword !== undefined) fields.push('rootPassword');
+  return fields;
 }
 
 /** Variables injected into an application linked to a service, with an optional prefix (`CACHE_` → `CACHE_REDIS_URL`). */
