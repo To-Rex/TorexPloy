@@ -58,6 +58,10 @@ export const EXTERNAL_BUILD_TYPES: readonly BuildType[] = ['nixpacks', 'railpack
 /** Debian/Ubuntu package names, as `apt-get install` accepts them. */
 export const APT_PACKAGE_RE = /^[a-z0-9][a-z0-9+.-]{0,99}$/;
 
+/** Steps of a self-update, in order: get the new build, make the image, swap the container, see it answer. */
+export const UPDATE_STAGES = ['fetch', 'build', 'replace', 'health', 'done'] as const;
+export type UpdateStage = (typeof UPDATE_STAGES)[number];
+
 export const DEPLOY_STRATEGIES = ['rolling', 'recreate'] as const;
 export type DeployStrategy = (typeof DEPLOY_STRATEGIES)[number];
 

@@ -20,7 +20,9 @@ import { join } from 'node:path';
 import { DockerClient, type ContainerInspect } from './docker/client.ts';
 import { errorMessage } from './lib/errors.ts';
 import { runProcess } from './lib/process.ts';
+import { buildStepFraction, formatProgress, stagePercent } from './updates/progress.ts';
 import { replaceContainer } from './updates/replace.ts';
+import type { UpdateStage } from '@ploy/shared';
 
 interface UpdaterEnv {
   target: string;
@@ -38,6 +40,13 @@ const HEALTH_PATH = '/api/health';
 
 function log(line: string): void {
   console.log(`${new Date().toISOString()} ${line}`);
+}
+
+/** The bar never moves backwards: a later, lower estimate keeps the last value. */
+let reported = 0;
+function progress(stage: UpdateStage, percent: number, message: string): void {
+  reported = Math.max(reported, Math.round(percent));
+  log(formatProgress({ stage, percent: reported, message }));
 }
 
 function readEnv(env: NodeJS.ProcessEnv): UpdaterEnv {
@@ -76,16 +85,21 @@ function splitTag(reference: string): { repository: string; tag: string } {
 }
 
 /** Run a command, streaming its output line by line; a non-zero exit is an error carrying the last lines. */
-async function run(command: string, args: string[], options: { cwd?: string; timeoutMs?: number; env?: Record<string, string> } = {}): Promise<string> {
+async function run(command: string, args: string[], options: { cwd?: string; timeoutMs?: number; env?: Record<string, string>; onLine?: (line: string) => void } = {}): Promise<string> {
   log(`$ ${command} ${args.join(' ')}`);
   let pending = '';
+  const { onLine, ...processOptions } = options;
   const result = await runProcess(command, args, {
-    ...options,
+    ...processOptions,
     onOutput: (chunk) => {
       pending += chunk;
       const lines = pending.split('\n');
       pending = lines.pop() ?? '';
-      for (const line of lines) if (line.trim().length > 0) log(`  ${line}`);
+      for (const line of lines) {
+        if (line.trim().length === 0) continue;
+        log(`  ${line}`);
+        onLine?.(line);
+      }
     },
   });
   if (pending.trim().length > 0) log(`  ${pending}`);
@@ -102,8 +116,10 @@ async function buildFromSource(env: UpdaterEnv): Promise<string> {
   const dir = join(tmpdir(), 'src');
   rmSync(dir, { recursive: true, force: true });
   const git = { GIT_TERMINAL_PROMPT: '0' };
+  progress('fetch', 1, `Cloning ${env.repository}@${env.branch}`);
   await run('git', ['clone', '--depth', '1', '--branch', env.branch, `https://github.com/${env.repository}.git`, dir], { env: git, timeoutMs: 5 * 60_000 });
   let head = await run('git', ['-C', dir, 'rev-parse', 'HEAD'], { env: git });
+  progress('fetch', 8, `Fetched ${head.slice(0, 7)}`);
   if (env.commit !== null && !head.startsWith(env.commit)) {
     // The branch moved on since the administrator approved this commit: build what was approved, not what is newest.
     log(`${env.branch} is now at ${head.slice(0, 7)}; fetching the approved commit ${env.commit.slice(0, 7)}`);
@@ -113,6 +129,7 @@ async function buildFromSource(env: UpdaterEnv): Promise<string> {
     if (!head.startsWith(env.commit)) throw new Error(`Checked out ${head.slice(0, 7)} but ${env.commit.slice(0, 7)} was requested`);
   }
   log(`Building ${env.tag} from ${env.repository}@${head.slice(0, 7)}`);
+  progress('build', stagePercent('build', 0), `Building ${env.tag}`);
   await run(
     'docker',
     [
@@ -131,8 +148,17 @@ async function buildFromSource(env: UpdaterEnv): Promise<string> {
       `PLOY_BUILT_AT=${new Date().toISOString()}`,
       dir,
     ],
-    { env: { DOCKER_HOST: `unix://${env.socket}`, DOCKER_BUILDKIT: '1' }, timeoutMs: BUILD_TIMEOUT_MS },
+    {
+      env: { DOCKER_HOST: `unix://${env.socket}`, DOCKER_BUILDKIT: '1' },
+      timeoutMs: BUILD_TIMEOUT_MS,
+      // BuildKit numbers its steps (`#12 [stage 3/9] RUN …`): each one moves the bar within the build stage.
+      onLine: (line) => {
+        const fraction = buildStepFraction(line);
+        if (fraction !== null) progress('build', stagePercent('build', fraction * 0.95), line.trim().slice(0, 140));
+      },
+    },
   );
+  progress('build', stagePercent('build', 0.98), `Built ${env.tag}`);
   rmSync(dir, { recursive: true, force: true });
   return head;
 }
@@ -141,7 +167,17 @@ async function buildFromSource(env: UpdaterEnv): Promise<string> {
 async function pullImage(docker: DockerClient, env: UpdaterEnv): Promise<string | null> {
   const image = env.image!;
   log(`Pulling ${image}`);
-  await docker.pullImage(image, (line) => log(`  ${line}`));
+  progress('fetch', 5, `Pulling ${image}`);
+  // Layer counts are unknown up front: every finished layer nudges the bar through the build stage.
+  let layers = 0;
+  await docker.pullImage(image, (line) => {
+    log(`  ${line}`);
+    if (/Pull complete|Already exists|Download complete/.test(line)) {
+      layers += 1;
+      progress('build', Math.min(stagePercent('build', 0.95), stagePercent('build', layers / 12)), line.trim().slice(0, 140));
+    }
+  });
+  progress('build', stagePercent('build', 0.98), `Pulled ${image}`);
   const { repository, tag } = splitTag(env.tag);
   await docker.tagImage(image, repository, tag);
   const inspect = await docker.inspectImage(image);
@@ -179,8 +215,21 @@ async function main(): Promise<void> {
   try {
     const version = await docker.negotiate();
     log(`Docker ${version.Version} (API ${version.ApiVersion})`);
+    progress('fetch', 0, 'Starting');
     const built = env.mode === 'source' ? await buildFromSource(env) : await pullImage(docker, env);
-    await replaceContainer(docker, { name: env.target, image: env.tag, probe: (inspect) => probeHealth(env.target, inspect), log });
+    progress('replace', stagePercent('replace', 0), `Replacing ${env.target}`);
+    await replaceContainer(docker, {
+      name: env.target,
+      image: env.tag,
+      probe: (inspect) => probeHealth(env.target, inspect),
+      log: (line) => {
+        log(line);
+        if (line.startsWith('Stopping ')) progress('replace', stagePercent('replace', 0.5), line);
+        else if (line.startsWith('Starting ')) progress('health', stagePercent('health', 0), line);
+        else if (line.startsWith('Rolling back')) progress('health', reported, line);
+      },
+    });
+    progress('done', 100, `Updated to ${built ?? env.tag}`);
     log(`✓ Updated to ${built ?? env.tag}`);
   } finally {
     docker.close();

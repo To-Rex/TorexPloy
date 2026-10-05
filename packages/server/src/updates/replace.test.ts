@@ -387,7 +387,7 @@ test('the updater container: launched from the running image with the socket, th
     const self: SelfContainer = { id: control.Id, name: 'ploy-control', image: 'torexploy:latest', network: 'ploy', inspect: h.daemon.inspect(control) };
     const config = { updates: { enabled: true, repository: 'To-Rex/TorexPloy', branch: 'main', image: null, container: 'ploy-control', intervalMs: 1 } } as AppConfig;
 
-    assert.deepEqual(await updaterState(h.docker), { state: 'idle', error: null });
+    assert.deepEqual(await updaterState(h.docker), { state: 'idle', error: null, progress: null });
 
     // A failed run from earlier: its last lines are the error, and it is replaced by the next launch.
     const failed = h.daemon.add(UPDATER_CONTAINER, { Running: false, Status: 'exited', ExitCode: 1, Config: { Image: 'torexploy:latest', Labels: {}, Env: [] }, HostConfig: { Memory: 0, NanoCpus: 0 } });
@@ -419,7 +419,7 @@ test('the updater container: launched from the running image with the socket, th
     assert.equal(host.AutoRemove, false);
     assert.deepEqual(launched.spec.NetworkingConfig, { EndpointsConfig: { ploy: {} } });
     assert.equal(h.daemon.find(id)?.Running, true);
-    assert.deepEqual(await updaterState(h.docker), { state: 'updating', error: null });
+    assert.deepEqual(await updaterState(h.docker), { state: 'updating', error: null, progress: null });
 
     // Image mode names the prebuilt image and derives the tag from the running reference, digest dropped.
     h.daemon.containers.delete(id);
@@ -435,7 +435,7 @@ test('the updater container: launched from the running image with the socket, th
     done.Running = false;
     done.Status = 'exited';
     done.ExitCode = 0;
-    assert.deepEqual(await updaterState(h.docker), { state: 'idle', error: null });
+    assert.deepEqual(await updaterState(h.docker), { state: 'idle', error: null, progress: null });
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal(h.daemon.find(UPDATER_CONTAINER), undefined);
   } finally {

@@ -6,9 +6,11 @@
  * carries node, git, the docker CLI and buildx — and that container does the
  * work (`updater.ts`). Only configuration reaches it: no database, no secrets.
  */
+import type { UpdateProgressDto } from '@ploy/shared';
 import type { DockerClient } from '../docker/client.ts';
 import { LABEL_MANAGED, LABEL_ROLE } from '../docker/naming.ts';
 import type { AppConfig } from '../lib/config.ts';
+import { latestProgress } from './progress.ts';
 import type { SelfContainer } from './self.ts';
 
 export const UPDATER_CONTAINER = 'ploy-updater';
@@ -16,10 +18,14 @@ export const UPDATER_CONTAINER = 'ploy-updater';
 const DEFAULT_TAG = 'torexploy:latest';
 /** Lines of updater output shown when it failed. */
 const ERROR_TAIL = 15;
+/** Lines searched for the latest progress marker. */
+const PROGRESS_TAIL = 120;
 
 export interface UpdaterState {
   state: 'idle' | 'updating' | 'failed';
   error: string | null;
+  /** The last step the updater reported, while it runs or where it stopped. */
+  progress: UpdateProgressDto | null;
 }
 
 /** Docker's own networks take no aliases and need no endpoint config. */
@@ -81,14 +87,22 @@ async function tail(docker: DockerClient, id: string, lines: number): Promise<st
  */
 export async function updaterState(docker: DockerClient): Promise<UpdaterState> {
   const inspect = await docker.inspectContainer(UPDATER_CONTAINER);
-  if (inspect === null) return { state: 'idle', error: null };
-  if (inspect.State.Running || inspect.State.Restarting || inspect.State.Status === 'created') return { state: 'updating', error: null };
+  if (inspect === null) return { state: 'idle', error: null, progress: null };
+  if (inspect.State.Running || inspect.State.Restarting || inspect.State.Status === 'created') {
+    const output = await tail(docker, inspect.Id, PROGRESS_TAIL).catch(() => '');
+    return { state: 'updating', error: null, progress: latestProgress(output) };
+  }
   if (inspect.State.ExitCode !== 0) {
-    const output = await tail(docker, inspect.Id, ERROR_TAIL).catch(() => '');
-    return { state: 'failed', error: output.length > 0 ? output : `The updater exited with code ${inspect.State.ExitCode}` };
+    const output = await tail(docker, inspect.Id, PROGRESS_TAIL).catch(() => '');
+    const shown = output
+      .split('\n')
+      .filter((line) => !line.includes('::progress '))
+      .slice(-ERROR_TAIL)
+      .join('\n');
+    return { state: 'failed', error: shown.length > 0 ? shown : `The updater exited with code ${inspect.State.ExitCode}`, progress: latestProgress(output) };
   }
   void docker.removeContainer(inspect.Id, { force: true }).catch(() => undefined);
-  return { state: 'idle', error: null };
+  return { state: 'idle', error: null, progress: null };
 }
 
 /** Start the updater for `commit`, replacing a finished one. Returns the container id. */

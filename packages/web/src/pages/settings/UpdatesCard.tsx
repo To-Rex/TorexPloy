@@ -12,7 +12,7 @@ import { keys, useUpdateStatus } from '../../lib/queries.ts';
 import { SettingsSection } from './SettingsLayout.tsx';
 
 export function UpdatesCard() {
-  const { m } = useI18n();
+  const { m, t } = useI18n();
   const u = m.updates;
   const status = useUpdateStatus(true);
   const [open, setOpen] = useState(false);
@@ -20,7 +20,19 @@ export function UpdatesCard() {
   const data = status.data;
   const tone = data === undefined ? 'idle' : data.state === 'updating' ? 'work' : data.state === 'failed' ? 'bad' : data.available ? 'work' : 'ok';
   const label =
-    data === undefined ? '' : data.state === 'updating' ? u.updatingTitle : data.state === 'failed' ? u.failedTitle : data.available ? u.available : data.checkError !== null ? u.checkFailedShort : u.upToDate;
+    data === undefined
+      ? ''
+      : data.state === 'updating'
+        ? data.progress === null
+          ? u.updatingTitle
+          : `${u.stages[data.progress.stage]} · ${t(u.percent, { percent: data.progress.percent })}`
+        : data.state === 'failed'
+          ? u.failedTitle
+          : data.available
+            ? u.available
+            : data.checkError !== null
+              ? u.checkFailedShort
+              : u.upToDate;
   return (
     <SettingsSection
       title={u.title}

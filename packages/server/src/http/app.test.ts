@@ -218,6 +218,9 @@ async function harness(options: { docker?: boolean; config?: Partial<AppConfig> 
     return { status: response.status, body: (await response.json()) as T };
   };
 
+  /** A request whose body is not JSON (event streams, downloads). */
+  const raw = async (token: string, method: string, path: string): Promise<Response> => app.request(path, { method, headers: { authorization: `Bearer ${token}` } }, BINDINGS);
+
   /** Connect a GitHub App (installation 42 on team A) whose webhooks are signed with WEBHOOK_SECRET. */
   const connectGithub = (): void => {
     stores.settings.setRaw(
@@ -268,6 +271,7 @@ async function harness(options: { docker?: boolean; config?: Partial<AppConfig> 
     application,
     githubApp,
     call,
+    raw,
     connectGithub,
     webhook,
     close: async () => {
@@ -1154,11 +1158,34 @@ test('updates: administrators see the status, only the instance administrator ap
     assert.equal(ready.body.canApply, true);
     assert.equal((await h.call<UpdateStatusDto>(h.tokens.owner, 'GET', '/api/updates')).body.canApply, false);
 
-    // An updater already running: 409, and the status says so.
-    h.inspects.set('ploy-updater', fakeInspect('ploy-updater', { running: true }));
+    // An updater already running: 409, the status says so and carries the last reported step.
+    const live = fakeInspect('ploy-updater', { running: true });
+    h.inspects.set('ploy-updater', live);
+    h.logs.set(
+      String(live.Id),
+      [
+        '2026-10-05T10:00:00.000Z 2026-10-05T10:00:00.000Z TorexPloy updater: source mode',
+        '2026-10-05T10:00:01.000Z 2026-10-05T10:00:01.000Z ::progress {"stage":"fetch","percent":1,"message":"Cloning To-Rex/TorexPloy@main"}',
+        '2026-10-05T10:00:20.000Z 2026-10-05T10:00:20.000Z   #7 [stage-1 3/9] RUN npm ci',
+        '2026-10-05T10:00:20.000Z 2026-10-05T10:00:20.000Z ::progress {"stage":"build","percent":34,"message":"#7 [stage-1 3/9] RUN npm ci"}',
+        '',
+      ].join('\n'),
+    );
     const busy = await h.call<UpdateStatusDto>(h.tokens.instanceAdmin, 'GET', '/api/updates');
     assert.equal(busy.body.state, 'updating');
     assert.equal(busy.body.canApply, false);
+    assert.deepEqual(busy.body.progress, { stage: 'build', percent: 34, message: '#7 [stage-1 3/9] RUN npm ci' });
+    // The live log: plain lines keep their text, markers become structured progress, and the stream says how it ended.
+    assert.equal((await h.raw(h.tokens.viewer, 'GET', '/api/updates/log')).status, 403);
+    const streamed = await h.raw(h.tokens.owner, 'GET', '/api/updates/log');
+    assert.equal(streamed.status, 200);
+    const events = (await streamed.text()).split('\n\n').filter((block) => block.includes('event: line')).map((block) => JSON.parse(block.split('\ndata: ')[1]!) as { seq: number; text: string; progress?: { stage: string; percent: number } });
+    assert.equal(events.length, 4);
+    assert.equal(events[0]!.text, 'TorexPloy updater: source mode', 'both timestamp prefixes are stripped');
+    assert.equal(events[0]!.progress, undefined);
+    assert.deepEqual(events[3]!.progress, { stage: 'build', percent: 34, message: '#7 [stage-1 3/9] RUN npm ci' });
+    assert.equal(events[3]!.text, '▸ #7 [stage-1 3/9] RUN npm ci');
+    assert.match(await (await h.raw(h.tokens.owner, 'GET', '/api/updates/log')).text(), /event: end\ndata: \{"status":"running"\}/);
     const conflict = await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
     assert.equal(conflict.status, 409);
     assert.equal(conflict.body.error.code, 'update_in_progress');
@@ -1171,7 +1198,9 @@ test('updates: administrators see the status, only the instance administrator ap
     assert.equal(broken.body.state, 'failed');
     assert.equal(broken.body.error?.split('\n').length, 15);
     assert.match(broken.body.error ?? '', /step 20$/);
+    assert.equal(broken.body.progress, null, 'an old updater without markers reports no step');
     assert.equal(broken.body.canApply, true);
+    assert.match(await (await h.raw(h.tokens.instanceAdmin, 'GET', '/api/updates/log')).text(), /"status":"failed"/);
 
     const applied = await h.call<{ ok: boolean }>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
     assert.equal(applied.status, 202, JSON.stringify(applied.body));
@@ -1201,8 +1230,9 @@ test('updates: administrators see the status, only the instance administrator ap
     assert.equal(running.body.state, 'updating', 'the updater that was just started is running');
     assert.equal((await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply')).status, 409);
 
-    // Up to date: nothing to apply.
+    // Up to date: nothing to apply, and no updater log to stream.
     h.inspects.delete('ploy-updater');
+    assert.equal((await h.raw(h.tokens.instanceAdmin, 'GET', '/api/updates/log')).status, 404);
     h.ctx.updates = new UpdateChecker(h.ctx, { fetch: github(A), self: { inDocker: true, hostname: 'c0ffee000001', cacheMs: 0 } });
     const current = await h.call<UpdateStatusDto>(h.tokens.instanceAdmin, 'POST', '/api/updates/check');
     assert.equal(current.body.available, false);

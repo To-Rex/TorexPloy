@@ -29,6 +29,7 @@ import type {
   TemplateCategory,
   Theme,
   TlsStatus,
+  UpdateStage,
 } from './constants.ts';
 
 export interface Page<T> {
@@ -90,6 +91,15 @@ export interface BootstrapDto {
 export type UpdateMode = 'source' | 'image' | 'manual';
 export type UpdateState = 'idle' | 'checking' | 'updating' | 'failed';
 
+/** How far a running (or just finished) update got, as the updater last reported. */
+export interface UpdateProgressDto {
+  stage: UpdateStage;
+  /** 0–100 across the whole update. */
+  percent: number;
+  /** What is happening right now (`RUN npm ci`, `Starting ploy-control`). */
+  message: string;
+}
+
 export interface UpdateCommitDto {
   sha: string;
   message: string;
@@ -118,6 +128,8 @@ export interface UpdateStatusDto {
   state: UpdateState;
   /** The updater's last output when it failed. */
   error: string | null;
+  /** The updater's last reported step while updating, or where a failed run stopped. */
+  progress: UpdateProgressDto | null;
   /** Only the instance administrator can start an update, and only when the panel runs in Docker. */
   canApply: boolean;
 }

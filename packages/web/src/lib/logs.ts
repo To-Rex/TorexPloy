@@ -6,12 +6,14 @@
  * keeps memory bounded on very long runtime streams.
  */
 import { useEffect, useRef, useState } from 'react';
-import type { LogLine } from '@ploy/shared';
+import type { LogLine, UpdateProgressDto } from '@ploy/shared';
 
 export interface StreamLine extends LogLine {
   replica?: number;
   /** Compose service that printed the line. */
   source?: string;
+  /** A self-update progress marker carried by this line. */
+  progress?: UpdateProgressDto;
 }
 
 export type StreamState = 'connecting' | 'streaming' | 'ended' | 'error';

@@ -12,11 +12,15 @@ import { api } from '../lib/api.ts';
 import { useAction } from '../lib/mutate.ts';
 import { keys, useUpdateStatus } from '../lib/queries.ts';
 import { Dialog } from './Dialog.tsx';
+import { UpdateProgress } from './UpdateProgress.tsx';
 import { RelativeTime } from './Time.tsx';
 import { useToast } from './Toast.tsx';
 import { Badge, Button, Callout, Skeleton } from './ui.tsx';
 
 const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(0, 7));
+
+/** The dialog can be mounted twice (sidebar and settings); the page reloads once. */
+let reloadScheduled = false;
 
 /** Once an update is running: wait for the panel to come back on the new build, then reload. */
 function useReloadWhenUpdated(status: UpdateStatusDto | undefined) {
@@ -34,6 +38,8 @@ function useReloadWhenUpdated(status: UpdateStatusDto | undefined) {
         const health = await api.get<{ version: string; commit?: string | null }>('/api/health');
         if (health.commit !== undefined && health.commit === target.current) {
           window.clearInterval(timer);
+          if (reloadScheduled) return;
+          reloadScheduled = true;
           toast.success(m.updates.updated);
           void client.invalidateQueries({ queryKey: keys.bootstrap });
           window.setTimeout(() => window.location.reload(), 1_200);
@@ -52,6 +58,7 @@ export function UpdateDialog({ open, onClose }: { open: boolean; onClose: () => 
   const status = useUpdateStatus(open);
   const data = status.data;
   const [confirming, setConfirming] = useState(false);
+  const client = useQueryClient();
   useReloadWhenUpdated(data);
   const check = useAction(() => api.post<UpdateStatusDto>('/api/updates/check'), {
     invalidate: [keys.updates, keys.bootstrap],
@@ -89,15 +96,21 @@ export function UpdateDialog({ open, onClose }: { open: boolean; onClose: () => 
           </dl>
 
           {data.state === 'updating' && (
-            <Callout tone="work" title={u.updatingTitle}>
-              {u.updatingText}
-            </Callout>
+            <div className="stack" style={{ gap: 10 }}>
+              <Callout tone="work" title={u.updatingTitle}>
+                {u.updatingText}
+              </Callout>
+              <UpdateProgress status={data} onFinished={() => void client.invalidateQueries({ queryKey: keys.updates })} />
+            </div>
           )}
           {data.state === 'failed' && (
-            <Callout tone="bad" title={u.failedTitle}>
-              {u.failedText}
-              {data.error !== null && <pre className="codeblock" style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{data.error}</pre>}
-            </Callout>
+            <div className="stack" style={{ gap: 10 }}>
+              <Callout tone="bad" title={u.failedTitle}>
+                {u.failedText}
+                {data.error !== null && <pre className="codeblock" style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{data.error}</pre>}
+              </Callout>
+              {data.progress !== null && <UpdateProgress status={data} />}
+            </div>
           )}
           {data.checkError !== null && <Callout tone="work">{t(u.checkFailed, { reason: data.checkError })}</Callout>}
           {data.mode === 'manual' && <Callout tone="info">{u.manualText}</Callout>}
