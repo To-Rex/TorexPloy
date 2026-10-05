@@ -169,6 +169,7 @@ export function ServiceLayout() {
                       { to: `${base}/files`, label: m.fileStore.tabs.files },
                       { to: `${base}/keys`, label: m.fileStore.tabs.keys },
                       { to: `${base}/domains`, label: m.fileStore.tabs.domains },
+                      { to: `${base}/docs`, label: m.fileStore.tabs.docs },
                       { to: `${base}/logs`, label: m.services.tabs.logs },
                       { to: `${base}/monitoring`, label: m.services.tabs.monitoring },
                       { to: `${base}/advanced`, label: m.services.tabs.advanced },

@@ -313,7 +313,7 @@ export const guide: GuideContent = {
               items: [
                 { title: "Loyiha → Yaratish → Fayl ombori", text: "Bir bosishda SeaweedFS koʻtariladi; Umumiy tabida endpoint va root kalitlar." },
                 { title: "Bucket va kalitlar", text: "**Fayllar** tabida bucket yarating, fayl yuklang, ochiq havola oling. **Kalitlar** tabida har bir ilova uchun alohida access key (faqat kerakli bucket’larga ruxsat)." },
-                { title: "Ilovaga ulash", text: "Oʻzgaruvchilar → Ulanish qoʻshish: ilova `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `AWS_*` oʻzgaruvchilarini oladi." },
+                { title: "Ilovaga ulash", text: "Oʻzgaruvchilar → Ulanish qoʻshish: ilova `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `AWS_*` oʻzgaruvchilarini oladi. Tashqi ilovalar, SDK namunalari (Node, Python, PHP, Go, Java, .NET, Ruby, Django, CLI) va vaqtinchalik havolalar — omborning **Hujjatlar** tabida, aynan shu ombor uchun toʻldirilgan." },
                 { title: "Domen", text: "**Domenlar** tabida `files.example.uz` kabi manzil bersangiz, fayllar HTTPS orqali toʻgʻridan-toʻgʻri tarqatiladi." },
               ],
             },

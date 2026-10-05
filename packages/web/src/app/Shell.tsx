@@ -141,7 +141,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
             label={m.nav.teams}
             trigger={(props) => (
               <button className="team-switch" type="button" {...props} aria-label={m.nav.switchTeam} title={team?.name}>
-                <BrandMark />
+                <BrandMark size={36} tile />
                 <span className="team-switch__text">
                   <span className="team-switch__name">TorexPloy</span>
                   <span className="team-switch__role">{team?.name ?? ''}</span>

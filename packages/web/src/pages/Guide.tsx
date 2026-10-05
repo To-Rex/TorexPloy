@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { CopyButton } from '../components/Copy.tsx';
 import { Frame } from '../components/Frame.tsx';
+import { Rich } from '../components/Rich.tsx';
 import { usePageMeta } from '../components/PageMeta.tsx';
 import { Callout, EmptyState, Skeleton } from '../components/ui.tsx';
 import { loadGuide, type GuideBlock, type GuideContent, type GuideIcon, type GuideSection } from '../guide/index.ts';
@@ -72,30 +73,6 @@ const ICONS: Record<GuideIcon, LucideIcon> = {
   wrench: Wrench,
   download: Download,
 };
-
-/** `**bold**`, `` `code` `` and `[label](/route)` inside guide text. */
-const TOKEN = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
-const LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
-
-function Rich({ text }: { text: string }) {
-  return (
-    <>
-      {text.split(TOKEN).map((part, index) => {
-        if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
-        if (part.startsWith('`') && part.endsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>;
-        const link = LINK.exec(part);
-        if (link !== null) {
-          return (
-            <Link key={index} to={link[2]!}>
-              {link[1]}
-            </Link>
-          );
-        }
-        return part;
-      })}
-    </>
-  );
-}
 
 /** Everything a section says, for the search. */
 function textOf(section: GuideSection): string {

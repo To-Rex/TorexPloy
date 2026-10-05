@@ -313,7 +313,7 @@ export const guide: GuideContent = {
               items: [
                 { title: "Project → Create → File store", text: "SeaweedFS comes up in one click; the General tab shows the endpoint and root keys." },
                 { title: "Buckets and keys", text: "On the **Files** tab create a bucket, upload files, get a public link. On the **Keys** tab issue a separate access key per app (limited to the buckets it needs)." },
-                { title: "Linking to an app", text: "Variables → Add link: the app receives `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `AWS_*`." },
+                { title: "Linking to an app", text: "Variables → Add link: the app receives `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `AWS_*`. External apps, SDK samples (Node, Python, PHP, Go, Java, .NET, Ruby, Django, CLI) and temporary links are on the store’s **Docs** tab, filled in for that very store." },
                 { title: "Domain", text: "On the **Domains** tab give it an address such as `files.example.uz` — files are served directly over HTTPS." },
               ],
             },

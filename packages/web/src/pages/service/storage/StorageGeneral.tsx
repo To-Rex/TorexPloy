@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { Archive, Eye } from 'lucide-react';
+import { Archive, BookOpen, Eye } from 'lucide-react';
 import type { ServiceCredentialsDto, ServiceDto, StorageOverviewDto } from '@ploy/shared';
 import { CopyButton, ValueField } from '../../../components/Copy.tsx';
 import { Card } from '../../../components/Frame.tsx';
@@ -137,14 +137,23 @@ function OverviewCard({ service, overview, credentials, onReveal, loading }: { s
   );
 }
 
-function GuideCard({ overview, credentials }: { overview: StorageOverviewDto; credentials: ServiceCredentialsDto | null }) {
+function GuideCard({ service, overview, credentials }: { service: ServiceDto; overview: StorageOverviewDto; credentials: ServiceCredentialsDto | null }) {
   const { m } = useI18n();
   const f = m.fileStore;
   const [guide, setGuide] = useState<Guide>('cli');
   const endpoint = overview.endpoint ?? overview.internalEndpoint;
   const text = snippet(guide, endpoint, overview.rootAccessKeyId, credentials?.password ?? '<SECRET_ACCESS_KEY>', 'uploads');
   return (
-    <Card title={f.guideTitle} description={f.guideHint}>
+    <Card
+      title={f.guideTitle}
+      description={f.guideHint}
+      actions={
+        <Link className="btn btn--sm" to={`/services/${service.id}/docs`} style={{ textDecoration: 'none' }}>
+          <BookOpen width={14} height={14} aria-hidden="true" />
+          {f.guideFull}
+        </Link>
+      }
+    >
       {overview.endpoint === null && <Callout tone="info">{f.guideNoEndpoint}</Callout>}
       <div className="guide-tabs" role="tablist">
         {GUIDES.map((value) => (
@@ -216,7 +225,7 @@ export function StorageGeneralTab({ service }: { service: ServiceDto }) {
       ) : (
         <>
           <OverviewCard service={service} overview={overview.data} credentials={credentials} onReveal={() => void reveal()} loading={loading} />
-          <GuideCard overview={overview.data} credentials={credentials} />
+          <GuideCard service={service} overview={overview.data} credentials={credentials} />
           <BackupCard service={service} overview={overview.data} />
         </>
       )}

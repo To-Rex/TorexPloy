@@ -80,6 +80,7 @@ export const router = createBrowserRouter([
           { path: 'files', lazy: async () => ({ Component: (await import('../pages/service/storage/Tabs.tsx')).FilesTab }) },
           { path: 'keys', lazy: async () => ({ Component: (await import('../pages/service/storage/Tabs.tsx')).KeysTab }) },
           { path: 'domains', lazy: async () => ({ Component: (await import('../pages/service/storage/Tabs.tsx')).DomainsTab }) },
+          { path: 'docs', lazy: async () => ({ Component: (await import('../pages/service/storage/Tabs.tsx')).DocsTab }) },
           ...['connect', 'terminal'].map((path) => ({ path, element: <Navigate to="../general" replace /> })),
           { path: 'metrics', element: <Navigate to="../monitoring" replace /> },
           { path: 'settings', element: <Navigate to="../advanced" replace /> },

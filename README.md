@@ -1,3 +1,5 @@
+<p align="center"><img src="packages/web/public/favicon.svg" width="80" alt="TorexPloy"></p>
+
 # TorexPloy
 
 Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy uni yigʻadi, uzilishsiz joylashtiradi va HTTPS bilan domen beradi.
