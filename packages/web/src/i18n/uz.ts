@@ -427,6 +427,22 @@ export const uz = {
     imageGone: 'Image oʻchirilgan',
     duration: 'Davomiyligi',
     buildTime: 'Yigʻish',
+    titles: {
+      manual: 'Qoʻlda joylashtirish',
+      push: 'Git push orqali joylashtirish',
+      rollback: 'Oldingi versiyaga qaytish',
+      redeploy: 'Qayta joylashtirish',
+      api: 'Deploy hook orqali joylashtirish',
+      restart: 'Qayta ishga tushirish',
+    },
+    number: '#{n}',
+    took: '{time} davom etdi',
+    running: '{time} davom etmoqda',
+    waited: 'navbatda {time}',
+    built: 'yigʻish {time}',
+    startedAt: 'Boshlangan: {time}',
+    rolledBackFrom: '{n}-versiyadan',
+    image: 'Image',
   },
 
   deployment: {

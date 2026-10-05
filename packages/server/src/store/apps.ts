@@ -604,6 +604,8 @@ export interface DeploymentRecord {
   buildDurationMs: number | null;
   finishedAt: string | null;
   durationMs: number | null;
+  /** Per-application sequence number (#1, #2, …); stable across pruning. */
+  seq: number;
 }
 
 function mapDeployment(row: Row): DeploymentRecord {
@@ -634,6 +636,7 @@ function mapDeployment(row: Row): DeploymentRecord {
     buildDurationMs: numOrNull(row.build_duration_ms),
     finishedAt: strOrNull(row.finished_at),
     durationMs: numOrNull(row.duration_ms),
+    seq: numOrNull(row.seq) ?? 0,
   };
 }
 
@@ -661,8 +664,8 @@ export class DeploymentStore {
     const app = input.application;
     this.db.run(
       `INSERT INTO deployments (id, application_id, project_id, team_id, server_id, status, trigger, commit_sha, commit_message,
-         commit_author, branch, image_tag, source_deployment_id, options, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         commit_author, branch, image_tag, source_deployment_id, options, created_by, created_at, seq)
+       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM deployments WHERE application_id = ?))`,
       id,
       app.id,
       app.projectId,
@@ -678,6 +681,7 @@ export class DeploymentStore {
       JSON.stringify(input.options ?? {}),
       input.createdBy,
       nowIso(),
+      app.id,
     );
     return this.get(id)!;
   }

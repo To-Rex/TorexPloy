@@ -766,6 +766,19 @@ CREATE UNIQUE INDEX idx_applications_preview ON applications(parent_application_
   },
   { version: 8, name: 'build-types', sql: BUILD_TYPES_V8, rebuildsTables: true },
   { version: 9, name: 'file-store', sql: FILE_STORE_V9, rebuildsTables: true },
+  // A stable per-application number for each deployment (#1, #2, …), kept when old rows are pruned.
+  {
+    version: 10,
+    name: 'deployment-numbers',
+    sql: `
+ALTER TABLE deployments ADD COLUMN seq INTEGER;
+UPDATE deployments SET seq = (
+  SELECT COUNT(*) FROM deployments x
+  WHERE x.application_id = deployments.application_id
+    AND (x.created_at < deployments.created_at OR (x.created_at = deployments.created_at AND x.id <= deployments.id))
+);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

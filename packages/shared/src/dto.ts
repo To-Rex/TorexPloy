@@ -474,6 +474,8 @@ export interface DeploymentDto extends DeploymentSummaryDto {
   durationMs: number | null;
   /** True when this deployment's image still exists and it can be rolled back to. */
   canRollback: boolean;
+  /** Per-application number (#1, #2, …). */
+  number: number;
 }
 
 /** A deployment in a team-wide list, with the application and project it belongs to. */

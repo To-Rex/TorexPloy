@@ -691,11 +691,11 @@
 @layer components {
   /* On a phone a list row keeps its title on one line; status and buttons drop below. */
   @media (max-width: 560px) {
-    .frame__sheet .list__row:not(.deploy-row) {
+    .frame__sheet .list__row {
       flex-wrap: wrap;
       gap: 8px 12px;
     }
-    .frame__sheet .list__row:not(.deploy-row) > .grow {
+    .frame__sheet .list__row > .grow {
       /* `.grow` lives in the utilities layer, which outranks this one. */
       flex: 1 1 calc(100% - 72px) !important;
     }

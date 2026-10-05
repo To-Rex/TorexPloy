@@ -221,6 +221,7 @@ export function deploymentDto(deployment: DeploymentRecord, app: ApplicationReco
     buildDurationMs: deployment.buildDurationMs,
     durationMs: deployment.durationMs,
     canRollback: deployment.status === 'succeeded' && deployment.imageTag !== null && !deployment.imageRemoved,
+    number: deployment.seq,
   };
 }
 

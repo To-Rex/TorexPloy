@@ -324,6 +324,11 @@ test('deployments paginate by keyset cursor and deleting an app cascades', () =>
   assert.equal(second.items.length, 2);
   assert.ok(second.items.every((item) => !first.items.some((other) => other.id === item.id)));
   assert.equal(first.items[0]!.createdByName, 'Owner');
+  // Numbered per application in creation order (rows made in the same millisecond tie on created_at).
+  const numbers = [...first.items, ...second.items].map((item) => item.seq);
+  assert.equal(new Set(numbers).size, 4);
+  assert.ok(numbers.every((number) => number >= 1 && number <= 5));
+  assert.equal(stores.deployments.create({ application: app, trigger: 'manual', createdBy: user.id }).seq, 6);
 
   stores.applications.setActiveDeployment(app.id, first.items[0]!.id);
   stores.applications.delete(app.id);

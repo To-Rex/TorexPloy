@@ -416,6 +416,22 @@ export const en: Messages = {
     imageGone: 'Image removed',
     duration: 'Duration',
     buildTime: 'Build',
+    titles: {
+      manual: 'Manual deployment',
+      push: 'Deployment from git push',
+      rollback: 'Rollback to a previous version',
+      redeploy: 'Redeploy',
+      api: 'Deployment from the deploy hook',
+      restart: 'Restart',
+    },
+    number: '#{n}',
+    took: 'took {time}',
+    running: 'running for {time}',
+    waited: 'queued {time}',
+    built: 'build {time}',
+    startedAt: 'Started: {time}',
+    rolledBackFrom: 'from version {n}',
+    image: 'Image',
   },
 
   deployment: {

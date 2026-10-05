@@ -345,6 +345,19 @@
     }
   }
 
+  /* A small fact with its icon: `⏱ 1 min 12 s`, used in meta strips. */
+  .fact {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+  }
+  .fact > svg {
+    width: 13px;
+    height: 13px;
+    flex: none;
+  }
+
   /* -------------------------------------------------------------- lists */
   .list {
     border: 1px solid var(--line);

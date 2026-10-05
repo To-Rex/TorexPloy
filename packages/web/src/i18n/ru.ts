@@ -424,6 +424,22 @@ export const ru: Messages = {
     imageGone: 'Образ удалён',
     duration: 'Длительность',
     buildTime: 'Сборка',
+    titles: {
+      manual: 'Ручной деплой',
+      push: 'Деплой по git push',
+      rollback: 'Откат к предыдущей версии',
+      redeploy: 'Повторный деплой',
+      api: 'Деплой через deploy hook',
+      restart: 'Перезапуск',
+    },
+    number: '#{n}',
+    took: 'заняло {time}',
+    running: 'идёт {time}',
+    waited: 'в очереди {time}',
+    built: 'сборка {time}',
+    startedAt: 'Начат: {time}',
+    rolledBackFrom: 'с версии {n}',
+    image: 'Образ',
   },
 
   deployment: {

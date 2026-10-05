@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router';
 import { Ban, Download, History } from 'lucide-react';
 import { isTerminalDeployment } from '@ploy/shared';
+import { DeploymentTimingFacts, deploymentTitle } from '../components/DeploymentItem.tsx';
 import { useConfirm } from '../components/Dialog.tsx';
 import { LogViewer } from '../components/LogViewer.tsx';
 import { usePageMeta } from '../components/PageMeta.tsx';
@@ -18,7 +19,7 @@ import { Reason } from '../components/Reason.tsx';
 
 export function DeploymentPage() {
   const { deploymentId = '' } = useParams();
-  const { m, t, formatDuration, formatDate } = useI18n();
+  const { m, t, formatDate } = useI18n();
   const confirm = useConfirm();
   const deployment = useDeployment(deploymentId);
   const data = deployment.data;
@@ -27,7 +28,7 @@ export function DeploymentPage() {
   usePageMeta([
     { label: m.nav.projects, to: '/projects' },
     ...(data === undefined ? [] : [{ label: data.applicationName, to: `/apps/${data.applicationId}/deployments` }]),
-    { label: `${m.deployment.title} ${deploymentId.slice(-6)}` },
+    { label: data === undefined ? m.deployment.title : `${m.deployment.title} ${t(m.deployments.number, { n: data.number })}` },
   ]);
 
   const invalidate = data === undefined ? [] : [keys.deployment(deploymentId), keys.appPart(data.applicationId, 'deployments')];
@@ -56,7 +57,9 @@ export function DeploymentPage() {
       <header className="resource__head">
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="resource__title">
-            <h1 className="truncate">{data.commitMessage ?? `${m.deployment.title} ${deploymentId.slice(-6)}`}</h1>
+            <h1 className="truncate">
+              <span className="faint tabular">{t(m.deployments.number, { n: data.number })}</span> {deploymentTitle(m, data)}
+            </h1>
             <Status kind="deployment" status={data.status} />
           </div>
           <dl className="resource__meta">
@@ -74,8 +77,7 @@ export function DeploymentPage() {
             <span title={formatDate(data.createdAt)}>
               <RelativeTime value={data.createdAt} />
             </span>
-            {data.durationMs !== null && data.durationMs >= 1000 && <span className="tabular">{m.deployment.duration}: {formatDuration(data.durationMs)}</span>}
-            {data.buildDurationMs !== null && <span className="tabular">{m.deployment.buildTime}: {formatDuration(data.buildDurationMs)}</span>}
+            <DeploymentTimingFacts deployment={data} />
           </dl>
         </div>
         <div className="resource__actions">
