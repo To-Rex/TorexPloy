@@ -55,6 +55,8 @@ export const ru: Messages = {
     proxy: 'Прокси',
     groupHome: 'Главное',
     groupSettings: 'Настройки',
+    groupHelp: 'Помощь',
+    guide: 'Руководство',
     deployments: 'Деплои',
     monitoring: 'Мониторинг',
     schedules: 'Задачи по расписанию',
@@ -651,6 +653,22 @@ export const ru: Messages = {
     noneYet: 'Хранилища S3 ещё не добавлены.',
     addFirst: 'Добавить S3',
     onlyRemote: 'Только в S3',
+  },
+
+  guide: {
+    title: 'Руководство',
+    subtitle: 'Изучите TorexPloy от начала до конца: установка, приложения, базы, домены, команда и решение проблем.',
+    search: 'Поиск по руководству: например, домен, копия, cron',
+    contents: 'Содержание',
+    quickStart: 'Быстрый старт: четыре шага',
+    go: 'Перейти',
+    open: 'Открыть в панели',
+    next: 'Далее',
+    found: { one: 'Найден {count} раздел', few: 'Найдено {count} раздела', many: 'Найдено {count} разделов', other: 'Найдено {count} раздела' },
+    empty: 'Ничего не найдено. Попробуйте другое слово.',
+    sections: { one: '{count} раздел', few: '{count} раздела', many: '{count} разделов', other: '{count} раздела' },
+    chapters: { one: '{count} глава', few: '{count} главы', many: '{count} глав', other: '{count} главы' },
+    languages: 'на 3 языках',
   },
 
   templates: {

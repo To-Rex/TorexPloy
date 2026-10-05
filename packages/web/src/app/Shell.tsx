@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  BookOpen,
   Activity,
   ArrowUpCircle,
   BellRing,
@@ -188,6 +189,10 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
             {admin && <SideLink to="/settings/notifications" icon={<BellRing aria-hidden="true" />} label={m.settings.nav.notifications} />}
             <SideLink to="/settings/tokens" icon={<KeyRound aria-hidden="true" />} label={m.settings.nav.tokens} />
             {admin && <SideLink to="/settings/audit" icon={<ScrollText aria-hidden="true" />} label={m.settings.nav.audit} />}
+          </div>
+          <div className="sidebar__group">
+            <div className="sidebar__label">{m.nav.groupHelp}</div>
+            <SideLink to="/guide" icon={<BookOpen aria-hidden="true" />} label={m.nav.guide} />
           </div>
         </nav>
 

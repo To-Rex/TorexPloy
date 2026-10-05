@@ -55,6 +55,8 @@ export const en: Messages = {
     proxy: 'Proxy',
     groupHome: 'Home',
     groupSettings: 'Settings',
+    groupHelp: 'Help',
+    guide: 'Guide',
     deployments: 'Deployments',
     monitoring: 'Monitoring',
     schedules: 'Schedules',
@@ -643,6 +645,22 @@ export const en: Messages = {
     noneYet: 'No S3 destinations yet.',
     addFirst: 'Add one',
     onlyRemote: 'S3 only',
+  },
+
+  guide: {
+    title: 'Guide',
+    subtitle: 'Learn TorexPloy from start to finish: installation, apps, databases, domains, the team and troubleshooting.',
+    search: 'Search the guide: domain, backup, cron…',
+    contents: 'Contents',
+    quickStart: 'Quick start: four steps',
+    go: 'Go',
+    open: 'Open in the panel',
+    next: 'Next',
+    found: { one: '{count} section found', other: '{count} sections found' },
+    empty: 'Nothing found. Try another word.',
+    sections: { one: '{count} section', other: '{count} sections' },
+    chapters: { one: '{count} chapter', other: '{count} chapters' },
+    languages: 'in 3 languages',
   },
 
   templates: {

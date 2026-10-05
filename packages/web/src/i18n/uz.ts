@@ -61,6 +61,8 @@ export const uz = {
     proxy: 'Proksi',
     groupHome: 'Asosiy',
     groupSettings: 'Sozlamalar',
+    groupHelp: 'Yordam',
+    guide: 'Qoʻllanma',
     deployments: 'Joylashtirishlar',
     monitoring: 'Monitoring',
     schedules: 'Rejalashtirilgan vazifalar',
@@ -654,6 +656,22 @@ export const uz = {
     noneYet: 'Hali S3 manzil qoʻshilmagan.',
     addFirst: 'S3 manzil qoʻshish',
     onlyRemote: 'Faqat S3’da',
+  },
+
+  guide: {
+    title: 'Qoʻllanma',
+    subtitle: 'TorexPloy’ni boshidan oxirigacha oʻrganing: oʻrnatish, ilovalar, bazalar, domenlar, jamoa va muammolarni hal qilish.',
+    search: 'Qoʻllanmadan qidirish: masalan, domen, zaxira, cron',
+    contents: 'Mundarija',
+    quickStart: 'Tez boshlash: toʻrt qadam',
+    go: 'Oʻtish',
+    open: 'Ilovada ochish',
+    next: 'Keyingi',
+    found: { one: '{count} ta boʻlim topildi', other: '{count} ta boʻlim topildi' },
+    empty: 'Hech narsa topilmadi. Boshqa soʻz bilan qidirib koʻring.',
+    sections: { one: '{count} ta boʻlim', other: '{count} ta boʻlim' },
+    chapters: { one: '{count} ta bob', other: '{count} ta bob' },
+    languages: '3 tilda',
   },
 
   templates: {

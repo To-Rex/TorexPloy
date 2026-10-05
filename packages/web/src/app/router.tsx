@@ -41,6 +41,8 @@ export const router = createBrowserRouter([
       { path: 'schedules', lazy: async () => ({ Component: (await import('../pages/Schedules.tsx')).SchedulesPage }) },
       { path: 'docker', lazy: async () => ({ Component: (await import('../pages/Docker.tsx')).DockerPage }) },
       { path: 'proxy', lazy: async () => ({ Component: (await import('../pages/Proxy.tsx')).ProxyPage }) },
+      { path: 'guide', lazy: async () => ({ Component: (await import('../pages/Guide.tsx')).GuidePage }) },
+      { path: 'guide/:section', lazy: async () => ({ Component: (await import('../pages/Guide.tsx')).GuidePage }) },
       {
         path: 'apps/:appId',
         lazy: async () => ({ Component: (await import('../pages/app/AppLayout.tsx')).AppLayout }),

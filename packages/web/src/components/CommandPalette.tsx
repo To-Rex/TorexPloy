@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Activity, BellRing, Boxes, CalendarClock, Container, FolderKanban, Languages, Moon, Network, Package, Plus, Rocket, ScrollText, Search, Server, Settings, SquareTerminal, Variable } from 'lucide-react';
+import { BookOpen, Activity, BellRing, Boxes, CalendarClock, Container, FolderKanban, Languages, Moon, Network, Package, Plus, Rocket, ScrollText, Search, Server, Settings, SquareTerminal, Variable } from 'lucide-react';
 import { LOCALES, roleAtLeast, type Locale } from '@ploy/shared';
 import { LOCALE_NAMES, useI18n } from '../i18n/index.tsx';
 import { useApplications, useProjects, useRole, useServers } from '../lib/queries.ts';
@@ -69,6 +69,7 @@ export function CommandPalette({ open, onClose, onNewProject }: { open: boolean;
         : []),
       { id: 'p-servers', group: m.palette.pages, label: m.nav.servers, icon: <Server />, run: go('/servers') },
       { id: 'p-settings', group: m.palette.pages, label: m.nav.settings, icon: <Settings />, run: go('/settings/profile') },
+      { id: 'p-guide', group: m.palette.pages, label: m.nav.guide, icon: <BookOpen />, run: go('/guide') },
       ...(admin
         ? [
             { id: 'p-notifications', group: m.palette.pages, label: m.settings.nav.notifications, icon: <BellRing />, run: go('/settings/notifications') },
