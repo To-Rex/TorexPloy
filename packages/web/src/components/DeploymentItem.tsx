@@ -6,7 +6,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Ban, Check, Clock, Ellipsis, GitBranch, Hammer, History, Hourglass, LoaderCircle, Minus, Rocket, RotateCcw, ScrollText, Timer, TriangleAlert, User, X } from 'lucide-react';
+import { Ban, Check, Clock, Ellipsis, GitBranch, Hammer, History, Hourglass, LoaderCircle, Minus, Rocket, RotateCcw, ScrollText, Timer, Trash2, TriangleAlert, User, X } from 'lucide-react';
 import { isTerminalDeployment, type DeploymentDto } from '@ploy/shared';
 import { useI18n } from '../i18n/index.tsx';
 import type { Messages } from '../i18n/uz.ts';
@@ -14,7 +14,7 @@ import { api } from '../lib/api.ts';
 import { useAction } from '../lib/mutate.ts';
 import { keys } from '../lib/queries.ts';
 import { useConfirm } from './Dialog.tsx';
-import { Menu, MenuItem } from './Menu.tsx';
+import { Menu, MenuItem, MenuSeparator } from './Menu.tsx';
 import { useReasonText } from './Reason.tsx';
 import { deploymentTone } from './Status.tsx';
 import { RelativeTime } from './Time.tsx';
@@ -119,9 +119,10 @@ export function DeploymentItem({
   const { m, t, formatDate } = useI18n();
   const confirm = useConfirm();
   const reason = useReasonText();
-  const refresh = [keys.app(deployment.applicationId), keys.appPart(deployment.applicationId, 'deployments'), ...invalidate];
+  const refresh = [keys.app(deployment.applicationId), keys.appPart(deployment.applicationId, 'deployments'), keys.appPart(deployment.applicationId, 'deployments-cleanup'), ...invalidate];
   const cancel = useAction(() => api.post(`/api/deployments/${deployment.id}/cancel`), { success: m.deployments.cancelled, invalidate: refresh });
   const redeploy = useAction(() => api.post(`/api/deployments/${deployment.id}/redeploy`), { success: m.app.deployQueued, invalidate: refresh });
+  const remove = useAction(() => api.delete(`/api/deployments/${deployment.id}`), { success: m.deployments.deleted, invalidate: refresh });
   const running = !isTerminalDeployment(deployment.status);
   const tone = deploymentTone[deployment.status];
   const Icon = ICONS[tone];
@@ -215,6 +216,26 @@ export function DeploymentItem({
             <MenuItem icon={<Ban />} danger onSelect={() => cancel.mutate()}>
               {m.deployments.cancel}
             </MenuItem>
+          )}
+          {!running && !deployment.isActive && (
+            <>
+              <MenuSeparator />
+              <MenuItem
+                icon={<Trash2 />}
+                danger
+                onSelect={async () => {
+                  const result = await confirm({
+                    title: t(m.deployments.deleteConfirmTitle, { n: deployment.number }),
+                    text: m.deployments.deleteConfirmText,
+                    confirmLabel: m.deployments.delete,
+                    danger: true,
+                  });
+                  if (result.confirmed) remove.mutate();
+                }}
+              >
+                {m.deployments.delete}
+              </MenuItem>
+            </>
           )}
         </Menu>
       </div>

@@ -1,8 +1,9 @@
 import { Link } from 'react-router';
-import { RefreshCw, ScrollText } from 'lucide-react';
+import { BrushCleaning, RefreshCw, ScrollText } from 'lucide-react';
 import { isTerminalDeployment, type ApplicationDto, type DeploymentDto } from '@ploy/shared';
 import { CopyButton, ValueField } from '../../components/Copy.tsx';
 import { DeploymentItem, deploymentTitle } from '../../components/DeploymentItem.tsx';
+import { useConfirm } from '../../components/Dialog.tsx';
 import { Card } from '../../components/Frame.tsx';
 import { computeStages, PipelineRail } from '../../components/Pipeline.tsx';
 import { Status } from '../../components/Status.tsx';
@@ -11,7 +12,7 @@ import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { useLogStream } from '../../lib/logs.ts';
 import { useAction } from '../../lib/mutate.ts';
-import { keys, useDeployments } from '../../lib/queries.ts';
+import { keys, useDeploymentCleanup, useDeployments } from '../../lib/queries.ts';
 import { useAppContext } from './AppLayout.tsx';
 
 /** The in-flight deployment: live pipeline rail and the tail of its log. */
@@ -73,6 +74,44 @@ function HookCard({ app }: { app: ApplicationDto }) {
   );
 }
 
+/** Clean-up of old deployments: everything finished except the active one and the newest. */
+function CleanupButton({ appId, count }: { appId: string; count: number }) {
+  const { m, t, plural } = useI18n();
+  const confirm = useConfirm();
+  const plan = useDeploymentCleanup(appId, count > 1);
+  const cleanup = useAction(() => api.post<{ removed: number; imagesRemoved: number }>(`/api/applications/${appId}/deployments/cleanup`), {
+    success: (result) => plural(m.deployments.cleaned, result.removed),
+    invalidate: [keys.app(appId), keys.appPart(appId, 'deployments'), keys.appPart(appId, 'deployments-cleanup'), keys.teamDeployments],
+  });
+  const removable = plan.data?.removable ?? 0;
+  const kept = (() => {
+    const { keptActive: active, keptNewest: newest } = plan.data ?? { keptActive: null, keptNewest: null };
+    if (active !== null && active === newest) return t(m.deployments.cleanupKeptBoth, { n: active });
+    return [active === null ? null : t(m.deployments.cleanupKeptActive, { n: active }), newest === null ? null : t(m.deployments.cleanupKeptNewest, { n: newest })].filter((part) => part !== null).join(', ');
+  })();
+  return (
+    <Button
+      size="sm"
+      icon={<BrushCleaning />}
+      busy={cleanup.isPending}
+      disabled={removable === 0}
+      title={removable === 0 ? m.deployments.cleanupNothing : undefined}
+      onClick={async () => {
+        const result = await confirm({
+          title: m.deployments.cleanupTitle,
+          text: `${plural(m.deployments.cleanupText, removable)} ${t(m.deployments.cleanupKeeps, { kept })}`,
+          confirmLabel: m.deployments.cleanup,
+          danger: true,
+        });
+        if (result.confirmed) cleanup.mutate();
+      }}
+    >
+      {m.deployments.cleanup}
+      {removable > 0 && <span className="btn__count">{removable}</span>}
+    </Button>
+  );
+}
+
 export function DeploymentsTab() {
   const app = useAppContext();
   const { m } = useI18n();
@@ -83,7 +122,7 @@ export function DeploymentsTab() {
   return (
     <>
       {live !== undefined && <LiveDeployment key={live.id} deployment={live} />}
-      <Card title={m.deployments.title} description={m.deployments.hint} flush={items.length > 0}>
+      <Card title={m.deployments.title} description={m.deployments.hint} flush={items.length > 0} actions={items.length > 1 ? <CleanupButton appId={app.id} count={items.length} /> : undefined}>
         {deployments.isPending ? (
           <SkeletonRows rows={5} />
         ) : items.length === 0 ? (

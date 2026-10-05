@@ -16,6 +16,7 @@ import type {
   ContainerDto,
   CronJobDto,
   CronRunDto,
+  DeploymentCleanupDto,
   DeploymentDto,
   DeploymentStatusFilter,
   DockerDiskUsageDto,
@@ -119,6 +120,8 @@ export const useProjectVariables = (id: string) =>
 export const useApplications = () => useQuery({ queryKey: keys.apps, queryFn: () => api.get<ApplicationDto[]>('/api/applications'), staleTime: 30_000 });
 export const useApp = (id: string) => useQuery({ queryKey: keys.app(id), queryFn: () => api.get<ApplicationDto>(`/api/applications/${id}`) });
 
+export const useDeploymentCleanup = (appId: string, enabled: boolean) =>
+  useQuery({ queryKey: keys.appPart(appId, 'deployments-cleanup'), queryFn: () => api.get<DeploymentCleanupDto>(`/api/applications/${appId}/deployments/cleanup`), enabled });
 export const useDeployments = (appId: string) =>
   useInfiniteQuery({
     queryKey: keys.appPart(appId, 'deployments'),

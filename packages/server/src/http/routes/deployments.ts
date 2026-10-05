@@ -3,13 +3,13 @@
  * cancel, redeploy/rollback).
  */
 import type { Hono } from 'hono';
-import { ACTIVE_DEPLOYMENT_STATUSES, deploymentListQuerySchema, isTerminalDeployment, type Page, type TeamDeploymentDto } from '@ploy/shared';
+import { ACTIVE_DEPLOYMENT_STATUSES, deploymentListQuerySchema, isTerminalDeployment, type DeploymentCleanupDto, type Page, type TeamDeploymentDto } from '@ploy/shared';
 import type { Context } from '../../context.ts';
 import { logPath, readLog } from '../../deploy/logs.ts';
 import { notFound } from '../../lib/errors.ts';
 import { audit, query, requireTeam, type Ctx, type Env } from '../core.ts';
 import { deploymentDto, teamDeploymentDtos } from '../dto.ts';
-import { streamLog } from './applications.ts';
+import { loadApp, streamLog } from './applications.ts';
 
 export function registerDeploymentRoutes(app: Hono<Env>, ctx: Context): void {
   const { stores } = ctx;
@@ -77,5 +77,29 @@ export function registerDeploymentRoutes(app: Hono<Env>, ctx: Context): void {
     const next = ctx.deployer.redeploy(application, deployment, auth.user.id);
     audit(ctx, c, next.trigger === 'rollback' ? 'deployment.rollback' : 'deployment.redeploy', { type: 'deployment', id: next.id, name: application.name }, { from: deployment.id });
     return c.json(deploymentDto(next, application), 202);
+  });
+
+  /** Delete one finished, non-active deployment: its log, its containers and (when nothing else uses it) its image. */
+  app.delete('/api/deployments/:id', async (c) => {
+    const { deployment, application } = load(c, 'developer');
+    if (application === undefined) throw notFound('Application');
+    const result = await ctx.deployer.deleteDeployment(application, deployment);
+    audit(ctx, c, 'deployment.deleted', { type: 'deployment', id: deployment.id, name: application.name }, { number: deployment.seq, imageRemoved: result.imageRemoved });
+    return c.json({ deleted: true, ...result });
+  });
+
+  /** What a clean-up would remove: every finished deployment except the active one and the newest. */
+  app.get('/api/applications/:id/deployments/cleanup', (c) => {
+    const application = loadApp(ctx, c, 'viewer');
+    const plan = ctx.deployer.cleanupPlan(application);
+    const body: DeploymentCleanupDto = { removable: plan.removable.length, keptActive: plan.active?.seq ?? null, keptNewest: plan.newest?.seq ?? null };
+    return c.json(body);
+  });
+
+  app.post('/api/applications/:id/deployments/cleanup', async (c) => {
+    const application = loadApp(ctx, c, 'developer');
+    const result = await ctx.deployer.cleanupHistory(application);
+    audit(ctx, c, 'deployment.cleanup', { type: 'application', id: application.id, name: application.name }, result);
+    return c.json(result);
   });
 }

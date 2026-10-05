@@ -738,6 +738,51 @@ export class Deployer {
     });
   }
 
+  /** What a history clean-up removes: every finished deployment except the active one and the newest. */
+  cleanupPlan(app: ApplicationRecord): { removable: DeploymentRecord[]; active: DeploymentRecord | undefined; newest: DeploymentRecord | undefined } {
+    const { stores } = this.ctx;
+    const newest = stores.deployments.latestForApplication(app.id);
+    const active = app.activeDeploymentId === null ? undefined : stores.deployments.get(app.activeDeploymentId);
+    const keep = new Set([newest?.id, active?.id].filter((id): id is string => id !== undefined));
+    return { removable: stores.deployments.listFinished(app.id).filter((deployment) => !keep.has(deployment.id)), active, newest };
+  }
+
+  /** Delete one finished deployment that is not serving: its containers, image, log and record. */
+  async deleteDeployment(app: ApplicationRecord, deployment: DeploymentRecord): Promise<{ imageRemoved: boolean }> {
+    if (!isTerminalDeployment(deployment.status)) throw new AppError('deployment_in_progress', 'A deployment that is still running cannot be deleted');
+    if (app.activeDeploymentId === deployment.id) throw new AppError('conflict', 'The active deployment cannot be deleted');
+    const docker = await this.ctx.connections.docker(app.serverId);
+    return this.removeDeployment(app, deployment, docker);
+  }
+
+  /** Delete every deployment the clean-up plan lists; the active and the newest stay. */
+  async cleanupHistory(app: ApplicationRecord): Promise<{ removed: number; imagesRemoved: number }> {
+    const docker = await this.ctx.connections.docker(app.serverId);
+    let removed = 0;
+    let imagesRemoved = 0;
+    for (const deployment of this.cleanupPlan(app).removable) {
+      const result = await this.removeDeployment(app, deployment, docker);
+      removed += 1;
+      if (result.imageRemoved) imagesRemoved += 1;
+    }
+    return { removed, imagesRemoved };
+  }
+
+  private async removeDeployment(app: ApplicationRecord, deployment: DeploymentRecord, docker: DockerClient): Promise<{ imageRemoved: boolean }> {
+    const { stores, config } = this.ctx;
+    // Containers of a deployment that is not active no longer serve; leftovers of a failed attempt go too.
+    for (const name of deployment.containers) await docker.removeContainer(name, { force: true }).catch(() => undefined);
+    let imageRemoved = false;
+    // Only images this instance built are its to remove, and only when no other deployment (a rollback, say) still uses them.
+    if (deployment.imageTag !== null && !deployment.imageRemoved && deployment.imageTag.startsWith(`${imageRepository(app)}:`) && !stores.deployments.imageInUse(app.id, deployment.imageTag, deployment.id)) {
+      imageRemoved = await docker.removeImage(deployment.imageTag).catch(() => false);
+    }
+    await removeLog(logPath(config.dataDir, 'deployments', deployment.id));
+    stores.deployments.delete(deployment.id);
+    emit(this.ctx, app.teamId, { type: 'deployment.deleted', id: deployment.id, applicationId: app.id, projectId: app.projectId });
+    return { imageRemoved };
+  }
+
   /** Remove every runtime trace of an application. Database rows are deleted by the caller. */
   async destroy(app: ApplicationRecord, removeVolumes: boolean): Promise<void> {
     const running = this.running.get(app.id);

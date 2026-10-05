@@ -10,6 +10,7 @@ import type { AppStatus, DeploymentStatus, ServerStatus, ServiceStatus } from '.
 
 export type PlatformEvent =
   | { type: 'deployment.updated'; id: string; applicationId: string; projectId: string; status: DeploymentStatus }
+  | { type: 'deployment.deleted'; id: string; applicationId: string; projectId: string }
   | { type: 'application.updated'; id: string; projectId: string; status: AppStatus }
   | { type: 'application.deleted'; id: string; projectId: string }
   | { type: 'service.updated'; id: string; projectId: string; status: ServiceStatus }

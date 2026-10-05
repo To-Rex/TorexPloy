@@ -18,6 +18,7 @@ import {
   type BootstrapDto,
   type BuildPlanDto,
   type CronJobDto,
+  type DeploymentCleanupDto,
   type DeploymentDto,
   type HealthDto,
   type OverviewDto,
@@ -33,6 +34,8 @@ import {
   type TeamDeploymentDto,
   type UpdateStatusDto,
 } from '@ploy/shared';
+import { logPath } from '../deploy/logs.ts';
+import { imageRepository } from '../docker/naming.ts';
 import type { AppConfig } from '../lib/config.ts';
 import { generateToken, hmac } from '../lib/crypto.ts';
 import { runProcessOrThrow } from '../lib/process.ts';
@@ -275,6 +278,57 @@ async function harness(options: { docker?: boolean; config?: Partial<AppConfig> 
     },
   };
 }
+
+test('deployment history: one finished deployment can be deleted, and a clean-up keeps the active and the newest', async () => {
+  const h = await harness();
+  try {
+    const { stores } = h.ctx;
+    const shop = stores.projects.create(h.teamA.id, 'Shop', null);
+    const web = h.application(h.teamA.id, shop.id, 'Web', 'web', 'nginx:alpine');
+    const deploy = (day: number, status: 'succeeded' | 'failed' | 'cancelled' | null, image: string | null = null): string => {
+      const id = stores.deployments.create({ application: web, trigger: 'manual', createdBy: null }).id;
+      stores.db.run('UPDATE deployments SET created_at = ? WHERE id = ?', `2026-03-0${day}T00:00:00.000Z`, id);
+      if (image !== null) stores.deployments.setImage(id, image, 1000);
+      if (status !== null) stores.deployments.finish(id, status);
+      return id;
+    };
+    const repo = imageRepository(web);
+    const first = deploy(1, 'succeeded', `${repo}:one`);
+    const failed = deploy(2, 'failed');
+    const active = deploy(3, 'succeeded', `${repo}:three`);
+    const cancelled = deploy(4, 'cancelled');
+    const newestFinished = deploy(5, 'succeeded', `${repo}:five`);
+    const running = deploy(6, null);
+    stores.applications.setActiveDeployment(web.id, active);
+    mkdirSync(join(h.ctx.config.dataDir, 'logs', 'deployments'), { recursive: true });
+    writeFileSync(logPath(h.ctx.config.dataDir, 'deployments', failed), '{"seq":1}\n');
+
+    assert.equal((await h.call(h.tokens.viewer, 'DELETE', `/api/deployments/${failed}`)).status, 403);
+    assert.equal((await h.call<ApiErrorBody>(h.tokens.developer, 'DELETE', `/api/deployments/${active}`)).body.error.code, 'conflict');
+    assert.equal((await h.call<ApiErrorBody>(h.tokens.developer, 'DELETE', `/api/deployments/${running}`)).body.error.code, 'deployment_in_progress');
+
+    const deleted = await h.call<{ deleted: boolean }>(h.tokens.developer, 'DELETE', `/api/deployments/${failed}`);
+    assert.equal(deleted.status, 200);
+    assert.equal(stores.deployments.get(failed), undefined);
+    assert.equal(existsSync(logPath(h.ctx.config.dataDir, 'deployments', failed)), false, 'the log goes with the deployment');
+    assert.equal((await h.call(h.tokens.developer, 'DELETE', `/api/deployments/${failed}`)).status, 404);
+
+    // The plan spares the active deployment, the newest (here the one still queued) and anything else in flight.
+    const plan = await h.call<DeploymentCleanupDto>(h.tokens.viewer, 'GET', `/api/applications/${web.id}/deployments/cleanup`);
+    assert.deepEqual(plan.body, { removable: 3, keptActive: 3, keptNewest: 6 });
+    assert.equal((await h.call(h.tokens.viewer, 'POST', `/api/applications/${web.id}/deployments/cleanup`)).status, 403);
+    const cleaned = await h.call<{ removed: number; imagesRemoved: number }>(h.tokens.developer, 'POST', `/api/applications/${web.id}/deployments/cleanup`);
+    assert.equal(cleaned.body.removed, 3);
+    assert.deepEqual(stores.deployments.listFinished(web.id).map((deployment) => deployment.id), [active], 'only the active deployment remains among the finished ones');
+    assert.equal(stores.deployments.get(running)?.status, 'queued');
+    assert.deepEqual((await h.call<DeploymentCleanupDto>(h.tokens.viewer, 'GET', `/api/applications/${web.id}/deployments/cleanup`)).body.removable, 0);
+    // Numbers stay stable after deletions.
+    assert.deepEqual([stores.deployments.get(active)!.seq, stores.deployments.get(running)!.seq], [3, 6]);
+    for (const id of [first, cancelled, newestFinished]) assert.equal(stores.deployments.get(id), undefined);
+  } finally {
+    await h.close();
+  }
+});
 
 test('GET /api/deployments pages the whole team newest first, filters by status, and stays inside the team', async () => {
   const h = await harness();

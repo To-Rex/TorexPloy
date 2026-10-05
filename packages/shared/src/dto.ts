@@ -478,6 +478,13 @@ export interface DeploymentDto extends DeploymentSummaryDto {
   number: number;
 }
 
+/** What a history clean-up would remove, and the deployments it keeps (by number). */
+export interface DeploymentCleanupDto {
+  removable: number;
+  keptActive: number | null;
+  keptNewest: number | null;
+}
+
 /** A deployment in a team-wide list, with the application and project it belongs to. */
 export interface TeamDeploymentDto extends DeploymentDto {
   applicationName: string;

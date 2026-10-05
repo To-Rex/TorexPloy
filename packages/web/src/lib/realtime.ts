@@ -20,6 +20,13 @@ export function applyEvent(client: QueryClient, event: PlatformEvent): void {
       invalidate(keys.overview);
       invalidate(keys.teamDeployments);
       break;
+    case 'deployment.deleted':
+      invalidate(keys.app(event.applicationId));
+      invalidate(keys.appPart(event.applicationId, 'deployments'));
+      invalidate(keys.appPart(event.applicationId, 'deployments-cleanup'));
+      invalidate(keys.project(event.projectId));
+      invalidate(keys.teamDeployments);
+      break;
     case 'application.updated':
       invalidate(keys.app(event.id));
       invalidate(keys.project(event.projectId));

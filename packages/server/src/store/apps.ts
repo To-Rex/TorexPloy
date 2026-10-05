@@ -748,6 +748,22 @@ export class DeploymentStore {
       .map(mapDeployment);
   }
 
+  /** Finished deployments (succeeded, failed or cancelled), newest first. */
+  listFinished(applicationId: string): DeploymentRecord[] {
+    return this.db
+      .all(`${DEPLOYMENT_SELECT} WHERE d.application_id = ? AND d.status IN ('succeeded','failed','cancelled') ORDER BY d.created_at DESC, d.id DESC`, applicationId)
+      .map(mapDeployment);
+  }
+
+  /** Whether another deployment of the application still refers to this image (rollbacks share their source's image). */
+  imageInUse(applicationId: string, imageTag: string, exceptId: string): boolean {
+    return this.db.get('SELECT 1 FROM deployments WHERE application_id = ? AND image_tag = ? AND image_removed = 0 AND id != ? LIMIT 1', applicationId, imageTag, exceptId) !== undefined;
+  }
+
+  delete(id: string): void {
+    this.db.run('DELETE FROM deployments WHERE id = ?', id);
+  }
+
   /** Successful deployments whose images are still present, newest first. */
   listWithImages(applicationId: string): DeploymentRecord[] {
     return this.db
