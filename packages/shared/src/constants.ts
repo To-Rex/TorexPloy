@@ -119,7 +119,7 @@ export type BackupStatus = (typeof BACKUP_STATUSES)[number];
 export const CRON_RUN_STATUSES = ['running', 'succeeded', 'failed'] as const;
 export type CronRunStatus = (typeof CRON_RUN_STATUSES)[number];
 
-export const TEMPLATE_CATEGORIES = ['automation', 'monitoring', 'analytics', 'cms', 'productivity', 'developer', 'database', 'security'] as const;
+export const TEMPLATE_CATEGORIES = ['automation', 'monitoring', 'analytics', 'cms', 'productivity', 'business', 'communication', 'developer', 'database', 'ai', 'media', 'storage', 'security', 'tools'] as const;
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
 
 export const NOTIFICATION_KINDS = ['telegram', 'discord', 'slack', 'webhook'] as const;

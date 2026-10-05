@@ -6,7 +6,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Container, ExternalLink, GitBranch, Hammer, KeyRound, Play, RotateCcw, Rocket, Square, SquareTerminal, Variable } from 'lucide-react';
+import { Container, Database, ExternalLink, GitBranch, Hammer, KeyRound, Play, RotateCcw, Rocket, ScrollText, Square, SquareTerminal, Variable } from 'lucide-react';
 import { updateApplicationSchema, type ApplicationDto, type ContainerDto, type SourceInput } from '@ploy/shared';
 import { CopyButton } from '../../components/Copy.tsx';
 import { useConfirm } from '../../components/Dialog.tsx';
@@ -19,7 +19,7 @@ import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
-import { keys, useAppContainers, useAppMetrics, useDeployKey, useDeployment, useGithub, useProject, useTemplates } from '../../lib/queries.ts';
+import { keys, useAppContainers, useAppMetrics, useDeployKey, useDeployment, useGithub, useLinks, useProject, useTemplates } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 import { TemplateMark } from '../projects/TemplatesDialog.tsx';
 import { useAppContext, useAppTerminal } from './AppLayout.tsx';
@@ -188,28 +188,46 @@ function TemplateAccessCard({ app }: { app: ApplicationDto }) {
   const { m, t } = useI18n();
   const templates = useTemplates(app.templateId !== null);
   const project = useProject(app.projectId);
+  const links = useLinks(app.id);
+  const openTerminal = useAppTerminal();
   const template = templates.data?.find((candidate) => candidate.id === app.templateId);
   if (template === undefined) return null;
   const access = template.access;
-  const firstService = project.data?.services[0];
+  // The database an installer asks about is the one linked at install time; any service is a fair example for a client.
+  const linked = project.data?.services.find((service) => links.data?.some((link) => link.serviceId === service.id));
+  const firstService = linked ?? project.data?.services[0];
+  const example = firstService === undefined ? 'postgres:5432' : `${firstService.internalHost}:${firstService.internalPort}`;
   const lines: string[] = [];
+  let path: string | undefined;
   if (access.kind === 'setup') {
     lines.push(m.templates.access.setup);
+    if (access.database === true) lines.push(t(m.templates.access.setupDatabase, { example, service: firstService?.name ?? '' }));
     if (access.path !== undefined) lines.push(t(m.templates.access.setupPath, { path: access.path }));
+    path = access.path;
   } else if (access.kind === 'login') {
     lines.push(typeof access.user === 'string' ? t(m.templates.access.login, { user: access.user }) : t(m.templates.access.loginVar, { key: access.user.key }));
     lines.push(t(m.templates.access.password, { key: access.passwordKey }));
+    if (access.path !== undefined) lines.push(t(m.templates.access.loginPath, { path: access.path }));
+    path = access.path;
   } else if (access.kind === 'default') {
     lines.push(t(m.templates.access.defaultLogin, { user: access.user, password: access.password }));
+    if (access.path !== undefined) lines.push(t(m.templates.access.loginPath, { path: access.path }));
+    path = access.path;
   } else if (access.kind === 'key') {
     lines.push(t(m.templates.access.key, { key: access.key }));
+  } else if (access.kind === 'password') {
+    lines.push(t(m.templates.access.passwordOnly, { key: access.key }));
+  } else if (access.kind === 'logs') {
+    lines.push(m.templates.access.logs);
+  } else if (access.kind === 'file') {
+    lines.push(t(m.templates.access.file, { path: access.path }));
   } else if (access.kind === 'database') {
-    lines.push(t(m.templates.access.database, { example: firstService === undefined ? 'postgres:5432' : `${firstService.internalHost}:${firstService.internalPort}` }));
+    lines.push(t(m.templates.access.database, { example }));
   } else {
     lines.push(m.templates.access.open);
   }
-  const siteUrl = app.url === null ? null : `${app.url}${access.kind === 'setup' && access.path !== undefined ? access.path : ''}`;
-  const usesVariables = access.kind === 'login' || access.kind === 'key';
+  const siteUrl = app.url === null ? null : `${app.url}${path ?? ''}`;
+  const usesVariables = access.kind === 'login' || access.kind === 'key' || access.kind === 'password';
   return (
     <Card
       icon={<TemplateMark template={template} size={34} />}
@@ -227,6 +245,23 @@ function TemplateAccessCard({ app }: { app: ApplicationDto }) {
             <Link className="btn btn--sm" to={`/apps/${app.id}/environment`} style={{ textDecoration: 'none' }}>
               <Variable width={14} height={14} aria-hidden="true" />
               {m.templates.access.openVariables}
+            </Link>
+          )}
+          {access.kind === 'logs' && (
+            <Link className="btn btn--sm" to={`/apps/${app.id}/logs`} style={{ textDecoration: 'none' }}>
+              <ScrollText width={14} height={14} aria-hidden="true" />
+              {m.templates.access.openLogs}
+            </Link>
+          )}
+          {access.kind === 'file' && (
+            <Button size="sm" icon={<SquareTerminal />} onClick={openTerminal}>
+              {m.deploySettings.terminal}
+            </Button>
+          )}
+          {(access.kind === 'setup' && access.database === true) && linked !== undefined && (
+            <Link className="btn btn--sm" to={`/services/${linked.id}/general`} style={{ textDecoration: 'none' }}>
+              <Database width={14} height={14} aria-hidden="true" />
+              {m.templates.access.openService}
             </Link>
           )}
         </>

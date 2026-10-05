@@ -8,7 +8,7 @@ import { resolveAppEnv } from '../deploy/env.ts';
 import { AppError } from '../lib/errors.ts';
 import { createContext } from '../main.ts';
 import { catalogEntry, linkEnv } from '../services/catalog.ts';
-import { TEMPLATES, templateSecret, type TemplateContext } from './catalog.ts';
+import { TEMPLATES, templateBase64, templateHex, templateSecret, type TemplateContext } from './catalog.ts';
 import { installTemplate } from './install.ts';
 
 const REFERENCE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
@@ -20,6 +20,8 @@ const sample: TemplateContext = {
   email: 'owner@example.uz',
   timezone: 'Asia/Tashkent',
   secret: templateSecret,
+  hex: templateHex,
+  base64: templateBase64,
 };
 
 test('every template is well-formed and every ${reference} resolves', () => {
@@ -50,8 +52,21 @@ test('every template is well-formed and every ${reference} resolves', () => {
       assert.ok(env[template.access.passwordKey] !== undefined, `${template.id}: password variable exists`);
       if (typeof template.access.user !== 'string') assert.ok(env[template.access.user.key] !== undefined);
     }
-    if (template.access.kind === 'key') assert.ok(env[template.access.key] !== undefined);
+    if (template.access.kind === 'key' || template.access.kind === 'password') assert.ok(env[template.access.key] !== undefined, `${template.id}: ${template.access.key} exists`);
+    if (template.access.kind === 'file') assert.ok(template.access.path.startsWith('/'), template.id);
+    // Paths open in the browser; the shell expands `$VAR` in commands but `${REF}` is only resolved in variables.
+    if ('path' in template.access && template.access.path !== undefined) assert.match(template.access.path, /^\//, `${template.id}: access path`);
+    if (template.command !== undefined) assert.ok(!template.command.includes('${'), `${template.id}: command uses $VAR, not references`);
+    assert.match(template.website, /^https:\/\//, template.id);
+    assert.ok(template.memoryMb >= 32 && template.memoryMb <= 8192, template.id);
+    // Templates that put the address into their variables must insist on one, or guard against its absence.
+    if (!template.needsUrl) {
+      const withoutUrl = template.env({ ...sample, url: null, host: null, https: false });
+      for (const [key, value] of Object.entries(withoutUrl)) assert.ok(!value.includes('null'), `${template.id}: ${key} tolerates a missing address or sets needsUrl`);
+    }
   }
+  assert.ok(TEMPLATES.length >= 100, 'the gallery is well stocked');
+  assert.ok(TEMPLATES.filter((template) => template.featured === true).length >= 8, 'some templates are featured');
 });
 
 test('generated secrets are alphanumeric and fresh', () => {
@@ -123,6 +138,14 @@ test('installing n8n creates a linked database, a volume, variables, an address 
     assert.equal(resolved.DB_POSTGRESDB_PASSWORD, services[0]!.credentials.password);
     assert.equal(stores.env.list({ applicationId: application.id }).find((variable) => variable.key === 'DB_POSTGRESDB_PASSWORD')?.value, '${DB_PGPASSWORD}');
     assert.equal(resolved.N8N_ENCRYPTION_KEY!.length, 32);
+    assert.equal(application.startCommand, null);
+
+    // An image whose entrypoint needs arguments gets its start command; the shell expands `$VAR` at start.
+    const dufs = installTemplate(h.ctx, h.project, h.user, { templateId: 'dufs', serverId: h.server.id });
+    assert.equal(dufs.application.startCommand, '/bin/dufs /data -A -a "admin:$DUFS_PASSWORD@/:rw"');
+    const keys = templateHex(16);
+    assert.match(keys, /^[0-9a-f]{32}$/);
+    assert.match(templateBase64(32), /^[A-Za-z0-9+/]{43}=$/);
   } finally {
     await h.close();
   }

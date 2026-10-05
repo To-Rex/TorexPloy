@@ -33,18 +33,30 @@ export function TemplateMark({ template, size = 40 }: { template: Pick<TemplateD
   );
 }
 
+type Shelf = TemplateCategory | 'all' | 'featured';
+
 function Gallery({ templates, onPick }: { templates: TemplateDto[] | undefined; onPick: (template: TemplateDto) => void }) {
   const { m, formatBytes } = useI18n();
   const catalog = useCatalog();
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<TemplateCategory | 'all'>('all');
+  const [shelf, setShelf] = useState<Shelf>('featured');
   const needle = query.trim().toLowerCase();
-  const visible = (templates ?? []).filter(
-    (template) =>
-      (category === 'all' || template.category === category) &&
-      (needle.length === 0 || template.name.toLowerCase().includes(needle) || m.templates.descriptions[template.id as keyof typeof m.templates.descriptions]?.toLowerCase().includes(needle)),
-  );
+  const describe = (template: TemplateDto) => m.templates.descriptions[template.id as keyof typeof m.templates.descriptions] ?? '';
+  const sorted = useMemo(() => [...(templates ?? [])].sort((a, b) => a.name.localeCompare(b.name)), [templates]);
+  const counts = useMemo(() => {
+    const map = new Map<Shelf, number>([['all', sorted.length], ['featured', sorted.filter((template) => template.featured).length]]);
+    for (const template of sorted) map.set(template.category, (map.get(template.category) ?? 0) + 1);
+    return map;
+  }, [sorted]);
+  // A search looks through everything: the shelf only narrows browsing.
+  const active: Shelf = needle.length > 0 ? 'all' : shelf;
+  const visible = sorted.filter((template) => {
+    if (active === 'featured' && !template.featured) return false;
+    if (active !== 'all' && active !== 'featured' && template.category !== active) return false;
+    return needle.length === 0 || template.name.toLowerCase().includes(needle) || template.id.includes(needle) || describe(template).toLowerCase().includes(needle) || m.templates.categories[template.category].toLowerCase().includes(needle);
+  });
   const serviceLabel = (type: string) => catalog.data?.find((entry) => entry.type === type)?.label ?? type;
+  const shelves: Shelf[] = ['featured', 'all', ...TEMPLATE_CATEGORIES.filter((category) => (counts.get(category) ?? 0) > 0)];
 
   return (
     <div className="stack" style={{ gap: 14 }}>
@@ -54,9 +66,10 @@ function Gallery({ templates, onPick }: { templates: TemplateDto[] | undefined; 
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={m.templates.search} aria-label={m.templates.search} data-autofocus />
         </label>
         <div className="template-cats" role="tablist" aria-label={m.templates.categoriesLabel}>
-          {(['all', ...TEMPLATE_CATEGORIES] as const).map((value) => (
-            <button key={value} type="button" role="tab" aria-selected={category === value} onClick={() => setCategory(value)}>
-              {value === 'all' ? m.templates.all : m.templates.categories[value]}
+          {shelves.map((value) => (
+            <button key={value} type="button" role="tab" aria-selected={active === value} onClick={() => { setShelf(value); setQuery(''); }}>
+              {value === 'all' ? m.templates.all : value === 'featured' ? m.templates.featured : m.templates.categories[value]}
+              <span className="template-cats__count">{counts.get(value) ?? 0}</span>
             </button>
           ))}
         </div>
@@ -80,7 +93,7 @@ function Gallery({ templates, onPick }: { templates: TemplateDto[] | undefined; 
                   <span className="template-card__cat">{m.templates.categories[template.category]}</span>
                 </span>
               </span>
-              <span className="template-card__text">{m.templates.descriptions[template.id as keyof typeof m.templates.descriptions] ?? ''}</span>
+              <span className="template-card__text">{describe(template)}</span>
               <span className="template-card__meta">
                 {template.services.map((type) => (
                   <span key={type} className="row" style={{ gap: 4 }}>

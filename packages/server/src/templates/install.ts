@@ -10,7 +10,7 @@ import { appVolume } from '../docker/naming.ts';
 import { generateToken } from '../lib/crypto.ts';
 import { AppError } from '../lib/errors.ts';
 import type { ApplicationRecord, DeploymentRecord, ProjectRecord, ServiceRecord, UserRecord } from '../store/index.ts';
-import { findTemplate, templateSecret } from './catalog.ts';
+import { findTemplate, templateBase64, templateHex, templateSecret } from './catalog.ts';
 
 export interface InstalledTemplate {
   application: ApplicationRecord;
@@ -52,7 +52,7 @@ export function installTemplate(ctx: Context, project: ProjectRecord, user: User
       templateId: template.id,
       sealedHookToken: ctx.secrets.seal(generateToken(24), 'hook'),
     });
-    const application = stores.applications.update(created.id, { healthCheckPath: template.healthCheckPath, healthCheckTimeoutSec: template.healthCheckTimeoutSec });
+    const application = stores.applications.update(created.id, { healthCheckPath: template.healthCheckPath, healthCheckTimeoutSec: template.healthCheckTimeoutSec, startCommand: template.command ?? null });
 
     const domain =
       input.domain === undefined
@@ -74,6 +74,8 @@ export function installTemplate(ctx: Context, project: ProjectRecord, user: User
       email: user.email,
       timezone: stores.settings.timezone(),
       secret: templateSecret,
+      hex: templateHex,
+      base64: templateBase64,
     });
     stores.env.replace({ applicationId: application.id }, Object.entries(env).map(([key, value]) => ({ key, value })));
     stores.projects.touch(project.id);

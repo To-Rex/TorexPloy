@@ -500,14 +500,20 @@ export interface NotificationChannelDto {
 
 /** How a person gets into a freshly installed template. */
 export type TemplateAccess =
-  /** The first visit creates the owner account (optionally at `path`). */
-  | { kind: 'setup'; path?: string }
+  /** The first visit creates the owner account (optionally at `path`); `database` when the wizard asks for the linked database's address and credentials. */
+  | { kind: 'setup'; path?: string; database?: boolean }
   /** Credentials were generated at install time; they live in the app's variables. */
-  | { kind: 'login'; user: string | { key: string }; passwordKey: string }
+  | { kind: 'login'; user: string | { key: string }; passwordKey: string; path?: string }
   /** The image seeds a fixed first account that must be changed right away. */
-  | { kind: 'default'; user: string; password: string }
+  | { kind: 'default'; user: string; password: string; path?: string }
   /** An API key, stored in the app's variables. */
   | { kind: 'key'; key: string }
+  /** Only a password (no user name), stored in the app's variables. */
+  | { kind: 'password'; key: string }
+  /** The image prints the first password in its log on the first start. */
+  | { kind: 'logs' }
+  /** The image writes the first password to a file inside the container. */
+  | { kind: 'file'; path: string }
   /** A database client: sign in with a database's own credentials. */
   | { kind: 'database' }
   /** No sign-in at all. */
@@ -526,6 +532,8 @@ export interface TemplateDto {
   needsUrl: boolean;
   memoryMb: number;
   access: TemplateAccess;
+  /** Shown first in the gallery. */
+  featured: boolean;
 }
 
 export interface ComposeDto {

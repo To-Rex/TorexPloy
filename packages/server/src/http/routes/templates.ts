@@ -22,6 +22,7 @@ const catalog: TemplateDto[] = TEMPLATES.map((template) => ({
   needsUrl: template.needsUrl,
   memoryMb: template.memoryMb,
   access: template.access,
+  featured: template.featured === true,
 }));
 
 export function registerTemplateRoutes(app: Hono<Env>, ctx: Context): void {
