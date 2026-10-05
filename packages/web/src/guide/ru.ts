@@ -20,17 +20,27 @@ export const guide: GuideContent = {
           title: "Установка",
           summary: "Нужен 64-битный Linux-сервер (Ubuntu 22.04+ / Debian 12+), минимум 2 ГБ RAM, открытые порты 80 и 443 и root-доступ.",
           blocks: [
-            { type: "code", label: "На сервере", text: "git clone <repo-url> torexploy && cd torexploy\nsudo sh deploy/install.sh" },
+            { type: "code", label: "На сервере, от root (одна команда)", text: "curl -fsSL https://raw.githubusercontent.com/To-Rex/TorexPloy/main/deploy/install.sh \\\n  | sudo TORXPLOY_SOURCE=https://github.com/To-Rex/TorexPloy.git TORXPLOY_PORT=2003 sh" },
+            {
+              type: "table",
+              head: ["Переменная", "Значение"],
+              rows: [
+                ["`TORXPLOY_SOURCE`", "Из какого репозитория собирать (`https://github.com/To-Rex/TorexPloy.git`). Панель потом следит за этим репозиторием ради обновлений."],
+                ["`TORXPLOY_PORT`", "Порт панели до настройки домена. По умолчанию `3000`; в примере `2003`; `0` — не открывать порт вовсе."],
+                ["`TORXPLOY_REF`", "Ветка или тег для сборки (по умолчанию `main`)."],
+                ["`TORXPLOY_IMAGE`", "Готовый образ вместо сборки на сервере (`ghcr.io/to-rex/torexploy:main`) — быстрее, меньше ресурсов."],
+              ],
+            },
             {
               type: "steps",
               items: [
-                { title: "Скрипт делает всё сам", text: "Ставит Docker (если нет), собирает образ панели, запускает контейнер `ploy-control` и прокси Caddy." },
-                { title: "Откройте панель", text: "`http://<server-ip>:3000` (порт мог быть изменён, например `TORXPLOY_PORT=2003`) — при первом открытии создаётся администратор." },
+                { title: "Скрипт делает всё сам", text: "Ставит Docker (если нет), клонирует репозиторий и собирает образ панели, запускает контейнер `ploy-control` и прокси Caddy. Обычно 3–6 минут." },
+                { title: "Откройте панель", text: "`http://<server-ip>:2003` — порт, заданный в `TORXPLOY_PORT` (без него `3000`). При первом открытии создаётся администратор." },
                 { title: "Домен панели", text: "В [Настройки → Веб-сервер](/settings/platform) введите домен вроде `deploy.example.uz` (A-запись должна указывать на сервер). После этого панель открывается по HTTPS." },
                 { title: "Домен для приложений (необязательно)", text: "Добавьте wildcard-домен (`*.apps.example.uz`) — каждое новое приложение получит красивый адрес. Иначе используется адрес `sslip.io` по IP сервера." },
               ],
             },
-            { type: "tip", tone: "info", title: "Закрыть порт", text: "Когда домен настроен, открытый порт можно закрыть: `sudo TORXPLOY_PORT=0 sh deploy/install.sh update`." },
+            { type: "tip", tone: "info", title: "Другой способ и закрытие порта", text: "Можно и склонировать репозиторий самому: `git clone https://github.com/To-Rex/TorexPloy.git && cd TorexPloy && sudo sh deploy/install.sh`. Когда домен настроен, закройте порт той же командой установки с `TORXPLOY_PORT=0` и `sh -s update` в конце." },
           ],
         },
         {
@@ -444,7 +454,8 @@ export const guide: GuideContent = {
               items: [
                 { title: "Уведомление", text: "Каждые 6 часов (`PLOY_UPDATE_INTERVAL_SEC`, минимум 600) проверяется отслеживаемая ветка; при новом коммите в боковой панели — **Доступно обновление**, в Настройки → Веб-сервер — список изменений." },
                 { title: "Обновить", text: "Администратор инстанса нажимает кнопку: временный контейнер `ploy-updater` готовит новый образ, пересоздаёт панель с теми же портами и дисками, проверяет её здоровье." },
-                { title: "Если что-то не так", text: "Старая версия возвращается автоматически, причина видна в статусе. Вручную: `git pull && sudo sh deploy/install.sh update`." },
+                { title: "Если что-то не так", text: "Старая версия возвращается автоматически, причина видна в статусе. Вручную — режим `update` команды установки:" },
+                { title: "Команда ручного обновления", text: "`curl -fsSL https://raw.githubusercontent.com/To-Rex/TorexPloy/main/deploy/install.sh | sudo TORXPLOY_SOURCE=https://github.com/To-Rex/TorexPloy.git sh -s update`" },
               ],
             },
           ],

@@ -20,17 +20,27 @@ export const guide: GuideContent = {
           title: "Oʻrnatish",
           summary: "64-bit Linux server (Ubuntu 22.04+ / Debian 12+), kamida 2 GB RAM, ochiq 80 va 443 portlar va root kirish kerak.",
           blocks: [
-            { type: "code", label: "Serverda", text: "git clone <repo-url> torexploy && cd torexploy\nsudo sh deploy/install.sh" },
+            { type: "code", label: "Serverda, root sifatida (bitta buyruq)", text: "curl -fsSL https://raw.githubusercontent.com/To-Rex/TorexPloy/main/deploy/install.sh \\\n  | sudo TORXPLOY_SOURCE=https://github.com/To-Rex/TorexPloy.git TORXPLOY_PORT=2003 sh" },
+            {
+              type: "table",
+              head: ["Oʻzgaruvchi", "Maʼnosi"],
+              rows: [
+                ["`TORXPLOY_SOURCE`", "Qaysi repozitoriyadan yigʻish (`https://github.com/To-Rex/TorexPloy.git`). Panel keyin yangilanishlar uchun shu repozitoriyani kuzatadi."],
+                ["`TORXPLOY_PORT`", "Domen sozlanguncha panel ochiladigan port. Standart `3000`; misolda `2003`; `0` — portni umuman ochmaslik."],
+                ["`TORXPLOY_REF`", "Yigʻiladigan branch yoki teg (standart `main`)."],
+                ["`TORXPLOY_IMAGE`", "Serverda yigʻish oʻrniga tayyor image (`ghcr.io/to-rex/torexploy:main`) — tezroq, kam resurs."],
+              ],
+            },
             {
               type: "steps",
               items: [
-                { title: "Skript hammasini tayyorlaydi", text: "Docker oʻrnatiladi (boʻlmasa), panel image’i yigʻiladi, `ploy-control` konteyneri va Caddy proksi ishga tushadi." },
-                { title: "Panelni oching", text: "`http://<server-ip>:3000` (port `TORXPLOY_PORT=2003` kabi oʻzgartirilgan boʻlishi mumkin) — birinchi ochilganda administrator hisobini yaratasiz." },
+                { title: "Skript hammasini tayyorlaydi", text: "Docker oʻrnatiladi (boʻlmasa), repozitoriya klon qilinib panel image’i yigʻiladi, `ploy-control` konteyneri va Caddy proksi ishga tushadi. Odatda 3–6 daqiqa." },
+                { title: "Panelni oching", text: "`http://<server-ip>:2003` — `TORXPLOY_PORT`da bergan portingiz (bermasangiz `3000`). Birinchi ochilganda administrator hisobini yaratasiz." },
                 { title: "Panel domenini bering", text: "[Sozlamalar → Veb-server](/settings/platform) boʻlimida `deploy.example.uz` kabi domen kiriting (A yozuvi serverga qaragan boʻlsin). Shundan soʻng panel HTTPS orqali ochiladi." },
                 { title: "Ilovalar uchun domen (ixtiyoriy)", text: "Wildcard domen (`*.apps.example.uz`) qoʻshsangiz, har bir yangi ilova avtomatik chiroyli manzil oladi. Boʻlmasa, server IP’si asosida `sslip.io` manzili ishlatiladi." },
               ],
             },
-            { type: "tip", tone: "info", title: "Portni yopish", text: "Domen sozlangach, ochiq portni yopish mumkin: `sudo TORXPLOY_PORT=0 sh deploy/install.sh update`." },
+            { type: "tip", tone: "info", title: "Boshqa yoʻl va portni yopish", text: "Repozitoriyani oʻzingiz klon qilib ham oʻrnatish mumkin: `git clone https://github.com/To-Rex/TorexPloy.git && cd TorexPloy && sudo sh deploy/install.sh`. Domen sozlangach, ochiq portni yopish uchun xuddi shu oʻrnatish buyrugʻini `TORXPLOY_PORT=0` bilan va oxirida `sh -s update` deb qayta ishga tushiring." },
           ],
         },
         {
@@ -444,7 +454,8 @@ export const guide: GuideContent = {
               items: [
                 { title: "Xabar", text: "Har 6 soatda (`PLOY_UPDATE_INTERVAL_SEC`, kamida 600) kuzatilayotgan branch tekshiriladi; yangi commit boʻlsa yon panelda **Yangilanish mavjud**, Sozlamalar → Veb-server’da oʻzgarishlar roʻyxati." },
                 { title: "Yangilash", text: "Instansiya administratori tugmani bosadi: vaqtinchalik `ploy-updater` konteyneri yangi image’ni tayyorlab, panelni xuddi shu portlar va disklar bilan qayta yaratadi, sogʻlomligini tekshiradi." },
-                { title: "Xato boʻlsa", text: "Eski versiya avtomatik qaytariladi va sabab paneldagi holatda koʻrinadi. Qoʻlda: `git pull && sudo sh deploy/install.sh update`." },
+                { title: "Xato boʻlsa", text: "Eski versiya avtomatik qaytariladi va sabab paneldagi holatda koʻrinadi. Qoʻlda yangilash — oʻrnatish buyrugʻining `update` rejimi:" },
+                { title: "Qoʻlda yangilash buyrugʻi", text: "`curl -fsSL https://raw.githubusercontent.com/To-Rex/TorexPloy/main/deploy/install.sh | sudo TORXPLOY_SOURCE=https://github.com/To-Rex/TorexPloy.git sh -s update`" },
               ],
             },
           ],

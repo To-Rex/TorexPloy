@@ -37,7 +37,14 @@ Arxitektura va dizayn qarorlari: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Talablar: 64-bit Linux server (Ubuntu 22.04+ yoki Debian 12+ tavsiya etiladi), kamida 2 GB RAM, ochiq 80 va 443 portlar, root kirish.
 
 ```sh
-git clone <repo-url> torexploy && cd torexploy
+curl -fsSL https://raw.githubusercontent.com/To-Rex/TorexPloy/main/deploy/install.sh \
+  | sudo TORXPLOY_SOURCE=https://github.com/To-Rex/TorexPloy.git TORXPLOY_PORT=2003 sh
+```
+
+`TORXPLOY_PORT` — domen sozlanguncha panel ochiladigan port (standart `3000`, `0` — ochilmaydi); `TORXPLOY_REF` — branch (standart `main`); `TORXPLOY_IMAGE` — serverda yigʻish oʻrniga tayyor image. Repozitoriyani oʻzingiz klon qilib ham oʻrnatish mumkin:
+
+```sh
+git clone https://github.com/To-Rex/TorexPloy.git && cd TorexPloy
 sudo sh deploy/install.sh
 ```
 
@@ -49,7 +56,7 @@ Skript kerak boʻlsa Docker’ni oʻrnatadi, control-plane image’ini yigʻadi 
 4. **Sozlamalar → Git integratsiyasi** boʻlimida “GitHub App yaratish” tugmasini bosing. Ilova sizning nomingizdan yaratiladi, webhook avtomatik sozlanadi.
    GitHub App bu versiyadan oldin yaratilgan boʻlsa, PR preview uchun uning sozlamalarida **Pull requests: Read and write** ruxsatini va **Pull request** hodisasini yoqing, soʻng oʻrnatishda yangi ruxsatni tasdiqlang.
 
-Domen sozlangandan keyin 3000-portni yopib qoʻyish mumkin: `sudo TORXPLOY_PORT=0 sh deploy/install.sh update`.
+Domen sozlangandan keyin ochiq portni yopib qoʻyish mumkin: xuddi shu oʻrnatish buyrugʻini `TORXPLOY_PORT=0` bilan va oxirida `sh -s update` deb ishga tushiring (klon qilingan boʻlsa: `sudo TORXPLOY_PORT=0 sh deploy/install.sh update`).
 
 ### Yangilash
 

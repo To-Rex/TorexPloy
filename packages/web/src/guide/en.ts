@@ -20,17 +20,27 @@ export const guide: GuideContent = {
           title: "Installation",
           summary: "You need a 64-bit Linux server (Ubuntu 22.04+ / Debian 12+), at least 2 GB of RAM, open ports 80 and 443, and root access.",
           blocks: [
-            { type: "code", label: "On the server", text: "git clone <repo-url> torexploy && cd torexploy\nsudo sh deploy/install.sh" },
+            { type: "code", label: "On the server, as root (one command)", text: "curl -fsSL https://raw.githubusercontent.com/To-Rex/TorexPloy/main/deploy/install.sh \\\n  | sudo TORXPLOY_SOURCE=https://github.com/To-Rex/TorexPloy.git TORXPLOY_PORT=2003 sh" },
+            {
+              type: "table",
+              head: ["Variable", "Meaning"],
+              rows: [
+                ["`TORXPLOY_SOURCE`", "The repository to build from (`https://github.com/To-Rex/TorexPloy.git`). The panel then follows it for updates."],
+                ["`TORXPLOY_PORT`", "The panel port until a domain is set up. Default `3000`; `2003` in the example; `0` opens no port at all."],
+                ["`TORXPLOY_REF`", "The branch or tag to build (default `main`)."],
+                ["`TORXPLOY_IMAGE`", "A prebuilt image instead of building on the server (`ghcr.io/to-rex/torexploy:main`) — faster, lighter."],
+              ],
+            },
             {
               type: "steps",
               items: [
-                { title: "The script does everything", text: "Installs Docker (if missing), builds the panel image, starts the `ploy-control` container and the Caddy proxy." },
-                { title: "Open the panel", text: "`http://<server-ip>:3000` (the port may have been changed, e.g. `TORXPLOY_PORT=2003`) — the first visit creates the administrator." },
+                { title: "The script does everything", text: "Installs Docker (if missing), clones the repository and builds the panel image, starts the `ploy-control` container and the Caddy proxy. Usually 3–6 minutes." },
+                { title: "Open the panel", text: "`http://<server-ip>:2003` — the port you gave in `TORXPLOY_PORT` (`3000` without it). The first visit creates the administrator." },
                 { title: "Panel domain", text: "In [Settings → Web server](/settings/platform) enter a domain such as `deploy.example.uz` (its A record must point at the server). The panel then opens over HTTPS." },
                 { title: "Apps domain (optional)", text: "Add a wildcard domain (`*.apps.example.uz`) and every new app gets a neat address. Otherwise an `sslip.io` address based on the server IP is used." },
               ],
             },
-            { type: "tip", tone: "info", title: "Closing the port", text: "Once the domain is set up, the open port can be closed: `sudo TORXPLOY_PORT=0 sh deploy/install.sh update`." },
+            { type: "tip", tone: "info", title: "Another way, and closing the port", text: "You can also clone the repository yourself: `git clone https://github.com/To-Rex/TorexPloy.git && cd TorexPloy && sudo sh deploy/install.sh`. Once the domain is set up, close the port by running the same install command with `TORXPLOY_PORT=0` and `sh -s update` at the end." },
           ],
         },
         {
@@ -444,7 +454,8 @@ export const guide: GuideContent = {
               items: [
                 { title: "Notice", text: "Every 6 hours (`PLOY_UPDATE_INTERVAL_SEC`, at least 600) the tracked branch is checked; on a new commit the sidebar shows **Update available** and Settings → Web server lists the changes." },
                 { title: "Update", text: "An instance administrator presses the button: a temporary `ploy-updater` container prepares the new image, recreates the panel with the same ports and volumes, and checks its health." },
-                { title: "If it fails", text: "The old version comes back automatically and the reason shows in the status. By hand: `git pull && sudo sh deploy/install.sh update`." },
+                { title: "If it fails", text: "The old version comes back automatically and the reason shows in the status. By hand — the install command in `update` mode:" },
+                { title: "Manual update command", text: "`curl -fsSL https://raw.githubusercontent.com/To-Rex/TorexPloy/main/deploy/install.sh | sudo TORXPLOY_SOURCE=https://github.com/To-Rex/TorexPloy.git sh -s update`" },
               ],
             },
           ],
