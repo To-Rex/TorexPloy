@@ -50,9 +50,10 @@ export function loadApp(ctx: Context, c: Ctx, role: Role, id: string = c.req.par
   return app;
 }
 
-function cronSchedule(expression: string): string {
+/** Validate a schedule and compute its next run on the instance time zone. */
+function cronSchedule(ctx: Context, expression: string): string {
   try {
-    return nextRunFor(expression).toISOString();
+    return nextRunFor(expression, new Date(), ctx.stores.settings.timezone()).toISOString();
   } catch (error) {
     throw new AppError('validation_failed', 'Invalid schedule', {
       issues: [{ path: 'schedule', code: 'invalid_format', message: error instanceof CronError ? error.message : 'Invalid schedule', params: { format: 'cron' } }],
@@ -478,7 +479,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
   app.post('/api/applications/:id/cron', async (c) => {
     const application = loadApp(ctx, c, 'developer');
     const input = await body(c, createCronJobSchema);
-    const nextRunAt = cronSchedule(input.schedule);
+    const nextRunAt = cronSchedule(ctx, input.schedule);
     const job = stores.cron.create({
       applicationId: application.id,
       name: input.name,
@@ -504,7 +505,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const input = await body(c, updateCronJobSchema);
     const schedule = input.schedule ?? job.schedule;
     const enabled = input.enabled ?? job.enabled;
-    const nextRunAt = enabled ? cronSchedule(schedule) : null;
+    const nextRunAt = enabled ? cronSchedule(ctx, schedule) : null;
     const updated = stores.cron.update(job.id, { ...input, nextRunAt });
     audit(ctx, c, 'cron.updated', { type: 'cron', id: job.id, name: updated.name });
     return c.json(cronJobDto(ctx, updated));

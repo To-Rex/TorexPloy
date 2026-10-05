@@ -16,6 +16,8 @@ export type PlatformEvent =
   | { type: 'service.deleted'; id: string; projectId: string }
   | { type: 'server.updated'; id: string; status: ServerStatus }
   | { type: 'domain.updated'; id: string; applicationId: string | null; serviceId: string | null }
+  /** Instance settings changed (time zone, domains…): every tab refetches its bootstrap. */
+  | { type: 'settings.updated' }
   | { type: 'project.updated'; id: string }
   | { type: 'project.deleted'; id: string }
   | { type: 'backup.updated'; id: string; serviceId: string }

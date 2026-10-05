@@ -30,9 +30,10 @@ export class CronRunner {
   /** Called every minute by the scheduler. */
   async tick(now: Date = new Date()): Promise<void> {
     const { stores } = this.ctx;
+    const timeZone = stores.settings.timezone();
     for (const job of stores.cron.listDue(now.toISOString())) {
       // Advance first, so a slow run or a crash cannot fire the same slot twice.
-      stores.cron.update(job.id, { nextRunAt: nextRunFor(job.schedule, now).toISOString() });
+      stores.cron.update(job.id, { nextRunAt: nextRunFor(job.schedule, now, timeZone).toISOString() });
       if (this.active.has(job.id) || stores.cron.isRunning(job.id)) continue;
       this.start(job, 'schedule');
     }
@@ -77,7 +78,7 @@ export class CronRunner {
 
       const resolved = resolveAppEnv(stores, app);
       log.mask(resolved.secrets);
-      const env = withPlatformEnv(resolved.env, { PLOY_APP: app.slug, PLOY_CRON_JOB: job.name });
+      const env = withPlatformEnv(resolved.env, { TZ: stores.settings.timezone(), PLOY_APP: app.slug, PLOY_CRON_JOB: job.name });
       docker = await connections.docker(app.serverId);
       const network = projectNetwork(app.projectId);
       log.info(`$ ${job.command}`);
@@ -125,17 +126,27 @@ export class CronRunner {
 
   /** Recompute next runs at boot (schedules may have been missed while the process was down). */
   initialize(): void {
+    this.ctx.stores.cron.failInterrupted();
+    this.rescheduleAll();
+  }
+
+  /**
+   * Recompute every enabled job's next run from now, on the instance time
+   * zone as it is now: at boot, and when the zone changes (a `30 2 * * *` job
+   * means 02:30 on the wall clock, so its next run moves with the zone).
+   */
+  rescheduleAll(now: Date = new Date()): void {
     const { stores } = this.ctx;
-    stores.cron.failInterrupted();
-    const now = new Date();
+    const timeZone = stores.settings.timezone();
     for (const job of stores.db.all('SELECT id FROM cron_jobs WHERE enabled = 1')) {
       const record = stores.cron.get(String(job.id));
       if (record === undefined) continue;
       try {
-        stores.cron.update(record.id, { nextRunAt: nextRunFor(record.schedule, now).toISOString() });
+        stores.cron.update(record.id, { nextRunAt: nextRunFor(record.schedule, now, timeZone).toISOString() });
       } catch {
         stores.cron.update(record.id, { enabled: false, nextRunAt: null });
       }
+      this.emitJob(record);
     }
   }
 

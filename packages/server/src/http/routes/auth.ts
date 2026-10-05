@@ -26,6 +26,8 @@ export function bootstrapDto(ctx: Context, c: Ctx): BootstrapDto {
   return {
     version: ctx.config.version,
     setupRequired: ctx.stores.users.count() === 0,
+    timezone: ctx.stores.settings.timezone(),
+    serverTime: new Date().toISOString(),
     user: user === null ? null : userDto(user, ctx.stores.users.getIdentityLogin(user.id, 'github')),
     teams: user === null ? [] : ctx.stores.teams.listForUser(user.id).map(teamDto),
     currentTeamId: auth?.teamId ?? null,

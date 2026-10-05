@@ -66,6 +66,10 @@ export interface TeamDto {
 export interface BootstrapDto {
   version: string;
   setupRequired: boolean;
+  /** The instance's time zone (IANA); dates in the panel are shown in it. */
+  timezone: string;
+  /** The server's clock when this response was made, so the dashboard can show server time without trusting the browser's. */
+  serverTime: string;
   user: UserDto | null;
   teams: TeamDto[];
   currentTeamId: string | null;
@@ -802,6 +806,8 @@ export interface GithubManifestDto {
 // ---------------------------------------------------------------------------
 
 export interface PlatformSettingsDto {
+  /** IANA time zone every clock in the panel and every container (`TZ`) uses. */
+  timezone: string;
   platformDomain: string | null;
   appsDomain: string | null;
   acmeEmail: string | null;

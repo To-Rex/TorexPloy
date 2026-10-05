@@ -1,7 +1,7 @@
 /**
  * Teams, memberships, invitations, audit log and platform settings.
  */
-import type { TeamRole } from '@ploy/shared';
+import { isValidTimeZone, type TeamRole } from '@ploy/shared';
 import type { Database } from '../db/database.ts';
 import { generateToken, sha256 } from '../lib/crypto.ts';
 import { newId, nowIso, slugify, uniqueSlug } from '../lib/ids.ts';
@@ -322,6 +322,8 @@ export class AuditStore {
 // ---------------------------------------------------------------------------
 
 export interface PlatformSettings {
+  /** IANA time zone of the instance: the panel's clocks, every container's `TZ` and every schedule use it. */
+  timezone: string;
   platformDomain: string | null;
   appsDomain: string | null;
   acmeEmail: string | null;
@@ -332,6 +334,7 @@ export interface PlatformSettings {
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
+  timezone: 'Asia/Tashkent',
   platformDomain: null,
   appsDomain: null,
   acmeEmail: null,
@@ -370,9 +373,30 @@ export class SettingsStore {
   platform(): PlatformSettings {
     if (this.cache === null) {
       const stored = json<Partial<PlatformSettings>>(this.getRaw('platform'), {});
-      this.cache = { ...DEFAULT_SETTINGS, ...stored };
+      const merged = { ...DEFAULT_SETTINGS, ...stored };
+      // A zone this runtime does not know (a hand-edited row, an older ICU) would break every schedule; fall back instead.
+      if (!isValidTimeZone(merged.timezone)) merged.timezone = DEFAULT_SETTINGS.timezone;
+      this.cache = merged;
     }
     return { ...this.cache };
+  }
+
+  /** The instance time zone (IANA). */
+  timezone(): string {
+    return this.platform().timezone;
+  }
+
+  /**
+   * Store values for settings the row does not have yet, and only those: an
+   * install that predates a setting keeps the value it has been running with
+   * (the time zone from `PLOY_TIMEZONE`) instead of silently taking the default.
+   */
+  seedPlatform(defaults: Partial<PlatformSettings>): void {
+    const stored = json<Partial<PlatformSettings>>(this.getRaw('platform'), {});
+    const missing = Object.entries(defaults).filter(([key]) => !(key in stored));
+    if (missing.length === 0) return;
+    this.setRaw('platform', JSON.stringify({ ...stored, ...Object.fromEntries(missing) }));
+    this.cache = null;
   }
 
   updatePlatform(patch: Partial<PlatformSettings>): PlatformSettings {

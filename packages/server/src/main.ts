@@ -41,6 +41,8 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   const db = openDatabase(config.databasePath);
   const secrets = new Secrets(config.secretKey);
   const stores = createStores(db, secrets);
+  // The time zone is a setting; `PLOY_TIMEZONE` only seeds it (a fresh install, or one from before the setting existed).
+  stores.settings.seedPlatform({ timezone: config.timezone });
   const bus = new EventBus();
   const connections = new ConnectionManager(config, stores, secrets, logger);
   const proxy = new ProxyManager(config, stores, connections, logger);

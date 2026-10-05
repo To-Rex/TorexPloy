@@ -96,7 +96,8 @@ export class ServiceManager {
       const portKey = `${service.internalPort}/tcp`;
       const containerId = await docker.createContainer(service.containerName, {
         Image: template.image,
-        Env: Object.entries(template.env).map(([key, value]) => `${key}=${value}`),
+        // The instance time zone first, so a template that sets its own TZ keeps it.
+        Env: Object.entries({ TZ: stores.settings.timezone(), ...template.env }).map(([key, value]) => `${key}=${value}`),
         ...(template.entrypoint === undefined ? {} : { Entrypoint: template.entrypoint }),
         ...(template.cmd === undefined ? {} : { Cmd: template.cmd }),
         Labels: {

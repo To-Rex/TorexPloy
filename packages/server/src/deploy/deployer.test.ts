@@ -320,6 +320,7 @@ test('a deployment pulls, starts, health-checks, switches traffic and drains the
     const env = (container.spec.Env as string[]).join('\n');
     assert.match(env, /SECRET_TOKEN=super-secret-value-123/);
     assert.match(env, /PORT=80/);
+    assert.ok(env.split('\n').includes(`TZ=${ctx.stores.settings.timezone()}`), 'the instance time zone reaches the container');
     const host = container.spec.HostConfig as Record<string, unknown>;
     assert.deepEqual(host.CapDrop, ['ALL']);
     assert.deepEqual(host.SecurityOpt, ['no-new-privileges:true']);
@@ -332,12 +333,14 @@ test('a deployment pulls, starts, health-checks, switches traffic and drains the
     const log = await import('node:fs/promises').then((fs) => fs.readFile(join(ctx.config.dataDir, 'logs', 'deployments', `${first.id}.log`), 'utf8'));
     assert.ok(!log.includes('super-secret-value-123'));
 
-    // Second deployment: new containers take over, the old ones are removed.
+    // Second deployment: new containers take over, the old ones are removed. The app's own TZ beats the instance zone.
     ctx.stores.applications.update(app.id, { replicas: 2 });
+    ctx.stores.env.replace({ applicationId: app.id }, [{ key: 'SECRET_TOKEN', value: 'super-secret-value-123' }, { key: 'TZ', value: 'Europe/Berlin' }]);
     const second = ctx.deployer.enqueue({ app: ctx.stores.applications.get(app.id)!, trigger: 'manual', createdBy: null });
     assert.equal(await settle(ctx, second.id), 'succeeded');
     const next = ctx.stores.deployments.get(second.id)!;
     assert.equal(next.containers.length, 2);
+    assert.ok((docker.containers.get(next.containers[0]!)!.spec.Env as string[]).includes('TZ=Europe/Berlin'));
     assert.equal(docker.containers.has(deployed.containers[0]!), false, 'previous containers drained');
     assert.deepEqual(docker.running('ploy-web-').sort(), [...next.containers].sort());
     const balanced = JSON.parse(docker.proxyConfigs.at(-1)!) as typeof config;

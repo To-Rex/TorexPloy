@@ -66,20 +66,22 @@ export class Maintenance {
   /** Fire scheduled backups whose time has come. Missed slots while the process was down are skipped, not replayed. */
   runBackups(now: Date = new Date()): void {
     const services = this.ctx.stores.services.listWithBackupSchedule();
+    // Schedules are wall-clock times in the instance zone, read on every pass so a change applies without a restart.
+    const timeZone = this.ctx.stores.settings.timezone();
     const known = new Set(services.map((service) => service.id));
     for (const id of this.nextBackup.keys()) if (!known.has(id)) this.nextBackup.delete(id);
     for (const service of services) {
       let next = this.nextBackup.get(service.id);
       if (next === undefined) {
         try {
-          this.nextBackup.set(service.id, nextRunFor(service.backupSchedule!, now).getTime());
+          this.nextBackup.set(service.id, nextRunFor(service.backupSchedule!, now, timeZone).getTime());
         } catch {
           // An invalid schedule is rejected at input; ignore anything that slipped through.
         }
         continue;
       }
       if (now.getTime() < next) continue;
-      next = nextRunFor(service.backupSchedule!, now).getTime();
+      next = nextRunFor(service.backupSchedule!, now, timeZone).getTime();
       this.nextBackup.set(service.id, next);
       if (service.status !== 'running') continue;
       void this.ctx.services.backup(service, 'schedule').catch((error) =>
@@ -90,5 +92,10 @@ export class Maintenance {
 
   forgetBackupSchedule(serviceId: string): void {
     this.nextBackup.delete(serviceId);
+  }
+
+  /** Forget every computed next backup; the next pass recomputes them (after a time-zone change). */
+  rescheduleBackups(): void {
+    this.nextBackup.clear();
   }
 }

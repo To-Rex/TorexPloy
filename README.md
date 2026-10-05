@@ -18,6 +18,7 @@ Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy 
 - **Zaxira nusxalar S3’ga:** AWS S3, Cloudflare R2, Backblaze B2, MinIO; server yoʻqolsa ham tiklash mumkin.
 - **Xususiy registrlar:** GHCR, GitLab, Docker Hub yoki oʻz registringiz logini (saqlashdan oldin tekshiriladi); image ilovalar, Dockerfile’dagi `FROM` va compose’dagi image’lar shu login bilan tortiladi.
 - **Jamoa boʻyicha roʻyxatlar:** barcha loyihalardagi deploy’lar (holat boʻyicha filtr) va barcha cron vazifalar bir joyda.
+- **Vaqt zonasi:** instansiya uchun bitta IANA zonasi (Sozlamalar’da tanlanadi, dastlab `PLOY_TIMEZONE`dan). Paneldagi sanalar shu zonada koʻrsatiladi; platforma yaratadigan har bir konteyner — ilovalar, cron ishlari, compose servislari, bazalar, shablonlar — `TZ` oʻzgaruvchisini oladi (ilovaning yoki compose faylining oʻz `TZ`si ustun); cron vazifalar va zaxira nusxa jadvallari shu zonaning devor soati boʻyicha hisoblanadi (DST oʻtishlari Vixie cron kabi: 02:30 bahorgi boʻshliqqa tushsa, keyingi haqiqiy daqiqada ishlaydi; kuzgi takrorlanadigan soatda ikki marta ishlamaydi). Zona oʻzgarganda jadvallar darhol qayta hisoblanadi, ishlab turgan konteynerlar esa yangi `TZ`ni keyingi deploy yoki qayta yaratishda oladi.
 - **Serverdagi konteynerlar:** barcha konteynerlar roʻyxati (egasi bilan), loglar, qayta ishga tushirish.
 - **Shablonlar:** n8n, Uptime Kuma, Grafana, Umami, Metabase, Vaultwarden, Gitea, WordPress, Ghost, Directus, NocoDB, Docmost va boshqalar bir bosishda: kerakli baza, disk va parollar avtomatik yaratiladi.
 - **Veb-terminal:** ilova yoki baza konteyneriga brauzerdan kirish (replika va shell tanlash, audit).
@@ -165,7 +166,7 @@ Deploy funksiyalari uchun lokal Docker kerak (Docker Desktop, OrbStack yoki Coli
 | `PLOY_DRAIN_SECONDS` | `10` | Eski versiya trafikni yakunlashi uchun vaqt |
 | `PLOY_PROXY_IMAGE` | `caddy:2.11-alpine` | Proxy image’i |
 | `PLOY_LOG_LEVEL` | `info` (prod), `debug` (dev) | Log darajasi |
-| `PLOY_TIMEZONE` | `Asia/Tashkent` | Shablon ilovalarga beriladigan vaqt zonasi |
+| `PLOY_TIMEZONE` | `Asia/Tashkent` | Instansiya vaqt zonasining boshlangʻich qiymati (birinchi ishga tushishda bazaga yoziladi); keyin Sozlamalar’da oʻzgartiriladi |
 | `PLOY_UPDATE_CHECK` | `true` | Yangilanishlarni GitHub orqali tekshirish |
 | `PLOY_UPDATE_REPO` | `To-Rex/TorexPloy` | Kuzatiladigan GitHub repozitoriya (`owner/name`) |
 | `PLOY_UPDATE_BRANCH` | `main` | Kuzatiladigan branch |

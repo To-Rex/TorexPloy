@@ -46,6 +46,7 @@ import { useRealtime } from '../lib/realtime.ts';
 import { useTheme } from '../lib/theme.tsx';
 import { NewProjectDialog } from '../pages/projects/NewProjectDialog.tsx';
 import { UpdateDialog } from '../components/UpdateDialog.tsx';
+import { ServerClock } from '../components/ServerClock.tsx';
 import { useToast } from '../components/Toast.tsx';
 
 const PROJECT_COLORS = ['#2563EB', '#16A34A', '#D97706', '#DC2626', '#7C3AED', '#0891B2', '#C2410C', '#4D7C0F'];
@@ -76,7 +77,7 @@ function SideLink({ to, icon, label, end = false }: { to: string; icon: ReactNod
 }
 
 export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
-  const { m, locale, setLocale } = useI18n();
+  const { m, locale, setLocale, setTimezone } = useI18n();
   const { theme, setTheme } = useTheme();
   const toast = useToast();
   const client = useQueryClient();
@@ -96,6 +97,8 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
 
   usePaletteShortcut(useCallback(() => setPalette(true), []));
   useEffect(() => setDrawer(false), [location.pathname]);
+  // Every date in the panel follows the instance's zone, not the browser's.
+  useEffect(() => setTimezone(bootstrap.timezone), [bootstrap.timezone, setTimezone]);
 
   const toggleRail = () =>
     setRail((current) => {
@@ -279,6 +282,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
               );
             })}
           </nav>
+          <ServerClock bootstrap={bootstrap} canEdit={user.isInstanceAdmin} />
           <button type="button" className="search-trigger" onClick={() => setPalette(true)}>
             <Search aria-hidden="true" />
             <span>{m.nav.search}</span>

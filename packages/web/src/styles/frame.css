@@ -1140,3 +1140,103 @@
     color: var(--ink-inverse);
   }
 }
+
+@layer components {
+  /* ------------------------------------------------ server clock + zones */
+  .clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    box-shadow: var(--shadow-xs);
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+    flex: none;
+  }
+  .clock:hover {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+  .clock svg {
+    width: 14px;
+    height: 14px;
+    color: var(--ink-3);
+  }
+  .clock__time {
+    font-weight: 600;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .clock__zone {
+    color: var(--ink-3);
+  }
+  .zones {
+    display: grid;
+    gap: 2px;
+    max-height: 320px;
+    overflow: auto;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+  }
+  .zone {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--ink);
+    text-align: left;
+    font-size: var(--text-md);
+  }
+  .zone:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+  .zone[aria-selected='true'] {
+    background: var(--muted);
+    font-weight: 560;
+  }
+  .zone:disabled {
+    cursor: default;
+  }
+  .zone__check svg {
+    width: 15px;
+    height: 15px;
+  }
+  .zone__name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .zone__meta {
+    color: var(--ink-3);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  @media (max-width: 900px) {
+    .clock__zone {
+      display: none;
+    }
+    .clock {
+      padding: 0 8px;
+    }
+  }
+  @media (max-width: 560px) {
+    .clock__time {
+      display: none;
+    }
+  }
+}

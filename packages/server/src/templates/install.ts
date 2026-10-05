@@ -72,7 +72,7 @@ export function installTemplate(ctx: Context, project: ProjectRecord, user: User
       host: domain?.host ?? null,
       https: domain?.https ?? false,
       email: user.email,
-      timezone: ctx.config.timezone,
+      timezone: stores.settings.timezone(),
       secret: templateSecret,
     });
     stores.env.replace({ applicationId: application.id }, Object.entries(env).map(([key, value]) => ({ key, value })));

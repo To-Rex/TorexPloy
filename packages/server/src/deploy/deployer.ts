@@ -402,6 +402,8 @@ export class Deployer {
       const env = withPlatformEnv(resolved.env, {
         ...(port === null ? {} : { PORT: String(port) }),
         HOST: '0.0.0.0',
+        // The instance time zone, unless the app sets its own TZ. Running containers keep theirs until the next deploy.
+        TZ: stores.settings.timezone(),
         PLOY_APP: app.slug,
         PLOY_DEPLOYMENT_ID: queued.id,
         ...(primaryDomain === undefined ? {} : { PLOY_PUBLIC_URL: `${primaryDomain.https ? 'https' : 'http'}://${primaryDomain.host}` }),

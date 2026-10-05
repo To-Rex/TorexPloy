@@ -486,6 +486,15 @@ diagnostika esa yoʻqolmaydi.
 - Accessibility: semantik HTML, ARIA faqat kerak joyda, WCAG AA kontrast (ikkala temada), `prefers-reduced-motion`.
 - Til va tema: profilda saqlanadi (barcha qurilmalarda sinxron) + `localStorage` (login sahifasida ham).
   Tema sahifa chizilishidan oldin qo'llanadi, shuning uchun miltillash bo'lmaydi.
+- Vaqt zonasi instansiya sozlamasi (`settings.platform.timezone`; birinchi ishga tushishda `PLOY_TIMEZONE`dan
+  yoziladi, keyin faqat Sozlamalar'dan oʻzgaradi). Bootstrap uni `serverTime` bilan birga beradi, panel barcha
+  sanalarni shu zonada chizadi. Server tomonida u ikki joyga boradi. Birinchisi — platforma yaratadigan har bir
+  konteyner (ilova, cron ishi, compose servisi, baza, shablon) `TZ` oladi: foydalanuvchining oʻz `TZ`si ustun,
+  ishlab turgan konteyner yangi zonani keyingi deploy yoki qayta yaratishda oladi. Ikkinchisi — cron va zaxira
+  jadvallari (`lib/cron.ts`) zonaning devor soatida hisoblanadi, har tekshiruvda sozlamadan oʻqilib; DST oʻtishlarida
+  Vixie cron qoidasi: belgilangan vaqtli ish (`30 2 * * *`) bahorgi boʻshliqda keyingi haqiqiy daqiqada ishlaydi,
+  kuzgi takrorlanadigan soatda bir marta; daqiqa yoki soat maydoni `*` boʻlgan ishlar ritmini saqlaydi. Zona
+  oʻzgarganda `settings.updated` hodisasi tarqatiladi va barcha `next_run_at` qayta hisoblanadi.
 - Brauzerlarda (Chromium) o'zbekcha CLDR ma'lumotlari yo'q, shuning uchun o'zbekcha sana, nisbiy vaqt va son
   formatlash CLDR qoliplari asosida qo'lda yozilgan (`i18n/uzFormat.ts`): "4-okt, 2026, 14:05", "6 daqiqa oldin".
   Rus va ingliz tillari `Intl` orqali formatlanadi.

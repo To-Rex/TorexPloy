@@ -123,6 +123,34 @@ test('invalid files are rejected with a reason the dashboard can show', () => {
   reject('services:\n  web:\n    image: nginx\n    ports: [{target: 443, published: "443"}]', /port 443/, 'compose_port_reserved');
 });
 
+test('services get the instance time zone as TZ unless they set one themselves', () => {
+  const source = `
+services:
+  web:
+    image: nginx:alpine
+  api:
+    image: ghcr.io/acme/api
+    environment:
+      TZ: \${TZ}
+      DEBUG: "1"
+  worker:
+    image: busybox
+    environment:
+      - QUEUE=jobs
+  legacy:
+    image: busybox
+    environment:
+      - TZ=Europe/Berlin
+`;
+  const doc = parse(transformCompose({ ...base, source, timezone: 'Asia/Tashkent' }).yaml) as { services: Record<string, Service> };
+  assert.deepEqual(doc.services.web!.environment, { TZ: 'Asia/Tashkent' });
+  assert.deepEqual(doc.services.api!.environment, { TZ: '${TZ}', DEBUG: '1' }, 'an interpolated TZ is the service own and survives');
+  assert.deepEqual(doc.services.worker!.environment, ['QUEUE=jobs', 'TZ=Asia/Tashkent'], 'the list form keeps its shape');
+  assert.deepEqual(doc.services.legacy!.environment, ['TZ=Europe/Berlin']);
+  const without = parse(transformCompose({ ...base, source }).yaml) as { services: Record<string, Service> };
+  assert.equal(without.services.web!.environment, undefined, 'no zone given, nothing added');
+});
+
 test('aliases are DNS-safe and service names can be listed without rewriting', () => {
   assert.equal(serviceAlias('My_App', 'Web.Front'), 'my-app-web-front');
   assert.equal(serviceAlias('a'.repeat(60), 'service').length, 63);

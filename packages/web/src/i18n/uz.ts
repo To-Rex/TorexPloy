@@ -1746,6 +1746,21 @@ export const uz = {
     domainHostHint: 'Masalan files.example.uz. A yozuvi server IP manziliga qaragan boʻlsin.',
   },
 
+  clock: {
+    serverTime: 'Server vaqti',
+    timezone: 'Vaqt mintaqasi',
+    offset: 'UTC’dan farqi',
+    timezoneTitle: 'Vaqt mintaqasi',
+    timezoneHint: 'Paneldagi barcha sanalar, cron vazifalar, zaxira jadvallari va yangi konteynerlar (TZ) shu mintaqada ishlaydi.',
+    timezoneReadOnly: 'Mintaqani faqat instansiya administratori oʻzgartira oladi.',
+    search: 'Shahar yoki mintaqani qidirish',
+    current: 'Joriy',
+    change: 'Oʻzgartirish',
+    apply: 'Qoʻllash',
+    applyHint: 'Ishlab turgan konteynerlar yangi mintaqani keyingi joylashtirish yoki qayta yaratishda oladi. Cron va zaxira jadvallari darhol qayta hisoblanadi.',
+    saved: 'Vaqt mintaqasi oʻzgartirildi',
+  },
+
   palette: {
     placeholder: 'Loyiha, ilova, server yoki amalni qidiring…',
     pages: 'Sahifalar',

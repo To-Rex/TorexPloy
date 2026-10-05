@@ -84,18 +84,8 @@ function renderText(text: string, needle: string): ReactNode {
   ));
 }
 
-const pad = (value: number): string => String(value).padStart(2, '0');
-const clock = (value: number): string => {
-  const date = new Date(value);
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-};
-const stamp = (value: number): string => {
-  const date = new Date(value);
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${clock(value)}`;
-};
-
 /** Text of the lines as they are shown, for the clipboard and downloads. */
-function toText(lines: StreamLine[], timestamps: boolean): string {
+function toText(lines: StreamLine[], timestamps: boolean, stamp: (value: number) => string): string {
   return lines
     .map((line) => {
       const tag = line.source ?? (line.replica === undefined ? null : `#${line.replica + 1}`);
@@ -134,7 +124,7 @@ export interface LogViewerProps {
 }
 
 export function LogViewer({ lines, height = 'calc(100dvh - 330px)', showReplica = false, empty, toolbar, live = true, name = 'logs', onClear, levels = true }: LogViewerProps) {
-  const { m, t, plural } = useI18n();
+  const { m, t, plural, formatClock: clock, formatStamp: stamp } = useI18n();
   const [filter, setFilter] = useState('');
   const [level, setLevel] = useState<LevelFilter>('all');
   const [wrap, setWrap] = useState(false);
@@ -199,7 +189,7 @@ export function LogViewer({ lines, height = 'calc(100dvh - 330px)', showReplica 
   };
 
   const copy = async () => {
-    if (await writeClipboard(toText(visible, timestamps))) {
+    if (await writeClipboard(toText(visible, timestamps, stamp))) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1_500);
     }
@@ -243,7 +233,7 @@ export function LogViewer({ lines, height = 'calc(100dvh - 330px)', showReplica 
           <Button variant="ghost" size="sm" iconOnly icon={copied ? <Check /> : <Copy />} title={l.copy} disabled={visible.length === 0} onClick={() => void copy()} aria-live="polite">
             {copied ? m.common.copied : l.copy}
           </Button>
-          <Button variant="ghost" size="sm" iconOnly icon={<Download />} title={l.download} disabled={visible.length === 0} onClick={() => download(`${name}.txt`, toText(visible, true))}>
+          <Button variant="ghost" size="sm" iconOnly icon={<Download />} title={l.download} disabled={visible.length === 0} onClick={() => download(`${name}.txt`, toText(visible, true, stamp))}>
             {l.download}
           </Button>
           {onClear !== undefined && (

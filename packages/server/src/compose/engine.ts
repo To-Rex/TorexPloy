@@ -168,13 +168,17 @@ export class ComposeEngine {
 
     // --------------------------------------------------------- prepare
     const network = projectNetwork(app.projectId);
+    const fresh = stores.applications.get(app.id) ?? app;
+    const resolved = resolveAppEnv(stores, fresh);
+    log.mask(resolved.secrets);
     const result = transformCompose({
       source,
       projectNetwork: network,
       aliasPrefix: app.slug,
       labels: { [LABEL_MANAGED]: 'true', [LABEL_ROLE]: 'compose', [LABEL_APP]: app.id, [LABEL_PROJECT]: app.projectId, [LABEL_TEAM]: app.teamId },
+      // Services that set no TZ get the app's own, else the instance zone.
+      timezone: resolved.env.TZ ?? stores.settings.timezone(),
     });
-    const fresh = stores.applications.get(app.id) ?? app;
     if (result.hostAccess.length > 0 && !fresh.hostAccess) {
       throw new AppError('forbidden', `This compose file reaches the host (${result.hostAccess.join('; ')}). An administrator must allow host access in the app settings.`, {
         params: { reason: 'compose_host_access' },
@@ -194,8 +198,6 @@ export class ComposeEngine {
     const server = stores.servers.get(app.serverId);
     if (server?.kind === 'ssh' && result.relativeBinds) await this.syncToServer(app, root, log);
 
-    const resolved = resolveAppEnv(stores, fresh);
-    log.mask(resolved.secrets);
     const primary = stores.domains.listForApplication(app.id).find((domain) => !domain.isGenerated && domain.redirectTo === null) ?? stores.domains.listForApplication(app.id)[0];
     const env = {
       ...resolved.env,

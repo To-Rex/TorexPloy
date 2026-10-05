@@ -1732,6 +1732,21 @@ export const en: Messages = {
     domainHostHint: 'For example files.example.com. The A record must point at the server IP.',
   },
 
+  clock: {
+    serverTime: 'Server time',
+    timezone: 'Time zone',
+    offset: 'UTC offset',
+    timezoneTitle: 'Time zone',
+    timezoneHint: 'Every date in the panel, cron jobs, backup schedules and new containers (TZ) use this zone.',
+    timezoneReadOnly: 'Only the instance administrator can change the time zone.',
+    search: 'Search a city or zone',
+    current: 'Current',
+    change: 'Change',
+    apply: 'Apply',
+    applyHint: 'Running containers pick up the new zone on their next deploy or recreate. Cron and backup schedules are recalculated right away.',
+    saved: 'Time zone changed',
+  },
+
   palette: {
     placeholder: 'Search projects, applications, servers or actions…',
     pages: 'Pages',

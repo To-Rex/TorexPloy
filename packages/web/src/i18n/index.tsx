@@ -9,7 +9,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Locale } from '@ploy/shared';
 import { uz, type Messages, type Plural } from './uz.ts';
-import { formatUzDate, formatUzNumber, formatUzRelative } from './uzFormat.ts';
+import { formatUzDate, formatUzNumber, formatUzRelative, zonedParts } from './uzFormat.ts';
 
 const LOADERS: Record<Locale, () => Promise<Messages>> = {
   uz: async () => uz,
@@ -37,6 +37,8 @@ export function storedLocale(): Locale {
 
 export type Params = Record<string, string | number>;
 
+const pad2 = (value: number): string => String(value).padStart(2, '0');
+
 export function interpolate(template: string, params: Params = {}): string {
   return template.replace(/\{(\w+)\}/g, (match, key: string) => (params[key] === undefined ? match : String(params[key])));
 }
@@ -50,6 +52,13 @@ export interface I18n {
   plural: (forms: Plural, count: number, params?: Params) => string;
   formatDate: (value: string | number | Date, options?: Intl.DateTimeFormatOptions) => string;
   formatRelative: (value: string | number | Date) => string;
+  /** The instance's IANA time zone; every date above is rendered in it. */
+  timezone: string;
+  setTimezone: (zone: string) => void;
+  /** `HH:MM:SS` in the instance's zone (log lines, the clock). */
+  formatClock: (value: string | number | Date) => string;
+  /** `YYYY-MM-DD HH:MM:SS` in the instance's zone (log downloads, tooltips). */
+  formatStamp: (value: string | number | Date) => string;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
   formatBytes: (bytes: number, fractionDigits?: number) => string;
   formatDuration: (ms: number) => string;
@@ -60,6 +69,8 @@ const I18nContext = createContext<I18n | null>(null);
 export function I18nProvider({ initial, children }: { initial: Locale; children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(initial);
   const [messages, setMessages] = useState<Messages>(uz);
+  // Until the bootstrap says otherwise, the browser's own zone; the Shell sets the instance's.
+  const [timezone, setTimezone] = useState<string>(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
 
   const setLocale = useCallback(async (next: Locale) => {
     const loaded = await LOADERS[next]();
@@ -110,8 +121,20 @@ export function I18nProvider({ initial, children }: { initial: Locale; children:
         const template = forms[category] ?? forms.other;
         return interpolate(template, { count: number(count), ...params });
       },
-      formatDate: (input, options = { dateStyle: 'medium', timeStyle: 'short' }) =>
-        isUz ? formatUzDate(new Date(input), options) : new Intl.DateTimeFormat(tag, options).format(new Date(input)),
+      formatDate: (input, options = { dateStyle: 'medium', timeStyle: 'short' }) => {
+        const zoned = { timeZone: timezone, ...options };
+        return isUz ? formatUzDate(new Date(input), zoned) : new Intl.DateTimeFormat(tag, zoned).format(new Date(input));
+      },
+      timezone,
+      setTimezone,
+      formatClock: (input) => {
+        const d = zonedParts(new Date(input), timezone);
+        return `${pad2(d.hour)}:${pad2(d.minute)}:${pad2(d.second)}`;
+      },
+      formatStamp: (input) => {
+        const d = zonedParts(new Date(input), timezone);
+        return `${d.year}-${pad2(d.month + 1)}-${pad2(d.day)} ${pad2(d.hour)}:${pad2(d.minute)}:${pad2(d.second)}`;
+      },
       formatRelative: (input) => {
         const seconds = (new Date(input).getTime() - Date.now()) / 1000;
         if (Math.abs(seconds) < 45) return messages.time.justNow;
@@ -144,7 +167,7 @@ export function I18nProvider({ initial, children }: { initial: Locale; children:
         return interpolate(d.s, { s });
       },
     };
-  }, [locale, messages, setLocale]);
+  }, [locale, messages, setLocale, timezone]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

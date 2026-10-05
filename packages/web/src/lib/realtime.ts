@@ -60,6 +60,10 @@ export function applyEvent(client: QueryClient, event: PlatformEvent): void {
         invalidate(keys.service(event.serviceId));
       }
       break;
+    case 'settings.updated':
+      invalidate(keys.bootstrap);
+      invalidate(keys.settings);
+      break;
     case 'project.updated':
     case 'project.deleted':
       invalidate(keys.projects);

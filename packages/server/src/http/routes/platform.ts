@@ -4,7 +4,7 @@
 import type { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { platformSettingsSchema, type HealthDto, type PlatformSettingsDto } from '@ploy/shared';
-import type { Context } from '../../context.ts';
+import { emit, type Context } from '../../context.ts';
 import { publicBaseUrl } from '../../github/app.ts';
 import { constantTimeEqual } from '../../lib/crypto.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
@@ -37,6 +37,12 @@ export function registerPlatformRoutes(app: Hono<Env>, ctx: Context): void {
       for (const server of stores.servers.listAll()) void ctx.proxy.requestSync(server.id).catch(() => undefined);
     }
     if (before.buildConcurrency !== after.buildConcurrency) ctx.deployer.tick();
+    if (before.timezone !== after.timezone) {
+      // Schedules are wall-clock times in the zone: every stored next run moves with it. Running containers keep their TZ until recreated.
+      ctx.cron.rescheduleAll();
+      ctx.maintenance.rescheduleBackups();
+    }
+    if (JSON.stringify(before) !== JSON.stringify(after)) emit(ctx, null, { type: 'settings.updated' });
     return c.json(settingsDto());
   });
 

@@ -17,11 +17,13 @@ import {
   type ApplicationDto,
   type BootstrapDto,
   type BuildPlanDto,
+  type CronJobDto,
   type DeploymentDto,
   type HealthDto,
   type OverviewDto,
   type Page,
   type PlatformEvent,
+  type PlatformSettingsDto,
   type PreviewDto,
   type PreviewSettingsDto,
   type ProjectDto,
@@ -1107,6 +1109,53 @@ test('updates: administrators see the status, only the instance administrator ap
     const upToDate = await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
     assert.equal(upToDate.status, 400);
     assert.equal(upToDate.body.error.params?.reason, 'up_to_date');
+  } finally {
+    await h.close();
+  }
+});
+
+test('the instance time zone is a setting: validated, broadcast, in the bootstrap, and schedules follow it', async () => {
+  const h = await harness();
+  try {
+    const { stores } = h.ctx;
+    // Instance settings are broadcast to every team; watch one of them.
+    const events: PlatformEvent[] = [];
+    h.ctx.bus.onTeamEvent(({ teamId, event }) => {
+      if (teamId === h.teamA.id) events.push(event);
+    });
+    const broadcasts = (): number => events.filter((event) => event.type === 'settings.updated').length;
+
+    const bootstrap = await h.call<BootstrapDto>(h.tokens.viewer, 'GET', '/api/bootstrap');
+    assert.equal(bootstrap.body.timezone, stores.settings.timezone(), 'seeded from PLOY_TIMEZONE on the first start');
+    assert.ok(Math.abs(Date.parse(bootstrap.body.serverTime) - Date.now()) < 5_000, 'serverTime is the server clock, ISO 8601');
+
+    // A cron job's next run is a wall-clock time in the zone: noon in Tashkent is 07:00Z.
+    stores.settings.updatePlatform({ timezone: 'Asia/Tashkent' });
+    const shop = stores.projects.create(h.teamA.id, 'Shop', null);
+    const web = h.application(h.teamA.id, shop.id, 'Web', 'web', 'nginx:alpine');
+    const job = await h.call<CronJobDto>(h.tokens.developer, 'POST', `/api/applications/${web.id}/cron`, { name: 'Noon', schedule: '0 12 * * *', command: 'true' });
+    assert.equal(job.status, 201, JSON.stringify(job.body));
+    assert.match(job.body.nextRunAt!, /T07:00:00/);
+
+    assert.equal((await h.call(h.tokens.owner, 'PATCH', '/api/settings', { timezone: 'Europe/Berlin' })).status, 403, 'instance administrators only');
+    const invalid = await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'PATCH', '/api/settings', { timezone: 'Mars/Olympus' });
+    assert.equal(invalid.status, 422);
+    assert.equal(invalid.body.error.issues?.[0]?.path, 'timezone');
+    assert.equal(broadcasts(), 0, 'nothing changed, nothing announced');
+
+    const updated = await h.call<PlatformSettingsDto>(h.tokens.instanceAdmin, 'PATCH', '/api/settings', { timezone: 'Europe/Berlin' });
+    assert.equal(updated.status, 200, JSON.stringify(updated.body));
+    assert.equal(updated.body.timezone, 'Europe/Berlin');
+    assert.equal(stores.settings.timezone(), 'Europe/Berlin');
+    assert.equal(broadcasts(), 1, 'every tab is told to refetch its bootstrap');
+    assert.ok(events.some((event) => event.type === 'cron.updated' && event.id === job.body.id), 'the job list refreshes its next run');
+    assert.equal((await h.call<BootstrapDto>(h.tokens.viewer, 'GET', '/api/bootstrap')).body.timezone, 'Europe/Berlin');
+    assert.equal((await h.call<PlatformSettingsDto>(h.tokens.instanceAdmin, 'GET', '/api/settings')).body.timezone, 'Europe/Berlin');
+    // The stored next run moved with the zone: noon in Berlin is 10:00Z in summer, 11:00Z in winter — never 07:00Z.
+    assert.match(stores.cron.get(job.body.id)!.nextRunAt!, /T1[01]:00:00/);
+
+    await h.call(h.tokens.instanceAdmin, 'PATCH', '/api/settings', { timezone: 'Europe/Berlin' });
+    assert.equal(broadcasts(), 1, 'an unchanged PATCH is not broadcast');
   } finally {
     await h.close();
   }

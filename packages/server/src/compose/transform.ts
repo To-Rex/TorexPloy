@@ -9,7 +9,9 @@
  * - every service is labelled as platform-managed and owned by the app;
  * - services without a restart policy get `unless-stopped` (they come back
  *   after a reboot) and services without log settings get rotation (logs
- *   cannot fill the disk).
+ *   cannot fill the disk);
+ * - services that do not set `TZ` get the instance time zone (a `TZ` of the
+ *   service's own, literal or `${TZ}`, is left alone).
  *
  * Features that reach past the container into the host (privileged mode, host
  * namespaces, extra capabilities, devices, absolute bind mounts) are reported
@@ -35,6 +37,8 @@ export interface TransformInput {
   /** App slug; aliases are `<slug>-<service>`. */
   aliasPrefix: string;
   labels: Record<string, string>;
+  /** Instance time zone, given as `TZ` to every service that does not set one. */
+  timezone?: string;
 }
 
 export interface TransformResult {
@@ -94,6 +98,15 @@ function bindSource(entry: unknown): string | null {
   if (typeof entry !== 'string') return null;
   const source = entry.split(':')[0]!;
   return source.startsWith('/') || source.startsWith('.') || source.startsWith('~') ? source : null;
+}
+
+/** `TZ` added to a service's environment (map or `KEY=value` list) unless the service sets one. */
+function withTimeZone(environment: unknown, timezone: string): unknown {
+  if (Array.isArray(environment)) {
+    return environment.some((item) => typeof item === 'string' && /^TZ(=|$)/.test(item)) ? environment : [...environment, `TZ=${timezone}`];
+  }
+  if (isMap(environment)) return 'TZ' in environment ? environment : { ...environment, TZ: timezone };
+  return environment == null ? { TZ: timezone } : environment;
 }
 
 function normalizeLabels(value: unknown): Json {
@@ -173,6 +186,7 @@ export function transformCompose(input: TransformInput): TransformResult {
       service.networks = networks;
     }
     service.labels = { ...normalizeLabels(service.labels), ...input.labels };
+    if (input.timezone !== undefined) service.environment = withTimeZone(service.environment, input.timezone);
     const restartPolicy = isMap(service.deploy) ? service.deploy.restart_policy : undefined;
     if (service.restart === undefined && restartPolicy === undefined) service.restart = 'unless-stopped';
     if (service.logging === undefined) service.logging = { driver: 'json-file', options: { 'max-size': '20m', 'max-file': '5' } };
