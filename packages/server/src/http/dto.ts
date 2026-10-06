@@ -242,11 +242,16 @@ export function teamDeploymentDtos(ctx: Context, deployments: DeploymentRecord[]
   });
 }
 
-export function applicationDto(ctx: Context, app: ApplicationRecord): ApplicationDto {
+/**
+ * `origin` is the address the request came in on: without a panel domain the
+ * deploy hook is still reachable there (`http://<ip>:<port>/api/hooks/…`), so
+ * the dashboard can show a working URL before any domain is set up.
+ */
+export function applicationDto(ctx: Context, app: ApplicationRecord, origin: string | null = null): ApplicationDto {
   const { stores } = ctx;
   const active = app.activeDeploymentId === null ? undefined : stores.deployments.get(app.activeDeploymentId);
   const latest = stores.deployments.latestForApplication(app.id);
-  const base = publicBaseUrl(ctx);
+  const base = publicBaseUrl(ctx) ?? origin;
   const hookToken = app.deployHookToken === null ? null : ctx.secrets.open(app.deployHookToken, 'hook');
   return {
     id: app.id,

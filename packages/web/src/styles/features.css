@@ -2298,4 +2298,28 @@
       transition: none;
     }
   }
+
+  /* File store docs header: the title keeps its width; the buttons drop below it on a phone. */
+  .docs__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .docs__title {
+    flex: 1 1 320px;
+    min-width: 0;
+  }
+  .docs__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-left: auto;
+  }
+  @media (max-width: 560px) {
+    .docs__actions {
+      flex-basis: 100%;
+      margin-left: 0;
+    }
+  }
 }

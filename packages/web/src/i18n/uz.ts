@@ -1181,6 +1181,7 @@ export const uz = {
     rotateHook: 'Yangi manzil yaratish',
     hookRotated: 'Eski manzil endi ishlamaydi',
     hookUnavailable: 'Manzil platforma domeni sozlangandan keyin paydo boʻladi.',
+    hookFromAddress: 'Panel domeni sozlanmagan: manzil hozirgi IP va port asosida tuzildi. Domen qoʻshilsa, bu yerda domenli manzil chiqadi; eski manzil ham ishlashda davom etadi.',
     danger: 'Xavfli hudud',
     dangerHint: 'Bu amallarni ortga qaytarib boʻlmaydi.',
     deleteTitle: 'Ilovani oʻchirish',
@@ -1951,6 +1952,9 @@ export const uz = {
       title: 'Integratsiya hujjatlari',
       subtitle: 'Fayl omborini ilovangizga ulash: parametrlar, SDK namunalari, havolalar, kalitlar va cheklovlar — hammasi aynan shu ombor uchun toʻldirilgan.',
       toc: 'Boʻlimlar',
+      download: 'Markdown yuklab olish',
+      copyMd: 'Markdown nusxalash',
+      copied: 'Hujjat Markdown sifatida nusxalandi',
       pick: { key: 'Namunalardagi kalit', root: 'Asosiy kalit (root)', bucket: 'Namunalardagi bucket' },
       secretNote: 'Maxfiy kalit (secret) hech qachon koʻrsatilmaydi: namunalardagi <SECRET_ACCESS_KEY> oʻrniga kalit yaratilganda bir marta koʻrsatilgan qiymatni qoʻying. Asosiy kalitning secret’i Umumiy tabida «Koʻrsatish» orqali olinadi.',
       quickstart: {

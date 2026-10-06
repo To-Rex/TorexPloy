@@ -36,7 +36,7 @@ import { CronError, nextRunFor } from '../../lib/cron.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
 import { generateKeyPair } from '../../servers/ssh.ts';
 import type { ApplicationPatch, ApplicationRecord } from '../../store/index.ts';
-import { audit, body, logWindow, query, requireTeam, type Ctx, type Env } from '../core.ts';
+import { audit, body, logWindow, query, requestOrigin, requireTeam, type Ctx, type Env } from '../core.ts';
 import { applicationDto, cronJobDto, cronRunDto, deploymentDto, domainDto, linkDto, teamCronJobDto, volumeDto } from '../dto.ts';
 import { loadProject } from './projects.ts';
 import { rangeQuery } from './servers.ts';
@@ -86,7 +86,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
 
   app.get('/api/applications', (c) => {
     const auth = requireTeam(c);
-    return c.json(stores.applications.listForTeam(auth.teamId).map((application) => applicationDto(ctx, application)));
+    return c.json(stores.applications.listForTeam(auth.teamId).map((application) => applicationDto(ctx, application, requestOrigin(c))));
   });
 
   app.post('/api/projects/:id/applications', async (c) => {
@@ -123,10 +123,10 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     // Deploy right away unless the source is a private git repo whose deploy key the user still has to install.
     const needsKey = source.sourceType === 'git' && source.gitUrl?.startsWith('git@') === true;
     const deployment = needsKey ? null : ctx.deployer.enqueue({ app: stores.applications.get(application.id)!, trigger: 'manual', createdBy: auth.user.id });
-    return c.json({ application: applicationDto(ctx, stores.applications.get(application.id)!), deploymentId: deployment?.id ?? null }, 201);
+    return c.json({ application: applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)), deploymentId: deployment?.id ?? null }, 201);
   });
 
-  app.get('/api/applications/:id', (c) => c.json(applicationDto(ctx, loadApp(ctx, c, 'viewer'))));
+  app.get('/api/applications/:id', (c) => c.json(applicationDto(ctx, loadApp(ctx, c, 'viewer'), requestOrigin(c))));
 
   app.patch('/api/applications/:id', async (c) => {
     const application = loadApp(ctx, c, 'developer');
@@ -159,7 +159,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     // Routing-relevant changes (port, kind) apply to the live proxy only on the next deployment; names apply now.
     audit(ctx, c, 'application.updated', { type: 'application', id: application.id, name: updated.name }, { fields: Object.keys(input) });
     changed(updated);
-    return c.json(applicationDto(ctx, stores.applications.get(application.id)!));
+    return c.json(applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)));
   });
 
   app.delete('/api/applications/:id', async (c) => {
@@ -189,7 +189,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
       // A stack restarts in place: every container, no rebuild (deploy for that).
       await ctx.compose.restart(application);
       audit(ctx, c, 'application.restart', { type: 'application', id: application.id, name: application.name });
-      return c.json(applicationDto(ctx, stores.applications.get(application.id)!), 202);
+      return c.json(applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)), 202);
     }
     const deployment = ctx.deployer.restart(application, auth.user.id);
     audit(ctx, c, 'application.restart', { type: 'application', id: application.id, name: application.name });
@@ -200,7 +200,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const application = loadApp(ctx, c, 'developer');
     await ctx.deployer.stop(application);
     audit(ctx, c, 'application.stop', { type: 'application', id: application.id, name: application.name });
-    return c.json(applicationDto(ctx, stores.applications.get(application.id)!));
+    return c.json(applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)));
   });
 
   app.post('/api/applications/:id/start', async (c) => {
@@ -208,7 +208,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const auth = requireTeam(c, 'developer');
     const deployment = await ctx.deployer.start(application, auth.user.id);
     audit(ctx, c, 'application.start', { type: 'application', id: application.id, name: application.name });
-    return c.json({ application: applicationDto(ctx, stores.applications.get(application.id)!), deploymentId: deployment?.id ?? null });
+    return c.json({ application: applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)), deploymentId: deployment?.id ?? null });
   });
 
   app.get('/api/applications/:id/containers', async (c) => {
@@ -258,7 +258,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const application = loadApp(ctx, c, 'admin');
     stores.applications.setHookToken(application.id, ctx.secrets.seal(generateToken(24), 'hook'));
     audit(ctx, c, 'application.hook_rotated', { type: 'application', id: application.id, name: application.name });
-    return c.json(applicationDto(ctx, stores.applications.get(application.id)!));
+    return c.json(applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)));
   });
 
   app.get('/api/applications/:id/deploy-key', (c) => {

@@ -68,6 +68,7 @@ function HookCard({ app }: { app: ApplicationDto }) {
             {`curl -X POST ${app.deployHookUrl}`}
             <CopyButton value={`curl -X POST ${app.deployHookUrl}`} />
           </div>
+          {/^https?:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?\//.test(app.deployHookUrl) && <p className="field__hint">{m.appSettings.hookFromAddress}</p>}
         </>
       )}
     </Card>

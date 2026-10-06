@@ -7,7 +7,7 @@ import { emit, type Context } from '../../context.ts';
 import { projectNetwork } from '../../docker/naming.ts';
 import { notFound } from '../../lib/errors.ts';
 import type { ProjectRecord } from '../../store/index.ts';
-import { audit, body, requireTeam, type Ctx, type Env } from '../core.ts';
+import { audit, body, requestOrigin, requireTeam, type Ctx, type Env } from '../core.ts';
 import { applicationDto, projectDto, serviceDto, teamDeploymentDtos } from '../dto.ts';
 
 export function loadProject(ctx: Context, c: Ctx, role: 'viewer' | 'developer' | 'admin', id: string = c.req.param('id')!): ProjectRecord {
@@ -59,7 +59,7 @@ export function registerProjectRoutes(app: Hono<Env>, ctx: Context): void {
     const project = loadProject(ctx, c, 'viewer');
     return c.json({
       project: projectDto(stores.projects.getWithStats(project.id)!),
-      applications: stores.applications.listForProject(project.id).map((application) => applicationDto(ctx, application)),
+      applications: stores.applications.listForProject(project.id).map((application) => applicationDto(ctx, application, requestOrigin(c))),
       services: stores.services.listForProject(project.id).map((service) => serviceDto(ctx, service)),
     });
   });

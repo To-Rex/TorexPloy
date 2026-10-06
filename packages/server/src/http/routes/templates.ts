@@ -6,7 +6,7 @@ import { installTemplateSchema, type TemplateDto } from '@ploy/shared';
 import { emit, type Context } from '../../context.ts';
 import { TEMPLATES } from '../../templates/catalog.ts';
 import { installTemplate } from '../../templates/install.ts';
-import { audit, body, requireAuth, requireTeam, type Env } from '../core.ts';
+import { audit, body, requestOrigin, requireAuth, requireTeam, type Env } from '../core.ts';
 import { applicationDto } from '../dto.ts';
 import { loadProject } from './projects.ts';
 
@@ -40,6 +40,6 @@ export function registerTemplateRoutes(app: Hono<Env>, ctx: Context): void {
     audit(ctx, c, 'template.installed', { type: 'application', id: application.id, name: application.name }, { template: input.templateId, services: services.map((service) => service.name) });
     for (const service of services) emit(ctx, project.teamId, { type: 'service.updated', id: service.id, projectId: project.id, status: service.status });
     emit(ctx, project.teamId, { type: 'application.updated', id: application.id, projectId: project.id, status: application.status });
-    return c.json({ application: applicationDto(ctx, application), deploymentId: deployment.id }, 201);
+    return c.json({ application: applicationDto(ctx, application, requestOrigin(c)), deploymentId: deployment.id }, 201);
   });
 }

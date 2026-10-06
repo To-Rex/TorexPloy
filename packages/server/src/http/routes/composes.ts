@@ -15,7 +15,7 @@ import { generateToken } from '../../lib/crypto.ts';
 import { AppError } from '../../lib/errors.ts';
 import { generateKeyPair } from '../../servers/ssh.ts';
 import type { ApplicationRecord } from '../../store/index.ts';
-import { audit, body, requireTeam, type Env } from '../core.ts';
+import { audit, body, requestOrigin, requireTeam, type Env } from '../core.ts';
 import { applicationDto } from '../dto.ts';
 import { loadApp } from './applications.ts';
 import { loadProject } from './projects.ts';
@@ -90,7 +90,7 @@ export function registerComposeRoutes(app: Hono<Env>, ctx: Context): void {
 
     const needsKey = source.type === 'git' && source.url.startsWith('git@');
     const deployment = needsKey ? null : ctx.deployer.enqueue({ app: stores.applications.get(application.id)!, trigger: 'manual', createdBy: auth.user.id });
-    return c.json({ application: applicationDto(ctx, stores.applications.get(application.id)!), deploymentId: deployment?.id ?? null }, 201);
+    return c.json({ application: applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)), deploymentId: deployment?.id ?? null }, 201);
   });
 
   app.get('/api/applications/:id/compose', async (c) => {
@@ -131,7 +131,7 @@ export function registerComposeRoutes(app: Hono<Env>, ctx: Context): void {
     });
     audit(ctx, c, 'compose.updated', { type: 'application', id: application.id, name: application.name }, { fields: Object.keys(input) });
     emit(ctx, application.teamId, { type: 'application.updated', id: application.id, projectId: application.projectId, status: updated.status });
-    return c.json(applicationDto(ctx, stores.applications.get(application.id)!));
+    return c.json(applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)));
   });
 
   app.put('/api/applications/:id/host-access', async (c) => {
@@ -139,6 +139,6 @@ export function registerComposeRoutes(app: Hono<Env>, ctx: Context): void {
     const input = await body(c, z.object({ allowed: z.boolean() }));
     stores.applications.setHostAccess(application.id, input.allowed);
     audit(ctx, c, input.allowed ? 'compose.host_access_granted' : 'compose.host_access_revoked', { type: 'application', id: application.id, name: application.name });
-    return c.json(applicationDto(ctx, stores.applications.get(application.id)!));
+    return c.json(applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)));
   });
 }

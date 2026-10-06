@@ -7,13 +7,15 @@
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { BookOpen, ExternalLink } from 'lucide-react';
+import { BookOpen, Copy, Download, ExternalLink } from 'lucide-react';
 import type { ServiceDto } from '@ploy/shared';
 import { CopyButton } from '../../../components/Copy.tsx';
 import { Rich } from '../../../components/Rich.tsx';
-import { Callout, Field, Input, Select, Skeleton } from '../../../components/ui.tsx';
+import { useToast } from '../../../components/Toast.tsx';
+import { Button, Callout, Field, Input, Select, Skeleton } from '../../../components/ui.tsx';
 import { useI18n } from '../../../i18n/index.tsx';
 import { useBuckets, useStorageKeys, useStorageOverview } from '../../../lib/queries.ts';
+import { downloadMarkdown, storageDocsMarkdown } from './storageDocsMarkdown.ts';
 import { browserUploadSnippet, linkEnvRows, linkedAppSnippet, panelApiSnippet, SDK_LABELS, SDKS, sdkSnippet, type Sdk } from './storageSnippets.ts';
 
 const SECTIONS = ['quickstart', 'connection', 'linked', 'sdk', 'links', 'browser', 'keys', 'backups', 'limits', 'faq', 'api'] as const;
@@ -73,7 +75,8 @@ function Bullets({ items }: { items: readonly string[] }) {
 }
 
 export function StorageDocsTab({ service }: { service: ServiceDto }) {
-  const { m } = useI18n();
+  const { m, formatDate } = useI18n();
+  const toast = useToast();
   const d = m.fileStore.docs;
   const overview = useStorageOverview(service.id);
   const buckets = useBuckets(service.id);
@@ -95,6 +98,29 @@ export function StorageDocsTab({ service }: { service: ServiceDto }) {
   const envPrefix = prefix.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
   const panelBase = typeof window === 'undefined' ? '' : window.location.origin;
 
+  const markdown = () =>
+    storageDocsMarkdown({
+      m,
+      serviceName: service.name,
+      serviceId: service.id,
+      origin: panelBase,
+      values,
+      external,
+      internalEndpoint: data?.internalEndpoint ?? fallback.internalEndpoint,
+      rootAccessKeyId: data?.rootAccessKeyId ?? fallback.rootAccessKeyId,
+      envPrefix,
+      generatedAt: formatDate(new Date(), { dateStyle: 'medium', timeStyle: 'short' }),
+    });
+  const download = () => downloadMarkdown(`torexploy-${service.slug}-docs.md`, markdown());
+  const copyMarkdown = async () => {
+    try {
+      await navigator.clipboard.writeText(markdown());
+      toast.success(d.copied);
+    } catch (error) {
+      toast.error(error);
+    }
+  };
+
   const jump = (section: Section) => document.getElementById(`docs-${section}`)?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
   if (overview.isPending || data === undefined) return <Skeleton height={320} />;
@@ -103,13 +129,21 @@ export function StorageDocsTab({ service }: { service: ServiceDto }) {
     <div className="stack" style={{ gap: 16 }}>
       {overview.isError && <Callout tone="work">{m.errors.codes.storage_unavailable}</Callout>}
       <div className="guide__hero" style={{ paddingBottom: 16, marginBottom: 0 }}>
-        <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <div className="docs__head">
           <span className="guide__section-icon" aria-hidden="true">
             <BookOpen />
           </span>
-          <div className="grow" style={{ minWidth: 0 }}>
+          <div className="docs__title">
             <h2 style={{ margin: 0, fontSize: 'var(--text-xl)', lineHeight: 'var(--lh-xl)', fontWeight: 650 }}>{d.title}</h2>
             <p className="guide__summary">{d.subtitle}</p>
+          </div>
+          <div className="docs__actions">
+            <Button size="sm" icon={<Copy />} onClick={() => void copyMarkdown()}>
+              {d.copyMd}
+            </Button>
+            <Button size="sm" variant="primary" icon={<Download />} onClick={download}>
+              {d.download}
+            </Button>
           </div>
         </div>
         <div className="form-grid">

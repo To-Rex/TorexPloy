@@ -331,6 +331,33 @@ test('POST /api/projects/:id/services takes hand-chosen credentials, a public po
   }
 });
 
+test('the deploy hook URL uses the panel domain when there is one, else the address the request came in on', async () => {
+  const h = await harness();
+  try {
+    const { stores } = h.ctx;
+    const shop = stores.projects.create(h.teamA.id, 'Shop', null);
+    const web = h.application(h.teamA.id, shop.id, 'Web', 'web', 'nginx:alpine');
+    const token = h.ctx.secrets.open(web.deployHookToken!, 'hook');
+
+    // No domain yet: the hook is still reachable where the dashboard is, so that address is shown (tests reach the app at localhost).
+    const bare = await h.call<ApplicationDto>(h.tokens.developer, 'GET', `/api/applications/${web.id}`);
+    assert.equal(bare.body.deployHookUrl, `http://localhost/api/hooks/deploy/${web.id}/${token}`);
+    const listed = await h.call<ApplicationDto[]>(h.tokens.developer, 'GET', '/api/applications');
+    assert.equal(listed.body.find((item) => item.id === web.id)?.deployHookUrl, `http://localhost/api/hooks/deploy/${web.id}/${token}`);
+    // That URL works without any domain.
+    const fired = await h.raw(h.tokens.viewer, 'POST', `/api/hooks/deploy/${web.id}/${token}`);
+    assert.ok([200, 202].includes(fired.status), `hook answered ${fired.status}`);
+
+    // With a panel domain the public address wins.
+    stores.settings.updatePlatform({ platformDomain: 'deploy.example.uz' });
+    const named = await h.call<ApplicationDto>(h.tokens.developer, 'GET', `/api/applications/${web.id}`);
+    assert.equal(named.body.deployHookUrl, `https://deploy.example.uz/api/hooks/deploy/${web.id}/${token}`);
+    for (let i = 0; i < 300 && stores.deployments.listOpen().length > 0; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+  } finally {
+    await h.close();
+  }
+});
+
 test('deployment history: one finished deployment can be deleted, and a clean-up keeps the active and the newest', async () => {
   const h = await harness();
   try {

@@ -1170,6 +1170,7 @@ export const en: Messages = {
     rotateHook: 'Generate a new URL',
     hookRotated: 'The old URL no longer works',
     hookUnavailable: 'The URL appears once the platform domain is configured.',
+    hookFromAddress: 'No panel domain is set: the address uses the current IP and port. Once a domain is added, a domain address appears here; the old one keeps working.',
     danger: 'Danger zone',
     dangerHint: 'These actions cannot be undone.',
     deleteTitle: 'Delete application',
@@ -1937,6 +1938,9 @@ export const en: Messages = {
       title: 'Integration docs',
       subtitle: 'How to put this file store into an application: parameters, SDK samples, links, keys and limits — all filled in for this very store.',
       toc: 'Sections',
+      download: 'Download Markdown',
+      copyMd: 'Copy as Markdown',
+      copied: 'Document copied as Markdown',
       pick: { key: 'Key in the samples', root: 'Root key', bucket: 'Bucket in the samples' },
       secretNote: 'The secret key is never shown: replace <SECRET_ACCESS_KEY> in the samples with the value shown once when the key was created. The root key secret is under “Reveal” on the General tab.',
       quickstart: {
