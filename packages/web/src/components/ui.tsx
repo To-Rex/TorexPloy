@@ -243,19 +243,11 @@ export function GithubMark({ size = 16 }: { size?: number }) {
 }
 
 /** The TorexPloy mark: two rising chevrons over a launch bar. */
-/** The TorexPloy mark: a turtle carried by a balloon. Inherits the text colour, so it sits on any surface. */
+/**
+ * The TorexPloy mark. It is `public/favicon.svg`, the same file the browser
+ * tab shows, so replacing that one file changes the logo everywhere: tab,
+ * sidebar, sign-in pages, loading screen.
+ */
 export function BrandMark({ size = 28, tile = false }: { size?: number; tile?: boolean }) {
-  return (
-    <svg className={tile ? 'brand-mark brand-mark--tile' : 'brand-mark'} width={size} height={size} viewBox="12 1 52 54" fill="currentColor" aria-hidden="true">
-      <path fillRule="evenodd" d="M37 2.8c4.7 0 7.8 3.9 7.8 9 0 4.3-2.6 7.9-5.7 9l1 1.6h-6.2l1-1.6c-3.1-1.1-5.7-4.7-5.7-9 0-5.1 3.1-9 7.8-9Zm-3.4 4.4c-1 .9-1.6 2.3-1.6 3.8 0 .4.3.7.7.7s.7-.3.7-.7c0-1.1.5-2.1 1.2-2.8.3-.3.3-.7 0-1-.3-.3-.7-.3-1 0Z" />
-      <path d="M37 22.4c.9 4.3-.7 8.2.1 11.2" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-      <path d="M20.8 44.6c0-7.2 7.3-11.8 16.2-11.8s16.2 4.6 16.2 11.8H20.8Z" />
-      <rect x="18.4" y="44.2" width="36.4" height="3.3" rx="1.6" />
-      <path fillRule="evenodd" d="M57.6 42.5c2.6 0 4.6 1.9 4.6 4.2s-2 4.2-4.6 4.2c-1.3 0-2.4-.5-3.2-1.2l-.3-6.1c.9-.7 2.1-1.1 3.5-1.1Zm1.2 2.1c-.8 0-1.4.6-1.4 1.4s.6 1.4 1.4 1.4 1.4-.6 1.4-1.4-.6-1.4-1.4-1.4Z" />
-      <circle cx="59.1" cy="46.2" r=".6" />
-      <path d="M45.6 47.5h5.6l1.9 4.1c.4.9-.2 1.9-1.2 1.9h-1.3c-.6 0-1.2-.3-1.5-.9l-3.5-5.1Z" />
-      <path d="M22.4 47.5H28l-3.5 5.1c-.3.6-.9.9-1.5.9h-1.3c-1 0-1.6-1-1.2-1.9l1.9-4.1Z" />
-      <path d="M18.9 44.6l-4.6-1.9c-.5-.2-1 .3-.7.8l2.6 2.8c.2.2.4.3.7.3h2v-2Z" />
-    </svg>
-  );
+  return <img className={tile ? 'brand-mark brand-mark--tile' : 'brand-mark'} src="/favicon.svg" width={size} height={size} alt="" aria-hidden="true" draggable={false} />;
 }

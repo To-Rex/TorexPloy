@@ -52,23 +52,20 @@
     background: var(--surface-hover);
   }
   .brand-mark {
+    display: block;
     flex: none;
-    color: var(--ink);
+    object-fit: contain;
+    border-radius: 50%;
   }
   .team-switch > .brand-mark--tile,
   .brand-mark--tile {
     box-sizing: border-box;
     width: 36px;
     height: 36px;
-    padding: 3px;
+    padding: 2px;
     border: 1px solid var(--line);
     border-radius: 10px;
-    background: var(--surface-sunken);
-    color: var(--ink);
-  }
-  .auth__brand .brand-mark,
-  .auth__mobile-brand .brand-mark {
-    color: inherit;
+    background: var(--surface);
   }
   .team-switch__text {
     flex: 1;
