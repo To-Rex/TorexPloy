@@ -52,7 +52,7 @@ export class ConnectionManager {
         host: server.host,
         port: server.port ?? 22,
         username: server.username ?? 'root',
-        privateKey: this.secrets.open(server.sshPrivateKey, 'ssh'),
+        auth: { kind: 'key', privateKey: this.secrets.open(server.sshPrivateKey, 'ssh') },
         hostKey: server.hostKey,
       },
       this.logger,

@@ -19,6 +19,10 @@ export function issueText(m: Messages, issue: ValidationIssue): string {
   const v = m.validation;
   if (params.reason === 'duplicate') return v.duplicate;
   if (params.reason === 'domain_required') return v.domainRequired;
+  if (params.reason === 'ssh_auth') return v.sshPassword;
+  if (params.reason === 'ssh_password_disabled') return v.sshPasswordDisabled;
+  if (params.reason === 'ssh_key_invalid') return v.sshKey;
+  if (params.reason === 'ssh_key_passphrase') return v.sshPassphrase;
   switch (issue.code) {
     case 'too_small':
       if (params.origin === 'string' && params.minimum === 1) return v.required;

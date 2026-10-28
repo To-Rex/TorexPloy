@@ -184,6 +184,8 @@ export const LIMITS = {
   memoryMbMax: 262_144,
   passwordMin: 8,
   passwordMax: 256,
+  /** A pasted SSH private key (the largest common ones, 4096-bit RSA, are ~3.3 KB). */
+  sshKeyMax: 16_384,
   composeFileMax: 256 * 1024,
   /** Pull request previews one application may run at once. */
   previewsMax: 20,

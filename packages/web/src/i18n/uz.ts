@@ -1321,6 +1321,20 @@ export const uz = {
     empty: 'Qoʻshimcha server yoʻq.',
     reconnect: 'Qayta ulanish',
     edit: 'Ulanishni tahrirlash',
+    auth: 'Serverga kirish',
+    authPassword: 'Parol bilan',
+    authPrivateKey: 'Shaxsiy kalit bilan',
+    authManual: 'Kalitni qoʻlda qoʻshish',
+    authKeep: 'Joriy kalit',
+    authKeepHint: 'Saqlangan kalit oʻzgarmaydi.',
+    password: 'SSH parol',
+    passwordHint: 'Faqat bir marta ishlatiladi: panel oʻz kalitini serverdagi authorized_keys ga yozadi. Parol saqlanmaydi.',
+    privateKey: 'Shaxsiy kalit',
+    privateKeyHint: 'OpenSSH yoki PEM formatdagi kalit (id_ed25519, id_rsa). Shifrlangan holda saqlanadi.',
+    passphrase: 'Kalit paroli',
+    passphraseHint: 'Kalit parol bilan himoyalangan boʻlsa kiriting.',
+    manualHint: 'Server qoʻshilgach, panel kalitini authorized_keys ga qoʻshish buyrugʻi koʻrsatiladi.',
+    connecting: 'Server tekshirilmoqda: SSH, Docker va proxy. Bu bir necha daqiqa olishi mumkin.',
   },
 
   // ------------------------------------------------------------- settings
@@ -2239,6 +2253,10 @@ export const uz = {
     invalid: 'Qiymat notoʻgʻri',
     integer: 'Butun son kiriting',
     domainRequired: 'Bu ilova oʻz manzilini bilishi kerak. Domen kiriting yoki Sozlamalar → Platforma boʻlimida ilovalar domenini sozlang.',
+    sshPassword: 'Server bu parolni qabul qilmadi',
+    sshPasswordDisabled: 'Bu server SSH orqali parol qabul qilmaydi (faqat kalit). Shaxsiy kalit kiriting yoki kalitni qoʻlda qoʻshing.',
+    sshKey: 'Kalit oʻqilmadi: OpenSSH yoki PEM formatdagi shaxsiy kalit kiriting',
+    sshPassphrase: 'Kalit paroli notoʻgʻri yoki kiritilmagan',
   },
 };
 

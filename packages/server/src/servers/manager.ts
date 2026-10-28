@@ -9,13 +9,15 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { hostname } from 'node:os';
+import type { ServerAuthInput } from '@ploy/shared';
 import { emit, type Context } from '../context.ts';
 import { DockerUnavailableError } from '../docker/client.ts';
 import { LABEL_MANAGED, PLATFORM_NETWORK } from '../docker/naming.ts';
 import { AppError, errorMessage, reasonOf } from '../lib/errors.ts';
+import { newId } from '../lib/ids.ts';
 import { cpuBusyPercent, parseRemoteProbe, readLocalHost, REMOTE_PROBE, type CpuTimes, type HostReading } from '../metrics/host.ts';
 import type { ServerRecord } from '../store/servers.ts';
-import { describeSshFailure, generateKeyPair, SshError, sshFailureReason } from './ssh.ts';
+import { describeSshFailure, generateKeyPair, importPrivateKey, SshError, SshKeyError, SshSession, sshFailureReason, type SshTarget } from './ssh.ts';
 
 const PUBLIC_IP_ENDPOINTS = ['https://api.ipify.org', 'https://ifconfig.me/ip', 'https://icanhazip.com'];
 
@@ -35,14 +37,99 @@ export class ServerManager {
     }
   }
 
-  async createSsh(teamId: string, input: { name: string; host: string; port: number; username: string }): Promise<ServerRecord> {
-    const keys = await generateKeyPair(`torexploy-${input.name.replace(/\s+/g, '-').toLowerCase()}`);
-    return this.ctx.stores.servers.createSsh({
+  /**
+   * Add an SSH server. With `key` auth the operator still has to authorize the
+   * generated key by hand; a password or a pasted key leaves nothing to do, so
+   * the server is verified right away (in the background: pulling the proxy can take a while).
+   */
+  async createSsh(teamId: string, input: { name: string; host: string; port: number; username: string; auth: ServerAuthInput }): Promise<ServerRecord> {
+    const id = newId('srv');
+    const keys = input.auth.method === 'privateKey' ? await this.importKey(input.auth) : await generateKeyPair(this.keyComment(input.name));
+    const learned =
+      input.auth.method === 'password'
+        ? await this.installKeyWithPassword({ serverId: id, host: input.host, port: input.port, username: input.username, hostKey: null }, input.auth.password, keys.publicKey)
+        : null;
+    const server = this.ctx.stores.servers.createSsh({
+      id,
       teamId,
-      ...input,
+      name: input.name,
+      host: input.host,
+      port: input.port,
+      username: input.username,
       sealedPrivateKey: this.ctx.secrets.seal(keys.privateKey, 'ssh'),
       publicKey: keys.publicKey,
+      hostKey: learned?.hostKey ?? null,
+      hostKeyFingerprint: learned?.fingerprint ?? null,
     });
+    if (input.auth.method !== 'key') void this.verify(server.id).catch(() => undefined);
+    return this.ctx.stores.servers.get(server.id)!;
+  }
+
+  /**
+   * Change how the panel signs in to a server. A password installs the server's
+   * existing public key; a pasted key replaces the pair; `key` generates a fresh
+   * pair the operator must authorize by hand again.
+   */
+  async setCredentials(serverId: string, auth: ServerAuthInput): Promise<ServerRecord> {
+    const { stores, secrets, connections } = this.ctx;
+    const server = stores.servers.get(serverId);
+    if (server === undefined || server.kind !== 'ssh' || server.host === null) throw new AppError('bad_request', 'Only SSH servers have credentials');
+    await connections.invalidate(server.id);
+    if (auth.method === 'password') {
+      let publicKey = server.sshPublicKey;
+      if (publicKey === null) {
+        const keys = await generateKeyPair(this.keyComment(server.name));
+        stores.servers.setSshKey(server.id, secrets.seal(keys.privateKey, 'ssh'), keys.publicKey);
+        publicKey = keys.publicKey;
+      }
+      const target = { serverId: server.id, host: server.host, port: server.port ?? 22, username: server.username ?? 'root', hostKey: server.hostKey };
+      const learned = await this.installKeyWithPassword(target, auth.password, publicKey);
+      if (learned !== null) stores.servers.setHostKey(server.id, learned.hostKey, learned.fingerprint);
+    } else {
+      const keys = auth.method === 'privateKey' ? await this.importKey(auth) : await generateKeyPair(this.keyComment(server.name));
+      stores.servers.setSshKey(server.id, secrets.seal(keys.privateKey, 'ssh'), keys.publicKey);
+    }
+    if (auth.method === 'key') this.setStatus(server, 'pending', null);
+    else void this.verify(server.id).catch(() => undefined);
+    return stores.servers.get(server.id)!;
+  }
+
+  private keyComment(name: string): string {
+    return `torexploy-${name.replace(/\s+/g, '-').toLowerCase()}`;
+  }
+
+  /** A pasted key, or a 422 on the field that is wrong with it. */
+  private async importKey(auth: { privateKey: string; passphrase?: string }): Promise<{ privateKey: string; publicKey: string }> {
+    try {
+      return await importPrivateKey(auth.privateKey, auth.passphrase);
+    } catch (error) {
+      if (!(error instanceof SshKeyError)) throw error;
+      const path = error.reason === 'ssh_key_passphrase' ? 'auth.passphrase' : 'auth.privateKey';
+      throw new AppError('validation_failed', error.message, { issues: [{ path, code: 'custom', message: error.message, params: { reason: error.reason } }] });
+    }
+  }
+
+  /**
+   * One password session: record the host key when it is not known yet, then put
+   * `publicKey` into authorized_keys. A rejected password is a validation error on
+   * the password field; anything else (unreachable, host key changed) is a server error.
+   */
+  private async installKeyWithPassword(target: Omit<SshTarget, 'auth'>, password: string, publicKey: string): Promise<{ hostKey: string; fingerprint: string } | null> {
+    const session = new SshSession({ ...target, auth: { kind: 'password', password } }, this.ctx.logger);
+    try {
+      const learned = target.hostKey === null ? await session.learnHostKey() : null;
+      await session.installAuthorizedKey(publicKey);
+      return learned;
+    } catch (error) {
+      if (error instanceof SshError && (error.reason === 'ssh_auth' || error.reason === 'ssh_password_disabled')) {
+        throw new AppError('validation_failed', error.message, { issues: [{ path: 'auth.password', code: 'custom', message: error.message, params: { reason: error.reason } }] });
+      }
+      if (error instanceof SshError) throw new AppError('server_unreachable', error.message, { params: { reason: error.reason } });
+      throw error;
+    } finally {
+      await session.closeMaster();
+      session.dispose();
+    }
   }
 
   /** Bring a server to `ready`. Concurrent calls for one server share a single run. */

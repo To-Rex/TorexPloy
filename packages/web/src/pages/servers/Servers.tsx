@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Plus, Server as ServerIcon } from 'lucide-react';
-import { createServerSchema, type ServerDto } from '@ploy/shared';
+import { createServerSchema, type CreateServerInput, type ServerDto } from '@ploy/shared';
 import { Frame } from '../../components/Frame.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
 import { usePageMeta } from '../../components/PageMeta.tsx';
+import { Reason } from '../../components/Reason.tsx';
 import { Status } from '../../components/Status.tsx';
-import { Badge, Button, Field, Input, SkeletonRows } from '../../components/ui.tsx';
+import { Badge, Button, Callout, Field, Input, SkeletonRows } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
-import { api } from '../../lib/api.ts';
-import { fieldErrors } from '../../lib/errors.ts';
+import { api, ApiError } from '../../lib/api.ts';
+import { errorText, fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useServers } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
+import { authPayload, emptyAuth, ServerAuthFields, type AuthForm } from './ServerAuthFields.tsx';
 
 export function ServersPage() {
   const { m, plural, formatBytes } = useI18n();
@@ -21,15 +23,24 @@ export function ServersPage() {
   const servers = useServers();
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: '', host: '', port: '22', username: 'root' });
+  const [auth, setAuth] = useState<AuthForm>(emptyAuth('password'));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const create = useAction((input: { name: string; host: string; port: number; username: string }) => api.post<ServerDto>('/api/servers', input), {
+  /** A failure past validation (unreachable host, host key changed…), shown in the dialog. */
+  const [failure, setFailure] = useState<{ reason: string | null; message: string } | null>(null);
+  const create = useAction((input: CreateServerInput) => api.post<ServerDto>('/api/servers', input), {
     invalidate: [keys.servers],
-    inlineValidation: true,
+    inlineErrors: true,
     onSuccess: (server) => {
       setAdding(false);
       void navigate(`/servers/${server.id}`);
     },
   });
+  const open = (): void => {
+    setErrors({});
+    setFailure(null);
+    setAuth(emptyAuth('password'));
+    setAdding(true);
+  };
 
   return (
     <div className="page">
@@ -38,7 +49,7 @@ export function ServersPage() {
         title={m.servers.title}
         description={m.servers.subtitle}
         actions={
-          <Button variant="primary" icon={<Plus />} onClick={() => { setErrors({}); setAdding(true); }}>
+          <Button variant="primary" icon={<Plus />} onClick={open}>
             {m.servers.add}
           </Button>
         }
@@ -78,24 +89,37 @@ export function ServersPage() {
         onClose={() => setAdding(false)}
         title={m.servers.add}
         onSubmit={() => {
-          const payload = { name: form.name.trim(), host: form.host.trim(), port: Number(form.port), username: form.username.trim() };
+          const payload: CreateServerInput = { name: form.name.trim(), host: form.host.trim(), port: Number(form.port), username: form.username.trim(), auth: authPayload(auth) };
           const result = validate(m, createServerSchema, payload);
+          setFailure(null);
           if (result.errors !== null) {
             setErrors(result.errors);
             return;
           }
-          create.mutate(payload, { onError: (error) => setErrors(fieldErrors(m, error)) });
+          setErrors({});
+          create.mutate(payload, {
+            onError: (error) => {
+              setErrors(fieldErrors(m, error));
+              if (error instanceof ApiError && error.code === 'validation_failed' && error.issues.length > 0) return;
+              setFailure({ reason: error instanceof ApiError && typeof error.params.reason === 'string' ? error.params.reason : null, message: errorText(m, error) });
+            },
+          });
         }}
         footer={
           <>
             <Button onClick={() => setAdding(false)}>{m.common.cancel}</Button>
             <Button type="submit" variant="primary" busy={create.isPending}>
-              {m.common.continue}
+              {auth.method === 'key' ? m.common.continue : m.servers.add}
             </Button>
           </>
         }
       >
         <div className="stack">
+          {failure !== null && (
+            <Callout tone="bad">
+              <Reason kind="server" code={failure.reason} message={failure.message} />
+            </Callout>
+          )}
           <Field label={m.servers.name} error={errors.name}>
             <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="hetzner-1" autoFocus />
           </Field>
@@ -110,6 +134,7 @@ export function ServersPage() {
           <Field label={m.servers.username} hint={m.servers.usernameHint} error={errors.username}>
             <Input mono value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} spellCheck={false} />
           </Field>
+          <ServerAuthFields form={auth} onChange={setAuth} errors={errors} editing={false} />
         </div>
       </Dialog>
     </div>

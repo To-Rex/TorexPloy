@@ -415,7 +415,7 @@ export const guide: GuideContent = {
             {
               type: "steps",
               items: [
-                { title: "Servers → Add server", text: "A name, `user@host`, port and SSH key. The platform connects, checks Docker (installs it if needed) and brings up the proxy." },
+                { title: "Servers → Add server", text: "A name, `user@host`, port and a way in: the SSH password (used once to install the panel key, never stored), your own private key, or adding the panel key by hand. The platform connects, checks Docker (installs it if needed) and brings up the proxy." },
                 { title: "Verification", text: "Once the status is **Ready**, the server can be picked when creating an app. On a problem, “Verify again” shows the reason." },
                 { title: "Public IP", text: "Detected automatically; public ports and DNS checks rely on it. If it was not detected — “Verify again”." },
               ],

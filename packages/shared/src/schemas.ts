@@ -154,11 +154,32 @@ const sshHostSchema = z
     message: 'Must be a hostname or an IP address',
   });
 
+const sshUsernameSchema = z.string().trim().regex(/^[a-z_][a-z0-9_-]{0,31}$/);
+
+/**
+ * How the control plane gets onto an SSH server.
+ *
+ * - `key`: the panel generates an ed25519 key pair; the operator adds the public
+ *   key to `~/.ssh/authorized_keys` by hand and then checks the connection.
+ * - `password`: the account password is used once, to install the panel's
+ *   generated key on the server; it is never stored.
+ * - `privateKey`: the operator's own private key (OpenSSH or PEM, optionally
+ *   passphrase-protected). It is stored encrypted and used for every connection.
+ */
+export const serverAuthSchema = z.discriminatedUnion('method', [
+  z.object({ method: z.literal('key') }),
+  z.object({ method: z.literal('password'), password: z.string().min(1).max(1024) }),
+  z.object({ method: z.literal('privateKey'), privateKey: z.string().trim().min(1).max(LIMITS.sshKeyMax), passphrase: z.string().max(1024).optional() }),
+]);
+export type ServerAuthInput = z.infer<typeof serverAuthSchema>;
+export type ServerAuthMethod = ServerAuthInput['method'];
+
 export const createServerSchema = z.object({
   name: nameSchema,
   host: sshHostSchema,
   port: portSchema.default(22),
-  username: z.string().trim().regex(/^[a-z_][a-z0-9_-]{0,31}$/).default('root'),
+  username: sshUsernameSchema.default('root'),
+  auth: serverAuthSchema.default({ method: 'key' }),
 });
 export type CreateServerInput = z.input<typeof createServerSchema>;
 
@@ -166,7 +187,9 @@ export const updateServerSchema = z.object({
   name: nameSchema.optional(),
   host: sshHostSchema.optional(),
   port: portSchema.optional(),
-  username: z.string().trim().regex(/^[a-z_][a-z0-9_-]{0,31}$/).optional(),
+  username: sshUsernameSchema.optional(),
+  /** New credentials; omitted keeps the current key. `key` generates a fresh panel key. */
+  auth: serverAuthSchema.optional(),
 });
 export type UpdateServerInput = z.infer<typeof updateServerSchema>;
 

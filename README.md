@@ -99,7 +99,13 @@ docker exec ploy-control node packages/server/src/cli.ts info
 
 ## Qoʻshimcha server ulash
 
-**Serverlar → Server qoʻshish** boʻlimida IP manzil va SSH foydalanuvchini kiriting. TorexPloy shu server uchun alohida ed25519 kalit yaratadi va uni `authorized_keys` ga qoʻshish buyrugʻini koʻrsatadi. “Ulanishni tekshirish” bosilganda:
+**Serverlar → Server qoʻshish** boʻlimida IP manzil, SSH port va foydalanuvchini kiriting, soʻng serverga qanday kirishni tanlang:
+
+- **Parol bilan** — eng oson yoʻl. Parol faqat bir marta, TorexPloy oʻzi yaratgan ed25519 kalitni serverdagi `~/.ssh/authorized_keys` ga yozish uchun ishlatiladi va saqlanmaydi; keyingi ulanishlar faqat kalit bilan. Serverda parol bilan kirish oʻchirilgan boʻlsa (`PasswordAuthentication no`), panel buni aytadi — keyingi usullardan birini tanlang.
+- **Shaxsiy kalit bilan** — oʻz kalitingizni (OpenSSH yoki PEM: `id_ed25519`, `id_rsa`) joylashtiring; parol bilan himoyalangan boʻlsa, parolini ham kiriting. Kalit parolsiz holga keltirilib, shifrlangan holda saqlanadi.
+- **Kalitni qoʻlda qoʻshish** — TorexPloy kalit yaratadi va uni `authorized_keys` ga qoʻshish buyrugʻini koʻrsatadi; keyin “Ulanishni tekshirish”ni bosing.
+
+Parol yoki kalit kiritilganda server darhol, orqa fonda tekshiriladi (sahifada “Ulanmoqda” holati koʻrinadi). Keyinchalik “Ulanishni tahrirlash” orqali parol yoki kalitni qaytadan berish mumkin — masalan, birinchi urinishda parol notoʻgʻri boʻlsa. Tekshiruvda:
 
 - host kaliti saqlanadi (keyingi ulanishlarda qatʼiy tekshiriladi);
 - Docker tekshiriladi (yoʻq boʻlsa, bir bosishda oʻrnatish mumkin);

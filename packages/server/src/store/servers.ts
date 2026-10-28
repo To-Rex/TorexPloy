@@ -99,6 +99,8 @@ export class ServerStore {
   }
 
   createSsh(input: {
+    /** Chosen by the caller when it needs the id before the row exists (an SSH session keyed by it). */
+    id?: string;
     teamId: string;
     name: string;
     host: string;
@@ -106,12 +108,15 @@ export class ServerStore {
     username: string;
     sealedPrivateKey: string;
     publicKey: string;
+    /** Already recorded when the key was installed over a password session. */
+    hostKey?: string | null;
+    hostKeyFingerprint?: string | null;
   }): ServerRecord {
-    const id = newId('srv');
+    const id = input.id ?? newId('srv');
     const now = nowIso();
     this.db.run(
-      `INSERT INTO servers (id, team_id, name, kind, host, port, username, ssh_private_key, ssh_public_key, status, created_at, updated_at)
-       VALUES (?, ?, ?, 'ssh', ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      `INSERT INTO servers (id, team_id, name, kind, host, port, username, ssh_private_key, ssh_public_key, host_key, host_key_fingerprint, status, created_at, updated_at)
+       VALUES (?, ?, ?, 'ssh', ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
       id,
       input.teamId,
       input.name,
@@ -120,6 +125,8 @@ export class ServerStore {
       input.username,
       input.sealedPrivateKey,
       input.publicKey,
+      input.hostKey ?? null,
+      input.hostKeyFingerprint ?? null,
       now,
       now,
     );
@@ -183,6 +190,11 @@ export class ServerStore {
       nowIso(),
       id,
     );
+  }
+
+  /** Replace the server's key pair (a pasted key, or a regenerated panel key). */
+  setSshKey(id: string, sealedPrivateKey: string, publicKey: string): void {
+    this.db.run('UPDATE servers SET ssh_private_key = ?, ssh_public_key = ?, updated_at = ? WHERE id = ?', sealedPrivateKey, publicKey, nowIso(), id);
   }
 
   setHostKey(id: string, hostKey: string, fingerprint: string): void {

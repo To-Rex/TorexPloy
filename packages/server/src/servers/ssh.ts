@@ -8,10 +8,15 @@
  * against the local socket.
  *
  * Security:
- * - One ed25519 key per server, generated here, stored encrypted.
+ * - One key per server, stored encrypted: an ed25519 key generated here, or
+ *   one the operator pasted in (its passphrase is stripped before storage).
+ * - A password is only ever used for one session, to install the panel's key
+ *   in `authorized_keys`; it is handed to ssh through an askpass helper that
+ *   reads it from the environment, so it never touches the disk or `ps`.
  * - Host keys are trust-on-first-use: recorded on the first successful
  *   connection, enforced strictly afterwards (`StrictHostKeyChecking=yes`).
- * - `-F /dev/null` ignores any ambient SSH config; `BatchMode` forbids prompts.
+ * - `-F /dev/null` ignores any ambient SSH config; `BatchMode` forbids prompts
+ *   on key sessions.
  * - ControlMaster multiplexes every tunnel connection over one TCP session.
  */
 import { spawn } from 'node:child_process';
@@ -21,12 +26,15 @@ import { join } from 'node:path';
 import { runProcess, type ProcessResult } from '../lib/process.ts';
 import type { Logger } from '../lib/logger.ts';
 
+/** How a session authenticates: the server's stored key, or a one-off password. */
+export type SshAuth = { kind: 'key'; privateKey: string } | { kind: 'password'; password: string };
+
 export interface SshTarget {
   serverId: string;
   host: string;
   port: number;
   username: string;
-  privateKey: string;
+  auth: SshAuth;
   /** known_hosts lines recorded on first contact; null until then. */
   hostKey: string | null;
 }
@@ -46,10 +54,30 @@ export function runtimeDir(): string {
   return base;
 }
 
+/** Name of the environment variable the askpass helper answers with. */
+const ASKPASS_SECRET_ENV = 'PLOY_SSH_SECRET';
+
+/**
+ * Make OpenSSH take a secret from us instead of a terminal. `SSH_ASKPASS_REQUIRE=force`
+ * (OpenSSH ≥ 8.4) routes every prompt — password, keyboard-interactive, key passphrase —
+ * to the helper, which prints the secret from its environment.
+ */
+function askpass(dir: string, secret: string): Record<string, string> {
+  const path = join(dir, 'askpass');
+  writeFileSync(path, `#!/bin/sh\nprintf '%s\\n' "\$${ASKPASS_SECRET_ENV}"\n`, { mode: 0o700 });
+  chmodSync(path, 0o700);
+  return { SSH_ASKPASS: path, SSH_ASKPASS_REQUIRE: 'force', [ASKPASS_SECRET_ENV]: secret };
+}
+
+function scratchDir(prefix: string): string {
+  const dir = join(runtimeDir(), `${prefix}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  mkdirSync(dir, { mode: 0o700 });
+  return dir;
+}
+
 /** Generate an ed25519 keypair with ssh-keygen. Returns OpenSSH-format private and public keys. */
 export async function generateKeyPair(comment: string): Promise<{ privateKey: string; publicKey: string }> {
-  const dir = join(runtimeDir(), `keygen-${process.pid}-${Date.now()}`);
-  mkdirSync(dir, { mode: 0o700 });
+  const dir = scratchDir('keygen');
   const path = join(dir, 'id');
   try {
     const result = await runProcess('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', comment, '-f', path], { timeoutMs: 15_000 });
@@ -60,18 +88,80 @@ export async function generateKeyPair(comment: string): Promise<{ privateKey: st
   }
 }
 
+/** Why a pasted private key was refused (translated by the dashboard). */
+export type SshKeyProblem = 'ssh_key_invalid' | 'ssh_key_passphrase';
+
+export class SshKeyError extends Error {
+  override name = 'SshKeyError';
+  readonly reason: SshKeyProblem;
+
+  constructor(message: string, reason: SshKeyProblem) {
+    super(message);
+    this.reason = reason;
+  }
+}
+
+/**
+ * Accept a private key the operator pasted: any format ssh-keygen reads (OpenSSH,
+ * PEM/PKCS#8, RSA/ECDSA/ed25519). A passphrase-protected key is unlocked with the
+ * given passphrase and stored without one, because ssh runs unattended here.
+ * Returns the key as stored and the public key derived from it.
+ */
+export async function importPrivateKey(privateKey: string, passphrase: string | undefined): Promise<{ privateKey: string; publicKey: string }> {
+  const dir = scratchDir('import');
+  const path = join(dir, 'id');
+  const text = privateKey.replace(/\r\n?/g, '\n').trim();
+  try {
+    writeFileSync(path, `${text}\n`, { mode: 0o600 });
+    chmodSync(path, 0o600);
+    const env = askpass(dir, passphrase ?? '');
+    // `-y` prints the public key; it needs the passphrase for an encrypted key and nothing otherwise.
+    const check = await runProcess('ssh-keygen', ['-y', '-f', path], { timeoutMs: 15_000, env });
+    if (check.code !== 0) {
+      const stderr = check.stderr.trim();
+      if (/incorrect passphrase|bad passphrase|passphrase/i.test(stderr) && !/invalid format/i.test(stderr)) {
+        throw new SshKeyError(passphrase === undefined || passphrase.length === 0 ? 'The key is passphrase-protected: enter its passphrase' : 'Incorrect key passphrase', 'ssh_key_passphrase');
+      }
+      throw new SshKeyError(`Not a usable private key${stderr.length > 0 ? `: ${stderr.split('\n')[0]}` : ''}`, 'ssh_key_invalid');
+    }
+    if (passphrase !== undefined && passphrase.length > 0) {
+      // Strip the passphrase (new passphrase empty via -N; the old one comes through askpass).
+      const strip = await runProcess('ssh-keygen', ['-q', '-p', '-N', '', '-f', path], { timeoutMs: 15_000, env });
+      if (strip.code !== 0) throw new SshKeyError(`Could not unlock the key: ${strip.stderr.trim().split('\n')[0] ?? ''}`, 'ssh_key_invalid');
+    }
+    return { privateKey: readFileSync(path, 'utf8'), publicKey: check.stdout.trim() };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Shell snippet that appends the public key on stdin to the account's
+ * `authorized_keys` (once), creating `~/.ssh` with the permissions sshd insists on.
+ * Wrapped in `sh -c` so it works whatever the login shell is.
+ */
+export const INSTALL_KEY_COMMAND =
+  'sh -c \'umask 077; mkdir -p "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; key=$(cat); if ! grep -qxF "$key" "$HOME/.ssh/authorized_keys"; then printf "%s\\n" "$key" >> "$HOME/.ssh/authorized_keys"; fi; chmod 700 "$HOME/.ssh"; chmod 600 "$HOME/.ssh/authorized_keys"\'';
+
 export class SshSession {
   readonly target: SshTarget;
   private readonly dir: string;
   private readonly logger: Logger;
+  private readonly extraEnv: Record<string, string>;
 
   constructor(target: SshTarget, logger: Logger) {
     this.target = target;
     this.logger = logger;
     this.dir = join(runtimeDir(), `ssh-${target.serverId.slice(-10)}`);
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
-    writeFileSync(this.keyPath, this.target.privateKey.endsWith('\n') ? this.target.privateKey : `${this.target.privateKey}\n`, { mode: 0o600 });
-    chmodSync(this.keyPath, 0o600);
+    if (target.auth.kind === 'key') {
+      const key = target.auth.privateKey;
+      writeFileSync(this.keyPath, key.endsWith('\n') ? key : `${key}\n`, { mode: 0o600 });
+      chmodSync(this.keyPath, 0o600);
+      this.extraEnv = {};
+    } else {
+      this.extraEnv = askpass(this.dir, target.auth.password);
+    }
     if (target.hostKey !== null) writeFileSync(this.knownHostsPath, `${target.hostKey.trim()}\n`, { mode: 0o600 });
   }
 
@@ -87,16 +177,22 @@ export class SshSession {
     return join(this.dir, 'cm');
   }
 
+  /** Environment every ssh process of this session needs on top of the parent's. */
+  env(): Record<string, string> {
+    return { ...this.extraEnv };
+  }
+
   /** Base arguments for every ssh invocation against this target. */
   args(options: { acceptNewHostKey?: boolean } = {}): string[] {
     const { host, port, username } = this.target;
+    const auth =
+      this.target.auth.kind === 'key'
+        ? ['-i', this.keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'PasswordAuthentication=no']
+        : ['-o', 'PubkeyAuthentication=no', '-o', 'PreferredAuthentications=password,keyboard-interactive', '-o', 'NumberOfPasswordPrompts=1', '-o', 'BatchMode=no'];
     return [
       '-F', '/dev/null',
-      '-i', this.keyPath,
+      ...auth,
       '-p', String(port),
-      '-o', 'IdentitiesOnly=yes',
-      '-o', 'BatchMode=yes',
-      '-o', 'PasswordAuthentication=no',
       '-o', `UserKnownHostsFile=${this.knownHostsPath}`,
       '-o', `StrictHostKeyChecking=${options.acceptNewHostKey === true ? 'accept-new' : 'yes'}`,
       '-o', 'ConnectTimeout=15',
@@ -114,6 +210,7 @@ export class SshSession {
   exec(command: string, options: { timeoutMs?: number; acceptNewHostKey?: boolean; stdin?: string } = {}): Promise<ProcessResult> {
     return runProcess('ssh', [...this.args(options), '--', command], {
       timeoutMs: options.timeoutMs ?? 60_000,
+      env: this.env(),
       ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
     });
   }
@@ -125,7 +222,7 @@ export class SshSession {
   async learnHostKey(): Promise<{ hostKey: string; fingerprint: string }> {
     if (existsSync(this.knownHostsPath)) unlinkSync(this.knownHostsPath);
     const result = await this.exec('true', { acceptNewHostKey: true, timeoutMs: 30_000 });
-    if (result.code !== 0) throw new SshError(describeSshFailure(result), sshFailureReason(result));
+    if (result.code !== 0) throw new SshError(describeSshFailure(result, this.target.auth.kind), sshFailureReason(result, this.target.auth.kind));
     const hostKey = readFileSync(this.knownHostsPath, 'utf8').trim();
     const fingerprint = await runProcess('ssh-keygen', ['-l', '-E', 'sha256', '-f', this.knownHostsPath], { timeoutMs: 10_000 });
     const line = fingerprint.stdout.trim().split('\n')[0] ?? '';
@@ -134,9 +231,15 @@ export class SshSession {
     return { hostKey, fingerprint: parts.length >= 2 ? `${parts[1]} ${parts[parts.length - 1]}` : line };
   }
 
+  /** Put a public key into the account's `authorized_keys` so key sessions work from now on. */
+  async installAuthorizedKey(publicKey: string): Promise<void> {
+    const result = await this.exec(INSTALL_KEY_COMMAND, { timeoutMs: 30_000, stdin: `${publicKey.trim()}\n` });
+    if (result.code !== 0) throw new SshError(`Could not add the key to authorized_keys: ${describeSshFailure(result, this.target.auth.kind)}`, sshFailureReason(result, this.target.auth.kind));
+  }
+
   async closeMaster(): Promise<void> {
     if (!existsSync(this.controlPath)) return;
-    await runProcess('ssh', [...this.args(), '-O', 'exit'], { timeoutMs: 10_000 }).catch(() => undefined);
+    await runProcess('ssh', [...this.args(), '-O', 'exit'], { timeoutMs: 10_000, env: this.env() }).catch(() => undefined);
   }
 
   dispose(): void {
@@ -158,11 +261,17 @@ export class SshError extends Error {
   }
 }
 
+/** Did sshd offer password (or keyboard-interactive) authentication at all? Its "Permission denied (…)" lists what it accepts. */
+function passwordsAccepted(stderr: string): boolean {
+  const offered = /Permission denied \(([^)]*)\)/i.exec(stderr)?.[1];
+  return offered === undefined || /password|keyboard-interactive/i.test(offered);
+}
+
 /** A stable reason code for an ssh failure (translated by the dashboard). */
-export function sshFailureReason(result: ProcessResult): string {
+export function sshFailureReason(result: ProcessResult, auth: SshAuth['kind'] = 'key'): string {
   const stderr = result.stderr;
   if (result.timedOut) return 'ssh_timeout';
-  if (/Permission denied/i.test(stderr)) return 'ssh_auth';
+  if (/Permission denied/i.test(stderr)) return auth === 'password' && !passwordsAccepted(stderr) ? 'ssh_password_disabled' : 'ssh_auth';
   if (/Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED/i.test(stderr)) return 'ssh_hostkey';
   if (/Could not resolve hostname/i.test(stderr)) return 'ssh_dns';
   if (/Connection refused/i.test(stderr)) return 'ssh_refused';
@@ -171,10 +280,17 @@ export function sshFailureReason(result: ProcessResult): string {
 }
 
 /** Turn ssh's stderr into an actionable message. */
-export function describeSshFailure(result: ProcessResult): string {
+export function describeSshFailure(result: ProcessResult, auth: SshAuth['kind'] = 'key'): string {
   const stderr = result.stderr.trim();
   if (result.timedOut) return 'Connection timed out. Check the address, port and firewall.';
-  if (/Permission denied/i.test(stderr)) return 'Permission denied. Add the public key to ~/.ssh/authorized_keys for this user.';
+  if (/Permission denied/i.test(stderr)) {
+    if (auth === 'password') {
+      return passwordsAccepted(stderr)
+        ? 'The server rejected the password.'
+        : 'The server does not accept passwords over SSH (only keys). Use a private key or add the panel key by hand.';
+    }
+    return 'Permission denied. Add the public key to ~/.ssh/authorized_keys for this user.';
+  }
   if (/Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED/i.test(stderr)) {
     return 'Host key mismatch: the server identity changed since it was added. If this is expected, re-verify the server.';
   }
@@ -223,7 +339,7 @@ export class DockerTunnel {
 
   private forward(socket: Socket): void {
     this.connections.add(socket);
-    const child = spawn('ssh', [...this.session.args(), '--', 'docker', 'system', 'dial-stdio'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn('ssh', [...this.session.args(), '--', 'docker', 'system', 'dial-stdio'], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...this.session.env() } });
     let stderr = '';
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', (chunk: string) => {

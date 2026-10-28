@@ -9,6 +9,8 @@ export interface ActionOptions<TResult> {
   onSuccess?: (result: TResult) => void;
   /** Leave validation errors for the form to render inline instead of toasting them. */
   inlineValidation?: boolean;
+  /** Leave every error to the caller's `onError` (a form that shows failures in place). */
+  inlineErrors?: boolean;
 }
 
 export function useAction<TArgs = void, TResult = unknown>(fn: (args: TArgs) => Promise<TResult>, options: ActionOptions<TResult> = {}) {
@@ -23,6 +25,7 @@ export function useAction<TArgs = void, TResult = unknown>(fn: (args: TArgs) => 
       options.onSuccess?.(result);
     },
     onError: (error) => {
+      if (options.inlineErrors) return;
       if (options.inlineValidation && error instanceof ApiError && error.code === 'validation_failed' && error.issues.length > 0) return;
       toast.error(error);
     },

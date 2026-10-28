@@ -35,7 +35,7 @@ export function registerServerRoutes(app: Hono<Env>, ctx: Context): void {
     const auth = requireTeam(c, 'admin');
     const input = await body(c, createServerSchema);
     const server = await ctx.servers.createSsh(auth.teamId, input);
-    audit(ctx, c, 'server.created', { type: 'server', id: server.id, name: server.name }, { host: server.host });
+    audit(ctx, c, 'server.created', { type: 'server', id: server.id, name: server.name }, { host: server.host, auth: input.auth.method });
     return c.json(serverDto(ctx, server), 201);
   });
 
@@ -43,13 +43,14 @@ export function registerServerRoutes(app: Hono<Env>, ctx: Context): void {
 
   app.patch('/api/servers/:id', async (c) => {
     const server = load(c, true);
-    const input = await body(c, updateServerSchema);
-    if (server.kind === 'local' && (input.host !== undefined || input.port !== undefined || input.username !== undefined)) {
+    const { auth: credentials, ...input } = await body(c, updateServerSchema);
+    if (server.kind === 'local' && (input.host !== undefined || input.port !== undefined || input.username !== undefined || credentials !== undefined)) {
       throw forbidden('The local server has no connection settings');
     }
     stores.servers.update(server.id, input);
     await ctx.connections.invalidate(server.id);
-    audit(ctx, c, 'server.updated', { type: 'server', id: server.id, name: input.name ?? server.name });
+    if (credentials !== undefined) await ctx.servers.setCredentials(server.id, credentials);
+    audit(ctx, c, 'server.updated', { type: 'server', id: server.id, name: input.name ?? server.name }, credentials === undefined ? {} : { auth: credentials.method });
     return c.json(serverDto(ctx, stores.servers.get(server.id)!));
   });
 

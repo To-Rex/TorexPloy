@@ -12,7 +12,7 @@
 | HTTP | **Hono + @hono/node-server** | Kichik va tez, web-standart API, SSE helper. Tashqi bog'liqligi deyarli yo'q. |
 | Validatsiya | **zod** (`@ploy/shared`) | Bitta schema server va UI'da ishlaydi, shuning uchun API kontrakti ikki joyda alohida yozilmaydi. |
 | Konteynerlar | **Docker Engine API** (unix socket) + **`docker buildx` CLI** | Lifecycle, stats, events va loglar to'g'ridan-to'g'ri API orqali (CLI matnini parse qilish yo'q). Build uchun BuildKit CLI ishlatiladi, chunki kesh, `--mount=type=cache` va bekor qilish faqat shu yerda to'liq ishlaydi. |
-| Multi-server | **SSH tunnel** (`ssh … docker system dial-stdio`) | Remote serverga agent o'rnatish shart emas, faqat Docker va SSH kalit kerak. Tunnel lokal unix socket bo'lib ochiladi, shuning uchun Docker kodi local va remote uchun **bir xil**. |
+| Multi-server | **SSH tunnel** (`ssh … docker system dial-stdio`) | Remote serverga agent o'rnatish shart emas, faqat Docker va SSH kalit kerak (kalitni panel yaratadi va parol orqali o'zi o'rnatadi, yoki operator o'z kalitini beradi). Tunnel lokal unix socket bo'lib ochiladi, shuning uchun Docker kodi local va remote uchun **bir xil**. |
 | Reverse proxy | **Caddy** (har bir serverda `ploy-proxy`) | Avtomatik ACME (Let's Encrypt + ZeroSSL), atomik graceful reload, HTTP/3. Config Docker API orqali yuboriladi; admin API konteyner ichidagi `localhost`'da turadi va ilovalarga ko'rinmaydi. |
 | Realtime | **SSE** | Loglar, metrikalar va holat o'zgarishlari bir tomonlama oqim. WebSocket'dan sodda, proxy orqali yaxshi o'tadi va o'zi qayta ulanadi. |
 | Navbat | **SQLite `jobs` jadvali** + in-process worker'lar | Redis kerak emas. Jarayon qayta ishga tushsa, navbat saqlanib qoladi; retry va backoff bor. |
@@ -419,7 +419,7 @@ servislarning nusxalari esa shu omborga yoziladi. Kod: `services/catalog.ts` (`f
 | RBAC | Har bir resurs `team_id` bilan bog'langan; har bir handler rolni tekshiradi |
 | Konteyner | `no-new-privileges`, `cap-drop ALL` + minimal allowlist, PID/CPU/RAM limitlar, loyiha tarmog'i izolyatsiyasi, docker.sock hech qachon mount qilinmaydi |
 | Env | Sirlar `ps` ro'yxatida ko'rinmaydi (Engine API body orqali uzatiladi), UI'da maskalanadi, loglarda redact qilinadi |
-| SSH | Har bir server uchun alohida ed25519 kalit, host key TOFU + fingerprint saqlanadi |
+| SSH | Har bir server uchun alohida kalit (panel yaratgan ed25519 yoki operator bergan, parolsiz holga keltirilgan), shifrlangan; parol faqat bitta sessiyada kalitni `authorized_keys` ga yozish uchun ishlatiladi, `SSH_ASKPASS` orqali uzatiladi va hech qayerda saqlanmaydi; host key TOFU + fingerprint saqlanadi |
 | HTTP | CSP, HSTS (HTTPS'da), `frame-ancestors 'none'`, `nosniff` |
 | Terminal | Upgrade'dan oldin sessiya + `Origin` + `developer` roli; konteyner server tomonida tanlanadi; audit, sessiya cheklovi, harakatsizlik taymauti |
 | Compose | Host darajasidagi imkoniyatlar faqat admin ruxsati bilan; 80/443 taqiqlangan; konteynerlar label orqali ajratiladi |

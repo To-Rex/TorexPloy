@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Brush, Download, Pencil, RefreshCw, Server as ServerIcon, Trash2 } from 'lucide-react';
-import { updateServerSchema } from '@ploy/shared';
+import { updateServerSchema, type UpdateServerInput } from '@ploy/shared';
 import { CopyButton } from '../../components/Copy.tsx';
 import { useConfirm, Dialog } from '../../components/Dialog.tsx';
 import { Card } from '../../components/Frame.tsx';
@@ -10,8 +10,8 @@ import { Status } from '../../components/Status.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
 import { Badge, Button, Callout, Field, Input, Skeleton } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
-import { api } from '../../lib/api.ts';
-import { fieldErrors } from '../../lib/errors.ts';
+import { api, ApiError } from '../../lib/api.ts';
+import { errorText, fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useBootstrap, useRole, useServer, useServerDocker } from '../../lib/queries.ts';
 import { ServerContainers } from './ServerContainers.tsx';
@@ -19,6 +19,7 @@ import { validate } from '../../lib/validate.ts';
 import { NotFound } from '../../app/RouteError.tsx';
 import { HostCharts } from './HostCharts.tsx';
 import { Reason } from '../../components/Reason.tsx';
+import { authPayload, emptyAuth, ServerAuthFields, type AuthForm } from './ServerAuthFields.tsx';
 
 export function ServerPage() {
   const { serverId = '' } = useParams();
@@ -30,7 +31,9 @@ export function ServerPage() {
   const docker = useServerDocker(serverId, data?.status === 'ready');
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: '', host: '', port: '', username: '' });
+  const [auth, setAuth] = useState<AuthForm>(emptyAuth('keep'));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [failure, setFailure] = useState<{ reason: string | null; message: string } | null>(null);
   const [installOutput, setInstallOutput] = useState<string | null>(null);
   const bootstrap = useBootstrap();
   const role = useRole();
@@ -50,7 +53,7 @@ export function ServerPage() {
     invalidate: [keys.serverPart(serverId, 'docker')],
     success: (result) => t(m.servers.cleanupDone, { size: formatBytes(result.reclaimedBytes) }),
   });
-  const update = useAction((input: object) => api.patch(`/api/servers/${serverId}`, input), { invalidate, inlineValidation: true, onSuccess: () => setEditing(false) });
+  const update = useAction((input: UpdateServerInput) => api.patch(`/api/servers/${serverId}`, input), { invalidate, inlineErrors: true, onSuccess: () => setEditing(false) });
   const remove = useAction(() => api.delete(`/api/servers/${serverId}`), { success: m.servers.deleted, invalidate: [keys.servers], onSuccess: () => void navigate('/servers') });
 
   if (server.isError) return <NotFound />;
@@ -58,6 +61,8 @@ export function ServerPage() {
 
   const authorizeCommand = data.publicKey === null ? null : `mkdir -p ~/.ssh && echo "${data.publicKey}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`;
   const needsDocker = data.statusReason === 'docker_missing';
+  // The manual step only matters while the key is not on the server yet: never verified, or SSH refused the key.
+  const needsKey = data.kind === 'ssh' && authorizeCommand !== null && (data.status === 'pending' || data.statusReason === 'ssh_auth');
 
   const canSeeContainers = data.status === 'ready' && (data.kind === 'local' ? bootstrap.data?.user?.isInstanceAdmin === true : role === 'admin' || role === 'owner');
 
@@ -96,7 +101,9 @@ export function ServerPage() {
                   icon={<Pencil />}
                   onClick={() => {
                     setForm({ name: data.name, host: data.host ?? '', port: String(data.port ?? 22), username: data.username ?? 'root' });
+                    setAuth(emptyAuth('keep'));
                     setErrors({});
+                    setFailure(null);
                     setEditing(true);
                   }}
                 >
@@ -121,10 +128,11 @@ export function ServerPage() {
                 <Reason kind="server" code={data.statusReason} message={data.statusMessage} />
               </Callout>
             )}
+            {data.status === 'connecting' && <Callout tone="work">{m.servers.connecting}</Callout>}
             {install.isPending && <Callout tone="work">{m.servers.installingDocker}</Callout>}
             {installOutput !== null && <div className="codeblock" style={{ maxHeight: 240, overflow: 'auto' }}>{installOutput}</div>}
 
-            {data.kind === 'ssh' && data.status !== 'ready' && authorizeCommand !== null && (
+            {needsKey && (
               <Card
                 title={m.servers.keyTitle}
                 description={m.servers.keyText}
@@ -245,13 +253,22 @@ export function ServerPage() {
         onClose={() => setEditing(false)}
         title={m.servers.edit}
         onSubmit={() => {
-          const payload = { name: form.name.trim(), host: form.host.trim(), port: Number(form.port), username: form.username.trim() };
+          const credentials = authPayload(auth);
+          const payload: UpdateServerInput = { name: form.name.trim(), host: form.host.trim(), port: Number(form.port), username: form.username.trim(), ...(credentials === undefined ? {} : { auth: credentials }) };
           const result = validate(m, updateServerSchema, payload);
+          setFailure(null);
           if (result.errors !== null) {
             setErrors(result.errors);
             return;
           }
-          update.mutate(payload, { onError: (error) => setErrors(fieldErrors(m, error)) });
+          setErrors({});
+          update.mutate(payload, {
+            onError: (error) => {
+              setErrors(fieldErrors(m, error));
+              if (error instanceof ApiError && error.code === 'validation_failed' && error.issues.length > 0) return;
+              setFailure({ reason: error instanceof ApiError && typeof error.params.reason === 'string' ? error.params.reason : null, message: errorText(m, error) });
+            },
+          });
         }}
         footer={
           <>
@@ -263,6 +280,11 @@ export function ServerPage() {
         }
       >
         <div className="stack">
+          {failure !== null && (
+            <Callout tone="bad">
+              <Reason kind="server" code={failure.reason} message={failure.message} />
+            </Callout>
+          )}
           <Field label={m.servers.name} error={errors.name}>
             <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           </Field>
@@ -277,6 +299,7 @@ export function ServerPage() {
           <Field label={m.servers.username} error={errors.username}>
             <Input mono value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />
           </Field>
+          <ServerAuthFields form={auth} onChange={setAuth} errors={errors} editing />
         </div>
       </Dialog>
     </div>

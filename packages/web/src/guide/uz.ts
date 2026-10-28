@@ -415,7 +415,7 @@ export const guide: GuideContent = {
             {
               type: "steps",
               items: [
-                { title: "Serverlar → Server qoʻshish", text: "Nom, `user@host`, port va SSH kalit. Platforma ulanadi, Docker’ni tekshiradi (kerak boʻlsa oʻrnatadi) va proksini koʻtaradi." },
+                { title: "Serverlar → Server qoʻshish", text: "Nom, `user@host`, port va serverga kirish usuli: SSH parol (bir marta, panel kalitini oʻrnatish uchun; saqlanmaydi), oʻz shaxsiy kalitingiz yoki panel kalitini qoʻlda qoʻshish. Platforma ulanadi, Docker’ni tekshiradi (kerak boʻlsa oʻrnatadi) va proksini koʻtaradi." },
                 { title: "Tekshirish", text: "Holat **Tayyor** boʻlgach, ilova yaratishda shu serverni tanlash mumkin. Muammo boʻlsa «Qayta tekshirish» sababini koʻrsatadi." },
                 { title: "Ommaviy IP", text: "Avtomatik aniqlanadi; tashqi portlar va DNS tekshiruvi shu IP’ga tayanadi. Aniqlanmagan boʻlsa — «Qayta tekshirish»." },
               ],

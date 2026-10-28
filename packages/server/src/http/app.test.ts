@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { HttpBindings } from '@hono/node-server';
 import { createServer } from 'node:http';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import {
@@ -44,6 +44,7 @@ import type { AppConfig } from '../lib/config.ts';
 import { generateToken, hmac } from '../lib/crypto.ts';
 import { runProcessOrThrow } from '../lib/process.ts';
 import { createContext } from '../main.ts';
+import { importPrivateKey } from '../servers/ssh.ts';
 import type { ApplicationRecord } from '../store/index.ts';
 import { UpdateChecker } from '../updates/checker.ts';
 import { createHttpApp } from './app.ts';
@@ -1388,6 +1389,121 @@ test('GitHub installations nobody claimed are kept as pending until a team admin
     assert.equal(stores.installations.get(77), undefined);
     assert.deepEqual(stores.installations.listPending(), []);
   } finally {
+    await h.close();
+  }
+});
+
+test('POST /api/servers signs in with a password or a pasted key, installs the panel key and checks the server by itself', async () => {
+  const h = await harness();
+  const bin = mkdtempSync(join(tmpdir(), 'ploy-fake-ssh-'));
+  const state = join(bin, 'state');
+  mkdirSync(join(state, 'home'), { recursive: true });
+  const previousPath = process.env.PATH;
+  try {
+    const { stores } = h.ctx;
+    // A host key for the pretend server, so the recorded known_hosts line fingerprints like a real one.
+    await runProcessOrThrow('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', join(bin, 'hostkey')]);
+    const hostPublicKey = readFileSync(join(bin, 'hostkey.pub'), 'utf8').trim();
+    // A stand-in `ssh`: takes one password through askpass, records the host key on first contact, runs the command against a fake home.
+    writeFileSync(
+      join(bin, 'ssh'),
+      [
+        '#!/bin/sh',
+        `state=${JSON.stringify(state)}`,
+        'known=""; cmd=""; opts=""',
+        'while [ $# -gt 0 ]; do',
+        '  case "$1" in',
+        '    -o) opts="$opts $2"; case "$2" in UserKnownHostsFile=*) known=$(printf "%s" "$2" | sed "s/^UserKnownHostsFile=//");; esac; shift 2;;',
+        '    -O) exit 0;;',
+        '    -F|-i|-p) shift 2;;',
+        '    --) cmd="$2"; break;;',
+        '    *) shift;;',
+        '  esac',
+        'done',
+        'printf "%s\\n" "$opts" >> "$state/opts"',
+        `if [ -n "$known" ] && [ ! -f "$known" ]; then printf "example.test %s\\n" ${JSON.stringify(hostPublicKey)} > "$known"; fi`,
+        'if [ "$SSH_ASKPASS_REQUIRE" != "force" ]; then echo "root@example.test: Permission denied (publickey)." >&2; exit 255; fi',
+        'pass=$("$SSH_ASKPASS" "Password:")',
+        'if [ "$pass" != "correct horse" ]; then echo "root@example.test: Permission denied (publickey,password)." >&2; exit 255; fi',
+        'if [ "$cmd" = "true" ]; then exit 0; fi',
+        'HOME="$state/home" exec sh -c "$cmd"',
+        '',
+      ].join('\n'),
+    );
+    chmodSync(join(bin, 'ssh'), 0o755);
+    process.env.PATH = [bin, previousPath].join(delimiter);
+    // Verification needs Docker on the far side; stand in for it and record who was checked.
+    const verified: string[] = [];
+    h.ctx.servers.verify = async (id: string) => {
+      verified.push(id);
+      return stores.servers.get(id)!;
+    };
+    const fields = (body: ApiErrorBody) => body.error.issues?.map((issue) => [issue.path, issue.params?.reason]);
+    const keyBody = (publicKey: string | null) => publicKey?.split(' ').slice(0, 2).join(' ');
+
+    const base = { name: 'vps', host: 'example.test', username: 'root' };
+    // A wrong password is a validation error on the password field, and nothing is created.
+    const refused = await h.call<ApiErrorBody>(h.tokens.owner, 'POST', '/api/servers', { ...base, auth: { method: 'password', password: 'nope' } });
+    assert.equal(refused.status, 422, JSON.stringify(refused.body));
+    assert.deepEqual(fields(refused.body), [['auth.password', 'ssh_auth']]);
+    assert.equal(stores.servers.listForTeam(h.teamA.id).filter((server) => server.kind === 'ssh').length, 0);
+    assert.deepEqual(verified, []);
+
+    // The right one installs the panel's generated key, records the host key and starts the check.
+    const made = await h.call<ServerDto>(h.tokens.owner, 'POST', '/api/servers', { ...base, auth: { method: 'password', password: 'correct horse' } });
+    assert.equal(made.status, 201, JSON.stringify(made.body));
+    assert.ok(made.body.publicKey?.startsWith('ssh-ed25519 '));
+    assert.ok(made.body.hostKeyFingerprint?.startsWith('SHA256:'), made.body.hostKeyFingerprint ?? 'no fingerprint');
+    assert.deepEqual(verified, [made.body.id]);
+    assert.equal(readFileSync(join(state, 'home', '.ssh', 'authorized_keys'), 'utf8'), `${made.body.publicKey}\n`);
+    assert.ok(stores.servers.get(made.body.id)!.hostKey?.includes(hostPublicKey.split(' ')[1]!));
+    assert.ok(!JSON.stringify(stores.db.all('SELECT * FROM servers')).includes('correct horse'), 'the password is never stored');
+    const opts = readFileSync(join(state, 'opts'), 'utf8');
+    assert.ok(opts.includes('PubkeyAuthentication=no') && opts.includes('StrictHostKeyChecking=accept-new'));
+    assert.ok(!existsSync(join(process.env.PLOY_RUN_DIR!, `ssh-${made.body.id.slice(-10)}`)), 'the password session is torn down');
+    const auditRow = stores.db.get("SELECT metadata FROM audit_log WHERE action = 'server.created' AND target_id = ?", made.body.id);
+    assert.equal((JSON.parse(String(auditRow!.metadata)) as { auth: string }).auth, 'password');
+
+    // A pasted, passphrase-protected key is stored unlocked; the wrong passphrase or junk is refused on its own field.
+    await runProcessOrThrow('ssh-keygen', ['-q', '-t', 'ed25519', '-N', 'pp', '-C', 'me@laptop', '-f', join(bin, 'own')]);
+    const own = readFileSync(join(bin, 'own'), 'utf8');
+    const ownPublic = keyBody(readFileSync(join(bin, 'own.pub'), 'utf8').trim());
+    const wrongPass = await h.call<ApiErrorBody>(h.tokens.owner, 'POST', '/api/servers', { ...base, name: 'keyed', auth: { method: 'privateKey', privateKey: own, passphrase: 'wrong' } });
+    assert.equal(wrongPass.status, 422, JSON.stringify(wrongPass.body));
+    assert.deepEqual(fields(wrongPass.body), [['auth.passphrase', 'ssh_key_passphrase']]);
+    const junk = await h.call<ApiErrorBody>(h.tokens.owner, 'POST', '/api/servers', { ...base, name: 'keyed', auth: { method: 'privateKey', privateKey: 'garbage' } });
+    assert.equal(junk.status, 422);
+    assert.deepEqual(fields(junk.body), [['auth.privateKey', 'ssh_key_invalid']]);
+    const keyed = await h.call<ServerDto>(h.tokens.owner, 'POST', '/api/servers', { ...base, name: 'keyed', auth: { method: 'privateKey', privateKey: own, passphrase: 'pp' } });
+    assert.equal(keyed.status, 201, JSON.stringify(keyed.body));
+    assert.equal(keyBody(keyed.body.publicKey), ownPublic);
+    assert.equal(keyed.body.hostKeyFingerprint, null, 'no session was opened: the key alone is verified in the background');
+    const stored = h.ctx.secrets.open(stores.servers.get(keyed.body.id)!.sshPrivateKey!, 'ssh');
+    assert.equal(keyBody((await importPrivateKey(stored, undefined)).publicKey), ownPublic, 'stored without its passphrase');
+    assert.deepEqual(verified, [made.body.id, keyed.body.id]);
+
+    // Without credentials the server waits for the operator to authorize the generated key by hand.
+    const manual = await h.call<ServerDto>(h.tokens.owner, 'POST', '/api/servers', { ...base, name: 'manual' });
+    assert.equal(manual.status, 201, JSON.stringify(manual.body));
+    assert.equal(manual.body.status, 'pending');
+    assert.ok(manual.body.publicKey !== null);
+    assert.deepEqual(verified, [made.body.id, keyed.body.id]);
+
+    // Credentials can be supplied later: a password puts the existing key on the server.
+    const fixed = await h.call<ServerDto>(h.tokens.owner, 'PATCH', `/api/servers/${manual.body.id}`, { auth: { method: 'password', password: 'correct horse' } });
+    assert.equal(fixed.status, 200, JSON.stringify(fixed.body));
+    assert.equal(fixed.body.publicKey, manual.body.publicKey);
+    assert.ok(fixed.body.hostKeyFingerprint?.startsWith('SHA256:'));
+    assert.equal(readFileSync(join(state, 'home', '.ssh', 'authorized_keys'), 'utf8'), `${made.body.publicKey}\n${manual.body.publicKey}\n`);
+    assert.deepEqual(verified, [made.body.id, keyed.body.id, manual.body.id]);
+    const again = await h.call<ApiErrorBody>(h.tokens.owner, 'PATCH', `/api/servers/${manual.body.id}`, { auth: { method: 'password', password: 'nope' } });
+    assert.equal(again.status, 422);
+    assert.deepEqual(fields(again.body), [['auth.password', 'ssh_auth']]);
+    assert.equal((await h.call(h.tokens.instanceAdmin, 'PATCH', `/api/servers/${h.local.id}`, { auth: { method: 'password', password: 'x' } })).status, 403, 'the local host has no credentials');
+    assert.equal((await h.call(h.tokens.developer, 'POST', '/api/servers', { ...base, name: 'dev', auth: { method: 'password', password: 'correct horse' } })).status, 403);
+  } finally {
+    process.env.PATH = previousPath;
+    rmSync(bin, { recursive: true, force: true });
     await h.close();
   }
 });
