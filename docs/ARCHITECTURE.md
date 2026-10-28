@@ -85,7 +85,7 @@ users ─ sessions · api_tokens · user_identities(github)
 teams ─ team_members(owner|admin|developer|viewer) · invitations
       ├ servers(local|ssh) ─ ssh kalit (shifrlangan), host key fingerprint
       ├ notification_channels(telegram|discord|slack|webhook) ─ manzil va tokenlar shifrlangan
-      ├ git_sources(github_app) ─ github_installations
+      ├ git_sources(github_app) ─ github_installations · github_pending_installations (hali jamoaga biriktirilmagan)
       ├ s3_destinations ─ zaxira nusxalar uchun S3 (secret shifrlangan; service_id — jamoaning oʻz fayl ombori ichida)
       ├ registries ─ xususiy registr loginlari (parol shifrlangan; jamoada bitta host — bitta login)
       └ projects ─┬ applications(web|worker|compose; source github|git|image|raw) ─┬ deployments (per-deploy log fayl)
@@ -215,6 +215,12 @@ ota ilovaning "PR preview" tabida turadi (`GET /api/applications/:id/previews`),
   `application.deleted`.
 - Yangi GitHub App manifestida `pull_requests: write` ruxsati va `pull_request` hodisasi bor. Avval yaratilgan App'da
   ularni GitHub sozlamalarida qo'shib, o'rnatishda yangi ruxsatni tasdiqlash kerak.
+- App `public: true` bilan yaratiladi: yopiq App faqat uni yaratgan hisobga o'rnatiladi, ochiq App esa foydalanuvchi
+  boshqaradigan istalgan hisob yoki tashkilotga (`installations/new` sahifasida GitHub hisob tanlatadi). O'rnatish
+  jamoaga faqat panelning bir martalik state'i orqali bog'lanadi. State'siz kelgan `setup` (tashkilot egasi so'rovni
+  15 daqiqadan keyin tasdiqlagan) yoki notanish `installation` webhook'i `github_pending_installations`ga yoziladi;
+  jamoa admini uni Sozlamalar → Git'dan biriktiradi (`POST /api/github/pending/:id/claim`) yoki olib tashlaydi.
+  Manifest flow'dan oldin yaratilgan (yopiq) App uchun panel egasi va GitHub'dagi sozlamalar havolasini ko'rsatadi.
 
 ### 5.7 Yigʻish usullari
 

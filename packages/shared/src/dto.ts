@@ -804,11 +804,33 @@ export interface BackupDto {
 
 export interface GithubStatusDto {
   configured: boolean;
-  app: { id: number; slug: string; name: string; htmlUrl: string; owner: string } | null;
+  app: GithubAppDto | null;
   installations: GithubInstallationDto[];
+  /**
+   * Installations GitHub reported that no team has claimed yet (an organization owner approved an install request
+   * after the panel's link expired, or the app was installed straight from GitHub). Team admins only; empty otherwise.
+   */
+  pending: GithubInstallationDto[];
   /** Base URL GitHub must be able to reach for webhooks; null until configured. */
   webhookUrl: string | null;
   publicUrlReady: boolean;
+}
+
+export interface GithubAppDto {
+  id: number;
+  slug: string;
+  name: string;
+  htmlUrl: string;
+  owner: string;
+  /** Whether `owner` is a user or an organization; null for apps created before this was recorded. */
+  ownerType: 'User' | 'Organization' | null;
+  /**
+   * A public app can be installed on any account the user administers; a private one only on `owner`.
+   * Null for apps created before visibility was recorded (those were private).
+   */
+  public: boolean | null;
+  /** The app's settings page on GitHub (its visibility is changed there under "Advanced"). */
+  settingsUrl: string;
 }
 
 export interface GithubInstallationDto {

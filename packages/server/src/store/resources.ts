@@ -923,6 +923,20 @@ function mapInstallation(row: Row): InstallationRecord {
   };
 }
 
+/** An installation GitHub reported that no team has claimed yet. */
+export type PendingInstallationRecord = Omit<InstallationRecord, 'teamId'>;
+
+function mapPendingInstallation(row: Row): PendingInstallationRecord {
+  return {
+    id: num(row.id),
+    accountLogin: str(row.account_login),
+    accountType: str(row.account_type) as 'User' | 'Organization',
+    avatarUrl: strOrNull(row.avatar_url),
+    repositorySelection: str(row.repository_selection) as 'all' | 'selected',
+    createdAt: str(row.created_at),
+  };
+}
+
 export class InstallationStore {
   private readonly db: Database;
 
@@ -964,6 +978,49 @@ export class InstallationStore {
 
   delete(id: number): void {
     this.db.run('DELETE FROM github_installations WHERE id = ?', id);
+  }
+
+  // ------------------------------------------------- pending (unclaimed)
+
+  upsertPending(input: Omit<PendingInstallationRecord, 'createdAt'>): PendingInstallationRecord {
+    const now = nowIso();
+    this.db.run(
+      `INSERT INTO github_pending_installations (id, account_login, account_type, avatar_url, repository_selection, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET account_login = excluded.account_login, account_type = excluded.account_type,
+         avatar_url = excluded.avatar_url, repository_selection = excluded.repository_selection, updated_at = excluded.updated_at`,
+      input.id,
+      input.accountLogin,
+      input.accountType,
+      input.avatarUrl,
+      input.repositorySelection,
+      now,
+      now,
+    );
+    return this.getPending(input.id)!;
+  }
+
+  getPending(id: number): PendingInstallationRecord | undefined {
+    const row = this.db.get('SELECT * FROM github_pending_installations WHERE id = ?', id);
+    return row === undefined ? undefined : mapPendingInstallation(row);
+  }
+
+  listPending(): PendingInstallationRecord[] {
+    return this.db.all('SELECT * FROM github_pending_installations ORDER BY created_at DESC, id').map(mapPendingInstallation);
+  }
+
+  deletePending(id: number): void {
+    this.db.run('DELETE FROM github_pending_installations WHERE id = ?', id);
+  }
+
+  /** Attach a pending installation to a team: it becomes a regular installation. Undefined when nothing was pending. */
+  claim(id: number, teamId: string): InstallationRecord | undefined {
+    return this.db.transaction(() => {
+      const pending = this.getPending(id);
+      if (pending === undefined) return undefined;
+      this.deletePending(id);
+      return this.upsert({ id: pending.id, teamId, accountLogin: pending.accountLogin, accountType: pending.accountType, avatarUrl: pending.avatarUrl, repositorySelection: pending.repositorySelection });
+    });
   }
 }
 

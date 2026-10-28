@@ -56,6 +56,8 @@ Skript kerak boʻlsa Docker’ni oʻrnatadi, control-plane image’ini yigʻadi 
 2. **Sozlamalar → Veb-server** boʻlimida panel domenini kiriting (masalan, `deploy.example.uz`; A yozuvi serverga yoʻnaltirilgan boʻlishi kerak). Shundan keyin panel HTTPS orqali ochiladi.
 3. Ixtiyoriy: ilovalar uchun wildcard domen (`*.apps.example.uz`) qoʻshing. Har bir yangi ilova avtomatik manzil oladi.
 4. **Sozlamalar → Git integratsiyasi** boʻlimida “GitHub App yaratish” tugmasini bosing. Ilova sizning nomingizdan yaratiladi, webhook avtomatik sozlanadi.
+   App ochiq (public) qilib yaratiladi, shuning uchun uni keyin siz boshqaradigan istalgan hisob yoki tashkilotga oʻrnatish mumkin (“Hisob yoki tashkilotga oʻrnatish”). Tashkilot nomidan yaratish uchun “Tashkilot”ni tanlab login’ini kiriting (unda egasi boʻlishingiz kerak). Tashkilot egasi oʻrnatish soʻrovini keyinroq tasdiqlasa, oʻrnatish “Kutilayotgan oʻrnatishlar”da chiqadi va bir bosishda jamoaga biriktiriladi.
+   Oldingi versiyalarda yaratilgan App yopiq (private) boʻlib, faqat oʻz hisobiga oʻrnatiladi: panel buni koʻrsatadi; GitHub’da App sozlamalaridan (Advanced → Make public) uni ochiq qiling yoki uzib, tashkilot nomidan qayta yarating.
    GitHub App bu versiyadan oldin yaratilgan boʻlsa, PR preview uchun uning sozlamalarida **Pull requests: Read and write** ruxsatini va **Pull request** hodisasini yoqing, soʻng oʻrnatishda yangi ruxsatni tasdiqlang.
 
 Domen sozlangandan keyin ochiq portni yopib qoʻyish mumkin: xuddi shu oʻrnatish buyrugʻini `TORXPLOY_PORT=0` bilan va oxirida `sh -s update` deb ishga tushiring (klon qilingan boʻlsa: `sudo TORXPLOY_PORT=0 sh deploy/install.sh update`).

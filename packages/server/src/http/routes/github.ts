@@ -4,10 +4,11 @@
  */
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { githubManifestSchema, type GithubInstallationDto, type GithubStatusDto } from '@ploy/shared';
+import { githubManifestSchema, roleAtLeast, type GithubInstallationDto, type GithubStatusDto } from '@ploy/shared';
 import type { Context } from '../../context.ts';
-import { isPublicOrigin, publicBaseUrl } from '../../github/app.ts';
+import { appSettingsUrl, isPublicOrigin, publicBaseUrl } from '../../github/app.ts';
 import { AppError, errorMessage, notFound } from '../../lib/errors.ts';
+import type { PendingInstallationRecord } from '../../store/index.ts';
 import { audit, body, query, requestOrigin, requireInstanceAdmin, requireTeam, type Ctx, type Env } from '../core.ts';
 
 const MAX_WEBHOOK_BYTES = 25 * 1024 * 1024;
@@ -17,7 +18,7 @@ export function registerGithubRoutes(app: Hono<Env>, ctx: Context): void {
 
   const baseUrl = (c: Ctx): string => publicBaseUrl(ctx) ?? requestOrigin(c);
 
-  const installationDto = (record: ReturnType<typeof stores.installations.listForTeam>[number]): GithubInstallationDto => ({
+  const installationDto = (record: PendingInstallationRecord): GithubInstallationDto => ({
     id: record.id,
     accountLogin: record.accountLogin,
     accountType: record.accountType,
@@ -32,8 +33,22 @@ export function registerGithubRoutes(app: Hono<Env>, ctx: Context): void {
     const base = github.webhookBase();
     const status: GithubStatusDto = {
       configured: credentials !== null,
-      app: credentials === null ? null : { id: credentials.appId, slug: credentials.slug, name: credentials.name, htmlUrl: credentials.htmlUrl, owner: credentials.owner },
+      app:
+        credentials === null
+          ? null
+          : {
+              id: credentials.appId,
+              slug: credentials.slug,
+              name: credentials.name,
+              htmlUrl: credentials.htmlUrl,
+              owner: credentials.owner,
+              ownerType: credentials.ownerType ?? null,
+              public: credentials.public ?? null,
+              settingsUrl: appSettingsUrl(credentials),
+            },
       installations: stores.installations.listForTeam(auth.teamId).map(installationDto),
+      // Only an admin can attach a pending installation to the team, so only an admin is shown them.
+      pending: credentials !== null && roleAtLeast(auth.role, 'admin') ? stores.installations.listPending().map(installationDto) : [],
       webhookUrl: base === null ? null : `${base}/api/webhooks/github`,
       publicUrlReady: isPublicOrigin(base),
     };
@@ -87,11 +102,22 @@ export function registerGithubRoutes(app: Hono<Env>, ctx: Context): void {
         // Updating access from GitHub's side arrives without our state; keep the existing owner.
       }
     }
-    if (teamId === null) return c.redirect('/settings/git?github=unknown_installation');
+    if (teamId === null) {
+      // Nobody in the panel is waiting for this installation: the link expired before an organization owner approved
+      // it, or the app was installed straight from GitHub. Keep it for an administrator to attach to a team.
+      try {
+        stores.installations.upsertPending(await github.installation(installationId));
+        return c.redirect('/settings/git?github=pending');
+      } catch (error) {
+        ctx.logger.warn('GitHub installation lookup failed', { installationId, error: errorMessage(error) });
+        return c.redirect('/settings/git?github=unknown_installation');
+      }
+    }
     if (existing !== undefined && existing.teamId !== teamId) return c.redirect('/settings/git?github=claimed');
     try {
       const info = await github.installation(installationId);
       stores.installations.upsert({ ...info, teamId });
+      stores.installations.deletePending(installationId);
       stores.audit.record({ teamId, userId: c.get('auth')?.user.id ?? null, action: 'github.installed', targetType: 'github', targetName: info.accountLogin, ip: c.get('ip') });
       return c.redirect('/settings/git?github=installed');
     } catch (error) {
@@ -106,6 +132,27 @@ export function registerGithubRoutes(app: Hono<Env>, ctx: Context): void {
     if (installation === undefined || installation.teamId !== auth.teamId) throw notFound('Installation');
     stores.installations.delete(installation.id);
     audit(ctx, c, 'github.installation_removed', { type: 'github', id: String(installation.id), name: installation.accountLogin });
+    return c.json({ ok: true });
+  });
+
+  /** Attach an installation GitHub reported (pending) to the caller's team. */
+  app.post('/api/github/pending/:id/claim', (c) => {
+    const auth = requireTeam(c, 'admin');
+    const id = Number(c.req.param('id'));
+    const installation = Number.isInteger(id) ? stores.installations.claim(id, auth.teamId) : undefined;
+    if (installation === undefined) throw notFound('Installation');
+    audit(ctx, c, 'github.installed', { type: 'github', id: String(installation.id), name: installation.accountLogin }, { pending: true });
+    return c.json(installationDto(installation));
+  });
+
+  /** Drop a pending installation without attaching it (it stays installed on GitHub). */
+  app.delete('/api/github/pending/:id', (c) => {
+    requireTeam(c, 'admin');
+    const id = Number(c.req.param('id'));
+    const pending = Number.isInteger(id) ? stores.installations.getPending(id) : undefined;
+    if (pending === undefined) throw notFound('Installation');
+    stores.installations.deletePending(id);
+    audit(ctx, c, 'github.pending_dismissed', { type: 'github', id: String(id), name: pending.accountLogin });
     return c.json({ ok: true });
   });
 

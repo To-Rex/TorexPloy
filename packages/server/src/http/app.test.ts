@@ -20,6 +20,8 @@ import {
   type CronJobDto,
   type DeploymentCleanupDto,
   type DeploymentDto,
+  type GithubInstallationDto,
+  type GithubStatusDto,
   type HealthDto,
   type OverviewDto,
   type Page,
@@ -1315,6 +1317,76 @@ test('the instance time zone is a setting: validated, broadcast, in the bootstra
 
     await h.call(h.tokens.instanceAdmin, 'PATCH', '/api/settings', { timezone: 'Europe/Berlin' });
     assert.equal(broadcasts(), 1, 'an unchanged PATCH is not broadcast');
+  } finally {
+    await h.close();
+  }
+});
+
+test('GitHub installations nobody claimed are kept as pending until a team admin attaches them', async () => {
+  const h = await harness();
+  try {
+    const { stores } = h.ctx;
+    h.connectGithub();
+    const installation = (id: number, login: string, action = 'created') => ({
+      action,
+      installation: { id, account: { login, type: 'Organization', avatar_url: null }, repository_selection: 'selected' },
+    });
+
+    // An organization owner approved an install request long after the panel's link expired: the webhook is the
+    // first the panel hears of it. Nothing is attached to a team by itself.
+    const created = await h.webhook('installation', installation(77, 'other-org'));
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+    assert.equal(created.body.result, 'installation pending');
+    assert.equal(stores.installations.get(77), undefined);
+    assert.equal(stores.installations.getPending(77)?.accountLogin, 'other-org');
+
+    // Only admins see pending installations; the app's visibility is unknown for one connected before it was recorded.
+    assert.deepEqual((await h.call<GithubStatusDto>(h.tokens.developer, 'GET', '/api/github')).body.pending, []);
+    const status = await h.call<GithubStatusDto>(h.tokens.owner, 'GET', '/api/github');
+    assert.equal(status.status, 200);
+    assert.deepEqual(
+      status.body.pending.map((entry) => [entry.id, entry.accountLogin, entry.accountType]),
+      [[77, 'other-org', 'Organization']],
+    );
+    assert.equal(status.body.app?.public, null);
+    assert.equal(status.body.app?.settingsUrl, 'https://github.com/settings/apps/torexploy-test');
+
+    // A known installation keeps updating from the payload; a repeated pending delivery is harmless.
+    const repositories = await h.webhook('installation_repositories', { action: 'added', installation: { id: 42, account: { login: 'acme', type: 'Organization' }, repository_selection: 'selected' } });
+    assert.equal(repositories.body.result, 'installation updated');
+    assert.equal(stores.installations.get(42)?.repositorySelection, 'selected');
+    assert.equal((await h.webhook('installation', installation(77, 'other-org'))).body.result, 'installation pending');
+
+    // GitHub's own redirect without the panel's state (the link expired) lands in the same list.
+    h.ctx.github.installation = async (id: number) => ({ id, accountLogin: 'late-org', accountType: 'Organization' as const, avatarUrl: null, repositorySelection: 'all' as const });
+    const setup = await h.raw(h.tokens.owner, 'GET', '/api/github/setup?installation_id=66');
+    assert.equal(setup.status, 302);
+    assert.equal(setup.headers.get('location'), '/settings/git?github=pending');
+    assert.equal(stores.installations.getPending(66)?.accountLogin, 'late-org');
+
+    // Claiming takes an admin; afterwards the installation belongs to that team and leaves the pending list.
+    assert.equal((await h.call(h.tokens.developer, 'POST', '/api/github/pending/77/claim')).status, 403);
+    assert.equal((await h.call(h.tokens.owner, 'POST', '/api/github/pending/99/claim')).status, 404);
+    const claimed = await h.call<GithubInstallationDto>(h.tokens.owner, 'POST', '/api/github/pending/77/claim');
+    assert.equal(claimed.status, 200, JSON.stringify(claimed.body));
+    assert.equal(claimed.body.accountLogin, 'other-org');
+    assert.equal(stores.installations.get(77)?.teamId, h.teamA.id);
+    assert.equal(stores.installations.getPending(77), undefined);
+    const after = await h.call<GithubStatusDto>(h.tokens.owner, 'GET', '/api/github');
+    assert.deepEqual(after.body.pending.map((entry) => entry.id), [66]);
+    assert.ok(after.body.installations.some((entry) => entry.id === 77));
+    assert.equal((await h.call(h.tokens.rival, 'POST', '/api/github/pending/77/claim')).status, 404, 'claimed once');
+    assert.ok(stores.db.all("SELECT 1 FROM audit_log WHERE action = 'github.installed' AND target_id = '77'").length === 1);
+
+    // Dismissing drops it from the panel only; uninstalling on GitHub removes it wherever it was.
+    assert.equal((await h.call(h.tokens.developer, 'DELETE', '/api/github/pending/66')).status, 403);
+    assert.equal((await h.call(h.tokens.owner, 'DELETE', '/api/github/pending/66')).status, 200);
+    assert.equal((await h.call(h.tokens.owner, 'DELETE', '/api/github/pending/66')).status, 404);
+    await h.webhook('installation', installation(88, 'gone'));
+    assert.equal((await h.webhook('installation', installation(88, 'gone', 'deleted'))).body.result, 'installation removed');
+    assert.equal((await h.webhook('installation', installation(77, 'other-org', 'deleted'))).body.result, 'installation removed');
+    assert.equal(stores.installations.get(77), undefined);
+    assert.deepEqual(stores.installations.listPending(), []);
   } finally {
     await h.close();
   }

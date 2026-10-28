@@ -16,7 +16,7 @@ import type { GithubRepositoryDto } from '@ploy/shared';
 import type { Context } from '../context.ts';
 import { constantTimeEqual, hmac } from '../lib/crypto.ts';
 import { AppError, errorMessage } from '../lib/errors.ts';
-import type { ApplicationRecord } from '../store/index.ts';
+import type { ApplicationRecord, InstallationRecord } from '../store/index.ts';
 
 const API = 'https://api.github.com';
 const SETTINGS_KEY = 'github.app';
@@ -29,6 +29,10 @@ export interface GithubCredentials {
   name: string;
   htmlUrl: string;
   owner: string;
+  /** Whether `owner` is a user or an organization; absent for apps created before this was recorded. */
+  ownerType?: 'User' | 'Organization';
+  /** Created public (installable on any account the user administers); absent for earlier apps, which were private. */
+  public?: boolean;
   clientId: string;
   clientSecret: string;
   webhookSecret: string;
@@ -128,7 +132,10 @@ export class GithubApp {
       callback_urls: [`${publicUrl}/api/auth/github/callback`],
       setup_url: `${publicUrl}/api/github/setup`,
       setup_on_update: true,
-      public: false,
+      // Public: GitHub lets a private app be installed only on the account that owns it, so an app created under a
+      // personal account could never reach an organization. Being public costs nothing here: an installation joins a
+      // team only through this panel's own one-time state (or an administrator attaching it), never by itself.
+      public: true,
       // `emails` — the manifest's name for "Email addresses" (read by /user/emails at sign-in); GitHub refuses
       // a manifest that says `email_addresses` ("Default permission records resource is not included in the list").
       default_permissions: { contents: 'read', metadata: 'read', statuses: 'write', pull_requests: 'write', emails: 'read' },
@@ -152,7 +159,7 @@ export class GithubApp {
       slug: string;
       name: string;
       html_url: string;
-      owner: { login: string };
+      owner: { login: string; type?: string };
       client_id: string;
       client_secret: string;
       webhook_secret: string;
@@ -165,6 +172,8 @@ export class GithubApp {
       name: data.name,
       htmlUrl: data.html_url,
       owner: data.owner.login,
+      ownerType: data.owner.type === 'Organization' ? 'Organization' : 'User',
+      public: true,
       clientId: data.client_id,
       clientSecret: data.client_secret,
       webhookSecret: data.webhook_secret,
@@ -333,13 +342,19 @@ export class GithubApp {
       const known = stores.installations.get(installationId);
       if (action === 'deleted') {
         if (known !== undefined) stores.installations.delete(installationId);
+        stores.installations.deletePending(installationId);
         return 'installation removed';
       }
+      // These deliveries carry the account; GitHub is only asked when one does not.
+      const info = installationFromPayload(payload) ?? (await this.installation(installationId));
       if (known !== undefined) {
-        const info = await this.installation(installationId);
         stores.installations.upsert({ ...info, teamId: known.teamId });
+        return 'installation updated';
       }
-      return 'installation updated';
+      // Nobody in the panel is waiting for it (an organization owner approved an install request after the link
+      // expired, or the app was installed straight from GitHub): kept for an administrator to attach to a team.
+      stores.installations.upsertPending(info);
+      return 'installation pending';
     }
 
     if (event === 'push') {
@@ -395,6 +410,28 @@ export class GithubApp {
     const primary = emails.find((email) => email.primary && email.verified) ?? emails.find((email) => email.verified);
     return { id: String(user.id), login: user.login, name: user.name ?? user.login, email: primary?.email ?? null, avatarUrl: user.avatar_url };
   }
+}
+
+/** The installation an `installation` or `installation_repositories` delivery describes, when it carries the account. */
+function installationFromPayload(payload: Record<string, unknown>): Omit<InstallationRecord, 'teamId' | 'createdAt'> | null {
+  const installation = payload.installation as { id?: unknown; account?: { login?: unknown; type?: unknown; avatar_url?: unknown }; repository_selection?: unknown } | undefined;
+  const account = installation?.account;
+  if (typeof installation?.id !== 'number' || !Number.isInteger(installation.id) || typeof account?.login !== 'string') return null;
+  return {
+    id: installation.id,
+    accountLogin: account.login,
+    accountType: account.type === 'Organization' ? 'Organization' : 'User',
+    avatarUrl: typeof account.avatar_url === 'string' ? account.avatar_url : null,
+    repositorySelection: installation.repository_selection === 'all' ? 'all' : 'selected',
+  };
+}
+
+/** The app's settings page on GitHub; its visibility (public or private) is changed there under "Advanced". */
+export function appSettingsUrl(credentials: Pick<GithubCredentials, 'slug' | 'owner' | 'ownerType'>): string {
+  const slug = encodeURIComponent(credentials.slug);
+  return credentials.ownerType === 'Organization'
+    ? `https://github.com/organizations/${encodeURIComponent(credentials.owner)}/settings/apps/${slug}`
+    : `https://github.com/settings/apps/${slug}`;
 }
 
 /** Whether GitHub could reach `origin` (not a loopback or private-network address). */

@@ -779,6 +779,23 @@ UPDATE deployments SET seq = (
 );
 `,
   },
+  // GitHub installations nobody claimed through the panel (an organization owner approved an install request after
+  // the link expired, or the app was installed straight from GitHub): kept until an administrator attaches them to a team.
+  {
+    version: 11,
+    name: 'github-pending-installations',
+    sql: `
+CREATE TABLE github_pending_installations (
+  id                   INTEGER PRIMARY KEY,
+  account_login        TEXT NOT NULL,
+  account_type         TEXT NOT NULL,
+  avatar_url           TEXT,
+  repository_selection TEXT NOT NULL DEFAULT 'selected',
+  created_at           TEXT NOT NULL,
+  updated_at           TEXT NOT NULL
+);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
