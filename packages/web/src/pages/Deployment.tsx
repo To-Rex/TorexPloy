@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router';
-import { Ban, Download, History } from 'lucide-react';
+import { Ban, Download, FolderUp, History } from 'lucide-react';
 import { isTerminalDeployment } from '@ploy/shared';
 import { DeploymentTimingFacts, deploymentTitle } from '../components/DeploymentItem.tsx';
 import { useConfirm } from '../components/Dialog.tsx';
@@ -19,7 +19,7 @@ import { Reason } from '../components/Reason.tsx';
 
 export function DeploymentPage() {
   const { deploymentId = '' } = useParams();
-  const { m, t, formatDate } = useI18n();
+  const { m, t, plural, formatDate, formatBytes } = useI18n();
   const confirm = useConfirm();
   const deployment = useDeployment(deploymentId);
   const data = deployment.data;
@@ -70,6 +70,15 @@ export function DeploymentPage() {
               <span>
                 <code>{data.commitSha.slice(0, 7)}</code>
                 {data.branch !== null && <span className="faint"> {data.branch}</span>}
+              </span>
+            )}
+            {data.upload !== null && (
+              <span className="row" style={{ gap: 5 }}>
+                <FolderUp width={13} height={13} aria-hidden="true" />
+                {data.upload.name}
+                <span className="faint">
+                  {plural(m.upload.files, data.upload.files)} · {formatBytes(data.upload.bytes, 0)}
+                </span>
               </span>
             )}
             <span>{m.trigger[data.trigger]}</span>

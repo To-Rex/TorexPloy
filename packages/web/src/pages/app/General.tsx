@@ -6,7 +6,8 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Container, Database, ExternalLink, GitBranch, Hammer, KeyRound, Play, RotateCcw, Rocket, ScrollText, Square, SquareTerminal, Variable } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Container, Database, ExternalLink, FileArchive, Folder, FolderUp, GitBranch, Hammer, KeyRound, Play, RotateCcw, Rocket, ScrollText, Square, SquareTerminal, Variable } from 'lucide-react';
 import { updateApplicationSchema, type ApplicationDto, type ContainerDto, type SourceInput } from '@ploy/shared';
 import { CopyButton } from '../../components/Copy.tsx';
 import { useConfirm } from '../../components/Dialog.tsx';
@@ -14,12 +15,15 @@ import { Card, SaveFooter } from '../../components/Frame.tsx';
 import { useReasonText } from '../../components/Reason.tsx';
 import { RepoPicker, type RepoChoice } from '../../components/RepoPicker.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
+import { useToast } from '../../components/Toast.tsx';
+import { UploadDrop, uploadErrorText } from '../../components/UploadDrop.tsx';
 import { Button, Callout, Field, GithubMark, Input, Skeleton, Switch } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useAppContainers, useAppMetrics, useDeployKey, useDeployment, useGithub, useLinks, useProject, useTemplates } from '../../lib/queries.ts';
+import { isZipName, useArchiveUpload, type Picked } from '../../lib/upload.ts';
 import { validate } from '../../lib/validate.ts';
 import { TemplateMark } from '../projects/TemplatesDialog.tsx';
 import { useAppContext, useAppTerminal } from './AppLayout.tsx';
@@ -39,6 +43,7 @@ function NextStep({ app, containers }: { app: ApplicationDto; containers: Contai
     </Link>
   );
 
+  if (app.source.type === 'upload' && app.source.upload === null) return <Callout tone="info" title={m.appOverview.next.noUploadTitle}>{m.appOverview.next.noUploadText}</Callout>;
   if (latest === null) return <Callout tone="info" title={m.appOverview.next.neverDeployedTitle}>{m.appOverview.next.neverDeployedText}</Callout>;
   if (app.status === 'stopped') return <Callout tone="idle" title={m.appOverview.next.stoppedTitle}>{m.appOverview.next.stoppedText}</Callout>;
   if (latest.status === 'failed') {
@@ -96,7 +101,8 @@ function Facts({ app, containers }: { app: ApplicationDto; containers: Container
             '—'
           ) : (
             <Link to={`/deployments/${active.id}`}>
-              {active.commitSha !== null ? <code>{active.commitSha.slice(0, 7)}</code> : m.trigger[active.trigger]} <span className="faint" style={{ fontWeight: 400 }}><RelativeTime value={active.finishedAt ?? active.createdAt} /></span>
+              {active.commitSha !== null ? <code>{active.commitSha.slice(0, 7)}</code> : active.upload !== null ? active.upload.name : m.trigger[active.trigger]}{' '}
+              <span className="faint" style={{ fontWeight: 400 }}><RelativeTime value={active.finishedAt ?? active.createdAt} /></span>
             </Link>
           )}
         </dd>
@@ -270,7 +276,7 @@ function TemplateAccessCard({ app }: { app: ApplicationDto }) {
   );
 }
 
-type Provider = 'github' | 'git' | 'image';
+type Provider = 'github' | 'git' | 'image' | 'upload';
 
 interface ProviderDraft {
   type: Provider;
@@ -297,6 +303,7 @@ function sourceFrom(draft: ProviderDraft): SourceInput | null {
     return { type: 'github', installationId: draft.repo.installationId, repository: draft.repo.repository, branch: draft.repo.branch };
   }
   if (draft.type === 'git') return { type: 'git', url: draft.url.trim(), branch: draft.branch.trim() };
+  if (draft.type === 'upload') return { type: 'upload' };
   return { type: 'image', image: draft.image.trim() };
 }
 
@@ -304,10 +311,71 @@ function sameSource(next: SourceInput, current: ApplicationDto['source']): boole
   if (next.type === 'github' && current.type === 'github') return next.installationId === current.installationId && next.repository === current.repository && next.branch === current.branch;
   if (next.type === 'git' && current.type === 'git') return next.url === current.url && next.branch === current.branch;
   if (next.type === 'image' && current.type === 'image') return next.image === current.image;
+  if (next.type === 'upload' && current.type === 'upload') return true;
   return false;
 }
 
-/** Where the code comes from: a connected GitHub repository, any Git URL, or a ready image. */
+/**
+ * Upload sources: the current archive, a drop zone for the next one (it
+ * deploys as soon as it lands; on another source it also switches the
+ * source), and the address CI can send archives to.
+ */
+function UploadSection({ app }: { app: ApplicationDto }) {
+  const { m, plural, formatBytes } = useI18n();
+  const u = m.upload;
+  const toast = useToast();
+  const client = useQueryClient();
+  const archive = useArchiveUpload();
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const current = app.source.type === 'upload' ? app.source.upload : null;
+  const send = async (next: Picked | null) => {
+    setPicked(next);
+    if (next === null) return;
+    try {
+      if (app.source.type !== 'upload') await api.patch(`/api/applications/${app.id}`, { source: { type: 'upload' } });
+      await archive.run(app.id, next);
+      toast.success(u.done);
+      for (const key of [keys.app(app.id), keys.appPart(app.id, 'deployments'), keys.project(app.projectId)]) void client.invalidateQueries({ queryKey: key });
+      window.setTimeout(() => {
+        setPicked(null);
+        archive.reset();
+      }, 2_000);
+    } catch (error) {
+      toast.failure(uploadErrorText(m, error));
+    }
+  };
+  const curl = [
+    `curl -X POST "${window.location.origin}/api/applications/${app.id}/upload?name=site.zip" \\`,
+    '  -H "Authorization: Bearer <API_TOKEN>" -H "Content-Type: application/zip" \\',
+    '  --data-binary @site.zip',
+  ].join('\n');
+  return (
+    <div className="stack" style={{ gap: 14 }}>
+      {current !== null && (
+        <div className="upload-summary">
+          {isZipName(current.name) ? <FileArchive aria-hidden="true" /> : <Folder aria-hidden="true" />}
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div className="upload-summary__name truncate">{current.name}</div>
+            <div className="upload-summary__meta">
+              {u.current} · {plural(u.files, current.files)} · {formatBytes(current.bytes)} ({formatBytes(current.size)} zip) · {u.uploadedAt} <RelativeTime value={current.uploadedAt} />
+            </div>
+          </div>
+        </div>
+      )}
+      <Field label={current === null ? u.title : u.replaceTitle} hint={app.source.type === 'upload' ? u.replaceHint : u.switchNote}>
+        <UploadDrop picked={picked} onPick={(next) => void send(next)} state={archive.state} title={current === null ? undefined : u.replaceTitle} />
+      </Field>
+      <Field label={u.curlTitle} hint={u.curlHint}>
+        <div className="codeblock">
+          {curl}
+          <CopyButton value={curl} />
+        </div>
+      </Field>
+    </div>
+  );
+}
+
+/** Where the code comes from: a connected GitHub repository, any Git URL, a ready image, or uploaded files. */
 function ProviderCard({ app }: { app: ApplicationDto }) {
   const { m } = useI18n();
   const p = m.provider;
@@ -335,13 +403,14 @@ function ProviderCard({ app }: { app: ApplicationDto }) {
     { value: 'github', label: 'GitHub', icon: <GithubMark size={16} /> },
     { value: 'git', label: 'Git', icon: <GitBranch aria-hidden="true" /> },
     { value: 'image', label: 'Docker', icon: <Container aria-hidden="true" /> },
+    { value: 'upload', label: m.newApp.sourceUpload, icon: <FolderUp aria-hidden="true" /> },
   ];
 
   return (
     <Card
       title={p.title}
-      description={p.description}
-      footer={<SaveFooter dirty={dirty} saving={save.isPending} onSave={submit} onReset={() => { setDraft(draftFrom(app)); setErrors({}); }} note={dirty ? p.redeployNote : undefined} />}
+      description={draft.type === 'upload' ? p.uploadHint : p.description}
+      footer={<SaveFooter dirty={dirty} saving={save.isPending} onSave={submit} onReset={() => { setDraft(draftFrom(app)); setErrors({}); }} note={dirty && draft.type !== 'upload' ? p.redeployNote : undefined} />}
     >
       <div className="picker" role="group" aria-label={p.title}>
         {choices.map((choice) => (
@@ -390,6 +459,7 @@ function ProviderCard({ app }: { app: ApplicationDto }) {
           <Input mono value={draft.image} onChange={(event) => setDraft({ ...draft, image: event.target.value })} placeholder="ghcr.io/team/app:latest" spellCheck={false} />
         </Field>
       )}
+      {draft.type === 'upload' && <UploadSection app={app} />}
     </Card>
   );
 }

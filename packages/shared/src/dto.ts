@@ -348,12 +348,27 @@ export interface VariablesDto {
 // Applications
 // ---------------------------------------------------------------------------
 
+/** An uploaded source archive: what it is called, how big it is and what it unpacks to. */
+export interface UploadInfoDto {
+  /** The zip file's name, or the folder's when the dashboard packed one. */
+  name: string;
+  /** Archive bytes as uploaded. */
+  size: number;
+  /** Regular files inside (system files and symlinks are not counted). */
+  files: number;
+  /** Bytes once unpacked. */
+  bytes: number;
+  uploadedAt: string;
+}
+
 export type SourceDto =
   | { type: 'github'; installationId: number; repository: string; branch: string }
   | { type: 'git'; url: string; branch: string }
   | { type: 'image'; image: string }
   /** Compose file kept in the panel. */
-  | { type: 'raw' };
+  | { type: 'raw' }
+  /** A folder or zip uploaded to the panel; null until the first upload. */
+  | { type: 'upload'; upload: UploadInfoDto | null };
 
 export interface DeploymentSummaryDto {
   id: string;
@@ -361,6 +376,8 @@ export interface DeploymentSummaryDto {
   trigger: DeploymentTrigger;
   commitSha: string | null;
   commitMessage: string | null;
+  /** The archive this deployment was built from (upload sources). */
+  upload: UploadInfoDto | null;
   createdAt: string;
   finishedAt: string | null;
 }

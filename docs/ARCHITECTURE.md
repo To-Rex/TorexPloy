@@ -88,7 +88,7 @@ teams ─ team_members(owner|admin|developer|viewer) · invitations
       ├ git_sources(github_app) ─ github_installations · github_pending_installations (hali jamoaga biriktirilmagan)
       ├ s3_destinations ─ zaxira nusxalar uchun S3 (secret shifrlangan; service_id — jamoaning oʻz fayl ombori ichida)
       ├ registries ─ xususiy registr loginlari (parol shifrlangan; jamoada bitta host — bitta login)
-      └ projects ─┬ applications(web|worker|compose; source github|git|image|raw) ─┬ deployments (per-deploy log fayl)
+      └ projects ─┬ applications(web|worker|compose; source github|git|image|raw|upload) ─┬ deployments (per-deploy log fayl)
                   │               ├ applications (PR preview: parent_application_id, preview_pr_*)
                   │               ├ env_vars (AES-256-GCM) · domains · volumes
                   │               ├ service_links (DB → env inject)
@@ -105,6 +105,7 @@ jobs · metrics_host · metrics_app · audit_log · settings
 ```
 QUEUED → (per-app serial; build semaphore = PLOY_MAX_CONCURRENT_BUILDS)
 FETCH     git: shallow clone, aniq commit SHA, GitHub App installation token (process ro'yxatida ko'rinmaydi)
+          upload: `uploads/<app>/<id>.zip` arxivi build katalogiga ochiladi (5.10-boʻlim)
 BUILD     torex (TorexBuilder: Node/Bun/Python/Go/Rust/PHP/static aniqlanadi → optimallashtirilgan Dockerfile)
           | dockerfile | nixpacks | railpack | heroku | paketo | static  (5.7-boʻlim)
           BuildKit layer cache + `RUN --mount=type=cache` (npm/pip/go kesh), `--progress=plain` log oqimi
@@ -403,6 +404,34 @@ servislarning nusxalari esa shu omborga yoziladi. Kod: `services/catalog.ts` (`f
   bekor qilinmaydi (`409 managed_key`), manzil oʻchirilganda u ham ketadi; ombor oʻchirilganda manzil, kalitlar,
   bucket satrlari va domenlar `ON DELETE CASCADE` bilan yoʻqoladi, boshqa servislar `backup_destination_id`ni
   yoʻqotadi (`SET NULL`).
+
+### 5.10 Yuklangan manbalar (Netlify Drop uslubi)
+
+Manbasi `upload` boʻlgan ilova repozitoriyasiz, boshqaruv serveridagi zip arxivdan yigʻiladi.
+
+- **Yoʻl.** `POST /api/applications/:id/upload` (developer) — tanasi xom zip, `Content-Length` shart, `?name=`
+  koʻrsatiladigan nom (zip fayl yoki papka nomi), `?deploy=0` faqat arxivni almashtiradi. Umumiy 1 MB JSON chegarasi bu
+  yoʻlga tegmaydi; oʻz chegarasi `LIMITS.uploadMax` (512 MB). Ilova yaratishda (`source: { type: 'upload' }`) deploy
+  boshlanmaydi — birinchi yuklash boshlaydi.
+- **Qabul qilish (`deploy/uploads.ts`).** Tana `uploads/<app>/<upl_id>.zip.part` ga oqimda yoziladi (uzunlik
+  tekshiriladi), soʻng markaziy katalog oʻqilib chegaralar tekshiriladi (fayllar soni, ochilgan hajm, boʻsh arxiv) va fayl
+  oʻz nomini oladi. Har qanday xatoda `.part` oʻchiriladi, joriy arxiv tegilmaydi. Ilova yozuvida `upload` JSON
+  (`id, name, size, files, bytes, uploadedAt`), deploy yozuvida esa qaysi arxivdan yigʻilgani (`deployments.upload`):
+  navbatda turganda yangi arxiv kelsa ham, deploy oʻziga biriktirilgan arxivni yigʻadi. Har ilovada faqat joriy arxiv
+  (va ishlab turgan deploy’ning arxivi) qoladi; ilova oʻchirilganda `uploads/<app>/` butunlay oʻchiriladi.
+- **Zip oʻquvchi (`lib/zip.ts`, bogʻliqliksiz).** Markaziy katalog boʻyicha ishlaydi: data descriptor, Zip64 (EOCD va
+  extra field), Unix/MS-DOS atributlari. Xavfsizlik: har bir yoʻl normallashtiriladi (`\` → `/`, `.` tashlanadi), `..`,
+  mutlaq yoʻl, disk harfi, NUL yoki 1024 baytdan uzun nom — rad; symlink’lar yaratilmaydi, `__MACOSX/`, `.DS_Store`,
+  `Thumbs.db` tashlanadi; eʼlon qilingan hajmdan bir bayt ortiq inflate — xato (zip bomba diskga yetib bormaydi);
+  CRC-32 tekshiriladi; rejim ikkitadan biri (`0644`, bajariladigan boʻlsa `0755`), setuid tushib qoladi. Katta
+  yozuvlar zlib orqali oqimda, kichiklari xotirada ochiladi. Arxiv bitta papkadan iborat boʻlsa, uning ichi ildizga
+  chiqariladi (`unpackUpload`).
+- **Zip yozuvchi (`shared/zip.ts`).** Brauzer tashlangan papkani (File System Access entries / `webkitdirectory`)
+  `CompressionStream('deflate-raw')` bilan oʻzi zip qiladi (`node_modules`, `.git`, tizim fayllari tashlanadi) va bitta
+  tana sifatida XHR orqali (progress bilan) yuboradi. Klassik format (Zip64’siz) — chegaralar undan ancha past.
+- **Build.** FETCH bosqichida arxiv `builds/<deploy>` ga ochiladi, keyin odatdagi pipeline (TorexBuilder statik saytni
+  Caddy image sifatida yigʻadi). `build-plan` ham arxivni ochib reja beradi (`commit: null`). Arxiv diskda yoʻq boʻlsa
+  (tiklangan data katalogi) — `nothing_to_deploy` / `upload_missing`.
 
 ## 6. Xavfsizlik
 

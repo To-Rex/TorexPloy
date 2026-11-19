@@ -8,11 +8,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { HttpBindings } from '@hono/node-server';
 import { createServer } from 'node:http';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import {
   API_TOKEN_PREFIX,
+  concatZip,
+  createZip,
   type ApiErrorBody,
   type ApplicationDto,
   type BootstrapDto,
@@ -39,6 +41,7 @@ import {
   type UpdateStatusDto,
 } from '@ploy/shared';
 import { logPath } from '../deploy/logs.ts';
+import { uploadPath, uploadsDir } from '../deploy/uploads.ts';
 import { imageRepository } from '../docker/naming.ts';
 import type { AppConfig } from '../lib/config.ts';
 import { generateToken, hmac } from '../lib/crypto.ts';
@@ -208,13 +211,15 @@ async function harness(options: { docker?: boolean; config?: Partial<AppConfig> 
   };
 
   const app = createHttpApp(ctx);
-  const call = async <T>(token: string, method: string, path: string, body?: unknown): Promise<{ status: number; body: T }> => {
+  /** A JSON request, or a raw one when `body` is a Buffer (archive uploads); `headers` are added as given. */
+  const call = async <T>(token: string, method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: T }> => {
+    const raw = body instanceof Buffer ? body : body === undefined ? undefined : JSON.stringify(body);
     const response = await app.request(
       path,
       {
         method,
-        headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        headers: { authorization: `Bearer ${token}`, ...(body === undefined || body instanceof Buffer ? {} : { 'content-type': 'application/json' }), ...headers },
+        ...(raw === undefined ? {} : { body: raw }),
       },
       BINDINGS,
     );
@@ -1504,6 +1509,98 @@ test('POST /api/servers signs in with a password or a pasted key, installs the p
   } finally {
     process.env.PATH = previousPath;
     rmSync(bin, { recursive: true, force: true });
+    await h.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Upload sources
+// ---------------------------------------------------------------------------
+
+test('uploads: a zip becomes the source, deploys on arrival, feeds the build plan, is pruned, and is bounded and role-checked', async () => {
+  const h = await harness();
+  try {
+    const { stores } = h.ctx;
+    const dataDir = h.ctx.config.dataDir;
+    const shop = stores.projects.create(h.teamA.id, 'Shop', null);
+    const zip = async (files: Record<string, string>): Promise<Buffer> =>
+      Buffer.from(concatZip(await createZip(Object.entries(files).map(([path, content]) => ({ path, data: new TextEncoder().encode(content) })))));
+    type Uploaded = { application: ApplicationDto; deployment: DeploymentDto | null };
+    const upload = (token: string, appId: string, body: Buffer, query = '', headers: Record<string, string> = {}) =>
+      h.call<Uploaded & ApiErrorBody>(token, 'POST', `/api/applications/${appId}/upload${query}`, body, { 'content-type': 'application/zip', 'content-length': String(body.length), ...headers });
+    const refused = async (token: string, appId: string, body: Buffer, query = '', headers: Record<string, string> = {}) => {
+      const result = await upload(token, appId, body, query, headers);
+      return { status: result.status, code: result.body.error?.code, reason: result.body.error?.params?.reason };
+    };
+
+    // Creating an upload application starts nothing: the archive comes next.
+    const created = await h.call<{ application: ApplicationDto; deploymentId: string | null }>(h.tokens.developer, 'POST', `/api/projects/${shop.id}/applications`, { name: 'Landing', serverId: h.local.id, source: { type: 'upload' } });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    assert.equal(created.body.deploymentId, null);
+    assert.deepEqual(created.body.application.source, { type: 'upload', upload: null });
+    const id = created.body.application.id;
+    const nothing = await h.call<ApiErrorBody>(h.tokens.developer, 'POST', `/api/applications/${id}/deploy`, {});
+    assert.equal(nothing.status, 409);
+    assert.equal(nothing.body.error.params?.reason, 'no_upload', 'nothing to build before the first upload');
+
+    // A site in a wrapping folder, as "Compress" makes it: accepted, counted (system files aside), kept on disk.
+    const site = await zip({ 'site/index.html': '<h1>Salom</h1>', 'site/css/app.css': 'h1{color:red}', 'site/.DS_Store': 'junk', '__MACOSX/site/._index.html': 'fork' });
+    const first = await upload(h.tokens.developer, id, site, '?name=site.zip&deploy=0');
+    assert.equal(first.status, 202, JSON.stringify(first.body));
+    assert.equal(first.body.deployment, null);
+    const source = first.body.application.source;
+    assert.ok(source.type === 'upload' && source.upload !== null, JSON.stringify(source));
+    assert.deepEqual([source.upload.name, source.upload.size, source.upload.files, source.upload.bytes], ['site.zip', site.length, 2, '<h1>Salom</h1>'.length + 'h1{color:red}'.length]);
+    const record = stores.applications.get(id)!;
+    assert.ok(record.upload !== null);
+    assert.ok(existsSync(uploadPath(dataDir, id, record.upload.id)));
+    assert.equal(stores.db.scalar("SELECT COUNT(*) FROM audit_log WHERE action = 'application.upload' AND target_id = ?", id), 1);
+
+    // The build plan unpacks the archive the way a deployment would: a static site served by Caddy, no commit.
+    const plan = await h.call<BuildPlanDto>(h.tokens.developer, 'POST', `/api/applications/${id}/build-plan`);
+    assert.equal(plan.status, 200, JSON.stringify(plan.body));
+    assert.equal(plan.body.stack, 'static');
+    assert.equal(plan.body.commit, null);
+    assert.match(plan.body.dockerfile ?? '', /caddy/i);
+    assert.equal(existsSync(join(dataDir, 'builds', `plan-${id}`)), false, 'the unpacked copy is removed');
+
+    // The next upload replaces the archive, starts a deployment pinned to it, and prunes the old file.
+    const next = await zip({ 'index.html': '<h1>v2</h1>' });
+    const second = await upload(h.tokens.developer, id, next, '?name=landing');
+    assert.equal(second.status, 202, JSON.stringify(second.body));
+    assert.ok(second.body.deployment !== null);
+    assert.equal(second.body.deployment.trigger, 'upload');
+    assert.equal(second.body.deployment.upload?.name, 'landing');
+    const after = stores.applications.get(id)!;
+    assert.notEqual(after.upload!.id, record.upload.id);
+    assert.deepEqual(readdirSync(uploadsDir(dataDir, id)), [`${after.upload!.id}.zip`], 'only the current archive is kept');
+    assert.equal(stores.deployments.get(second.body.deployment.id)!.upload?.id, after.upload!.id);
+    assert.equal(second.body.application.latestDeployment?.upload?.name, 'landing');
+
+    // Refused: other sources, viewers, other teams, a missing length, oversize, not a zip, hostile paths, nothing inside, a short body.
+    const image = h.application(h.teamA.id, shop.id, 'Proxy', 'web', 'nginx:alpine');
+    assert.deepEqual(await refused(h.tokens.developer, image.id, next), { status: 409, code: 'conflict', reason: 'not_upload_source' });
+    assert.equal((await refused(h.tokens.viewer, id, next)).status, 403);
+    assert.equal((await refused(h.tokens.rival, id, next)).status, 404);
+    assert.deepEqual(await refused(h.tokens.developer, id, next, '', { 'content-length': 'abc' }), { status: 400, code: 'bad_request', reason: 'length_required' });
+    assert.deepEqual(await refused(h.tokens.developer, id, next, '', { 'content-length': String(600 * 1024 * 1024) }), { status: 413, code: 'payload_too_large', reason: undefined });
+    assert.deepEqual(await refused(h.tokens.developer, id, Buffer.from('PK, but just text')), { status: 400, code: 'bad_request', reason: 'zip_invalid' });
+    assert.deepEqual(await refused(h.tokens.developer, id, await zip({ 'ok.txt': 'ok', '../escape.txt': 'no' })), { status: 400, code: 'bad_request', reason: 'zip_unsafe_path' });
+    assert.deepEqual(await refused(h.tokens.developer, id, await zip({ 'only/.DS_Store': 'x' })), { status: 400, code: 'bad_request', reason: 'zip_empty' });
+    assert.deepEqual(await refused(h.tokens.developer, id, next, '', { 'content-length': String(next.length + 10) }), { status: 400, code: 'bad_request', reason: 'upload_truncated' });
+    assert.deepEqual(readdirSync(uploadsDir(dataDir, id)), [`${after.upload!.id}.zip`], 'a refused upload leaves nothing behind');
+    assert.deepEqual(stores.applications.get(id)!.upload, after.upload, 'and does not touch the current archive');
+
+    // Any application can move to uploads; a move away keeps the archive for a move back; deleting the app removes everything.
+    const moved = await h.call<ApplicationDto>(h.tokens.developer, 'PATCH', `/api/applications/${image.id}`, { source: { type: 'upload' } });
+    assert.equal(moved.status, 200, JSON.stringify(moved.body));
+    assert.deepEqual(moved.body.source, { type: 'upload', upload: null });
+    assert.equal((await upload(h.tokens.developer, image.id, next, '?name=proxy.zip&deploy=0')).status, 202);
+    assert.equal((await h.call<ApplicationDto>(h.tokens.developer, 'PATCH', `/api/applications/${image.id}`, { source: { type: 'image', image: 'nginx:alpine' } })).body.source.type, 'image');
+    assert.equal(stores.applications.get(image.id)!.upload?.name, 'proxy.zip');
+    assert.equal((await h.call(h.tokens.owner, 'DELETE', `/api/applications/${image.id}`)).status, 200);
+    assert.equal(existsSync(uploadsDir(dataDir, image.id)), false);
+  } finally {
     await h.close();
   }
 });

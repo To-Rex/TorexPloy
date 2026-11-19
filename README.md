@@ -4,7 +4,7 @@
 
 Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy uni yigʻadi, uzilishsiz joylashtiradi va HTTPS bilan domen beradi.
 
-- **Joylashtirish:** GitHub App (push → avtomatik deploy, commit status), istalgan Git URL (yopiq repo uchun deploy kaliti) yoki Docker image.
+- **Joylashtirish:** GitHub App (push → avtomatik deploy, commit status), istalgan Git URL (yopiq repo uchun deploy kaliti), Docker image yoki papka/zip yuklash (Netlify Drop kabi: brauzerga tashlang yoki `curl` bilan yuboring).
 - **Yigʻish usullari:** TorexBuilder, repodagi Dockerfile (`--target` bosqichi bilan), Nixpacks, Railpack, Heroku yoki Paketo buildpack’lari, statik sayt. Sirlar buyruq qatoriga tushmaydi, build maqsad serverda boʻladi. Deploy’dan oldin yigʻish rejasini (stack, buyruqlar, Dockerfile, ogohlantirishlar) koʻrish mumkin.
 - **TorexBuilder:** stack’ni oʻzi aniqlab, kichik va xavfsiz image yigʻadi. Node/Bun (Next.js, Nuxt, SvelteKit, Remix, Astro, Angular, NestJS, Vite va boshqa SPA’lar, monorepo’lar), Python (Django, FastAPI, Flask, Celery), Go, Rust, PHP/Laravel, Ruby/Rails, Java (Spring Boot, Quarkus), Clojure, .NET, Elixir/Phoenix, Gleam, Dart/Flutter, Swift, Crystal, Nim, Haskell, Deno, statik sayt. Versiyalar `.tool-versions`, `.nvmrc`, `go.mod` kabi fayllardan olinadi; `torexploy.json` orqali buyruqlar, versiyalar va apt paketlar beriladi; dev bogʻliqliklar runtime’ga oʻtmaydi, konteyner root’siz ishlaydi.
 - **Ishlash:** uzilishsiz (rolling) yoki recreate strategiyasi, health-check, replikalar, avtomatik qayta ishga tushirish, bir bosishda rollback, self-heal.
@@ -110,6 +110,25 @@ Parol yoki kalit kiritilganda server darhol, orqa fonda tekshiriladi (sahifada �
 - host kaliti saqlanadi (keyingi ulanishlarda qatʼiy tekshiriladi);
 - Docker tekshiriladi (yoʻq boʻlsa, bir bosishda oʻrnatish mumkin);
 - serverda platforma tarmogʻi va Caddy proxy ishga tushiriladi.
+
+## Papka yoki zip yuklab joylashtirish
+
+Repozitoriyasiz ham joylashtirish mumkin — Netlify Drop kabi. **Yangi ilova** oynasida manba sifatida **Fayl yuklash**ni tanlang va tayyor sayt papkasini yoki loyihaning `.zip` arxivini oynaga tashlang (yoki “Papka tanlash” / “Zip tanlash” tugmalaridan foydalaning):
+
+- papka brauzerning oʻzida zip qilinadi (`node_modules`, `.git` va tizim fayllari oʻtkazib yuboriladi) va bitta fayl sifatida yuklanadi; jarayon foizlarda koʻrinadi;
+- arxiv ichida bitta papka boʻlsa (Finder/Explorer’ning “Compress”i shunday qiladi), uning ichi loyiha ildizi hisoblanadi;
+- yuklash tugashi bilan joylashtirish boshlanadi: stack avtomatik aniqlanadi (oddiy `index.html` papkasi — Caddy orqali statik sayt, `package.json` yoki Dockerfile bor loyiha — odatdagidek yigʻiladi), yigʻish usuli va ildiz katalogni oʻzgartirish mumkin;
+- keyingi versiyani ilovaning **Umumiy → Manba** kartasiga tashlang: eski versiyalar “Joylashtirishlar”da qoladi, bir bosishda qaytish mumkin; “Joylashtirish” tugmasi joriy arxivni qaytadan yigʻadi.
+
+Terminal yoki CI’dan API token bilan (Profil → API tokenlar):
+
+```sh
+zip -r site.zip .
+curl -X POST "https://panel.example.uz/api/applications/<APP_ID>/upload?name=site.zip" \
+  -H "Authorization: Bearer ploy_..." -H "Content-Type: application/zip" --data-binary @site.zip
+```
+
+Chegaralar: arxiv 512 MB gacha, ochilganda 2 GB va 50 000 faylgacha. Arxivlar boshqaruv serverida `uploads/<app>/` papkasida saqlanadi; har bir ilova uchun faqat joriy arxiv qoladi (orqaga qaytish image’lar orqali ishlaydi).
 
 ## Fayl ombori
 

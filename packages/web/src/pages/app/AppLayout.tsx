@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router';
-import { Container, Ellipsis, ExternalLink, FileCode2, GitBranch, Globe, Pencil, Rocket, Server, SquareTerminal, Trash2 } from 'lucide-react';
+import { Container, Ellipsis, ExternalLink, FileCode2, FolderUp, GitBranch, Globe, Pencil, Rocket, Server, SquareTerminal, Trash2 } from 'lucide-react';
 import { updateApplicationSchema, type ApplicationDto } from '@ploy/shared';
 import { Dialog, useConfirm } from '../../components/Dialog.tsx';
 import { AppMark } from '../../components/KindMark.tsx';
@@ -41,7 +41,7 @@ export function useAppTerminal(): () => void {
 }
 
 export function SourceLabel({ app }: { app: ApplicationDto }) {
-  const { m } = useI18n();
+  const { m, formatBytes } = useI18n();
   const source = app.source;
   if (source.type === 'github') {
     return (
@@ -68,6 +68,21 @@ export function SourceLabel({ app }: { app: ApplicationDto }) {
       <span className="row" style={{ gap: 5 }}>
         <FileCode2 aria-hidden="true" />
         {m.compose.storedSource}
+      </span>
+    );
+  }
+  if (source.type === 'upload') {
+    return (
+      <span className="row" style={{ gap: 5 }}>
+        <FolderUp aria-hidden="true" />
+        {source.upload === null ? (
+          m.upload.title
+        ) : (
+          <>
+            <span className="truncate" style={{ maxWidth: 240 }}>{source.upload.name}</span>
+            <span className="faint">{formatBytes(source.upload.size, 0)}</span>
+          </>
+        )}
       </span>
     );
   }

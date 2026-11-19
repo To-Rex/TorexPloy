@@ -23,7 +23,7 @@ export function randomId(length = 12): string {
 
 export type IdPrefix =
   | 'usr' | 'ses' | 'tok' | 'team' | 'mem' | 'inv' | 'srv' | 'prj' | 'app' | 'dep' | 'env'
-  | 'dom' | 'vol' | 'svc' | 'lnk' | 'cron' | 'run' | 'bak' | 'job' | 'aud' | 'idn' | 'ntf' | 's3d' | 'reg' | 'sk';
+  | 'dom' | 'vol' | 'svc' | 'lnk' | 'cron' | 'run' | 'bak' | 'job' | 'aud' | 'idn' | 'ntf' | 's3d' | 'reg' | 'sk' | 'upl';
 
 export function newId(prefix: IdPrefix): string {
   return `${prefix}_${randomId(14)}`;

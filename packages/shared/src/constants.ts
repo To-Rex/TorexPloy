@@ -36,8 +36,11 @@ export type ServerStatus = (typeof SERVER_STATUSES)[number];
 export const APP_KINDS = ['web', 'worker'] as const;
 export type AppKind = (typeof APP_KINDS)[number] | 'compose';
 
-/** `raw`: a compose file kept in the panel instead of a repository. */
-export const SOURCE_TYPES = ['github', 'git', 'image', 'raw'] as const;
+/**
+ * `raw`: a compose file kept in the panel instead of a repository.
+ * `upload`: a folder or zip archive uploaded from the browser (or with the API), Netlify Drop style.
+ */
+export const SOURCE_TYPES = ['github', 'git', 'image', 'raw', 'upload'] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
 /**
@@ -92,7 +95,8 @@ export const ACTIVE_DEPLOYMENT_STATUSES: readonly DeploymentStatus[] = ['queued'
 export const DEPLOYMENT_STATUS_FILTERS = [...DEPLOYMENT_STATUSES, 'active'] as const;
 export type DeploymentStatusFilter = (typeof DEPLOYMENT_STATUS_FILTERS)[number];
 
-export const DEPLOYMENT_TRIGGERS = ['manual', 'push', 'rollback', 'redeploy', 'api', 'restart'] as const;
+/** `upload`: a new archive was uploaded for an upload-source application. */
+export const DEPLOYMENT_TRIGGERS = ['manual', 'push', 'rollback', 'redeploy', 'api', 'restart', 'upload'] as const;
 export type DeploymentTrigger = (typeof DEPLOYMENT_TRIGGERS)[number];
 
 /** `files` is the file store (S3-compatible object storage, SeaweedFS); the rest are databases and queues. */
@@ -194,6 +198,13 @@ export const LIMITS = {
   systemPackagesMax: 50,
   storageKeysMax: 50,
   storageUploadMax: 5 * 1024 * 1024 * 1024,
+  /** An uploaded source archive (zip), as sent. */
+  uploadMax: 512 * 1024 * 1024,
+  /** What that archive may unpack to, and how many files it may hold. */
+  uploadUnpackedMax: 2 * 1024 * 1024 * 1024,
+  uploadFilesMax: 50_000,
+  /** The name an upload is shown under (the zip file's or the folder's). */
+  uploadNameMax: 200,
 } as const;
 
 // ---------------------------------------------------------------------------

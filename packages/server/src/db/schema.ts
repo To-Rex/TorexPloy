@@ -673,6 +673,122 @@ ALTER TABLE s3_destinations ADD COLUMN service_id TEXT REFERENCES services(id) O
 CREATE INDEX idx_s3_destinations_service ON s3_destinations(service_id);
 `;
 
+/**
+ * Uploaded sources (Netlify Drop style): `upload` joins the source types and
+ * `upload` joins the deployment triggers — both CHECK-constrained, so both
+ * tables are rebuilt. Each table gets an `upload` JSON column: on an
+ * application the current archive (id, name, sizes), on a deployment the
+ * archive it was built from.
+ */
+const UPLOAD_SOURCES_V12 = /* sql */ `
+CREATE TABLE applications_v12 (
+  id                       TEXT PRIMARY KEY,
+  project_id               TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  team_id                  TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  server_id                TEXT NOT NULL REFERENCES servers(id) ON DELETE RESTRICT,
+  name                     TEXT NOT NULL,
+  slug                     TEXT NOT NULL,
+  description              TEXT,
+  kind                     TEXT NOT NULL DEFAULT 'web' CHECK (kind IN ('web','worker','compose')),
+  source_type              TEXT NOT NULL CHECK (source_type IN ('github','git','image','raw','upload')),
+  github_installation_id   INTEGER,
+  repository               TEXT,
+  git_url                  TEXT,
+  branch                   TEXT,
+  image                    TEXT,
+  build_type               TEXT NOT NULL DEFAULT 'torex' CHECK (build_type IN ('torex','dockerfile','nixpacks','railpack','heroku','paketo','static')),
+  dockerfile_path          TEXT NOT NULL DEFAULT 'Dockerfile',
+  root_directory           TEXT NOT NULL DEFAULT '',
+  install_command          TEXT,
+  build_command            TEXT,
+  start_command            TEXT,
+  output_directory         TEXT,
+  build_stage              TEXT,
+  buildpack_builder        TEXT,
+  system_packages          TEXT,
+  port                     INTEGER,
+  replicas                 INTEGER NOT NULL DEFAULT 1 CHECK (replicas BETWEEN 1 AND 20),
+  cpu_limit                REAL,
+  memory_limit_mb          INTEGER,
+  health_check_path        TEXT,
+  health_check_timeout_sec INTEGER NOT NULL DEFAULT 120,
+  strategy                 TEXT NOT NULL DEFAULT 'rolling' CHECK (strategy IN ('rolling','recreate')),
+  auto_deploy              INTEGER NOT NULL DEFAULT 1 CHECK (auto_deploy IN (0,1)),
+  deploy_hook_token        TEXT,
+  deploy_key               TEXT,
+  deploy_public_key        TEXT,
+  status                   TEXT NOT NULL DEFAULT 'idle'
+                           CHECK (status IN ('idle','queued','building','deploying','running','crashed','failed','stopped')),
+  active_deployment_id     TEXT REFERENCES deployments(id) ON DELETE SET NULL,
+  config_updated_at        TEXT NOT NULL,
+  created_at               TEXT NOT NULL,
+  updated_at               TEXT NOT NULL,
+  template_id              TEXT,
+  compose_file             TEXT,
+  compose_path             TEXT NOT NULL DEFAULT 'docker-compose.yml',
+  host_access              INTEGER NOT NULL DEFAULT 0 CHECK (host_access IN (0,1)),
+  parent_application_id    TEXT REFERENCES applications(id) ON DELETE CASCADE,
+  preview_pr_number        INTEGER CHECK ((parent_application_id IS NULL) = (preview_pr_number IS NULL)),
+  preview_pr_title         TEXT,
+  preview_pr_url           TEXT,
+  preview_pr_author        TEXT,
+  preview_head_sha         TEXT,
+  preview_comment_id       INTEGER,
+  previews_enabled         INTEGER NOT NULL DEFAULT 0 CHECK (previews_enabled IN (0,1)),
+  preview_limit            INTEGER NOT NULL DEFAULT 3 CHECK (preview_limit BETWEEN 1 AND 20),
+  preview_env_sealed       TEXT,
+  -- Upload sources: the current archive as JSON {id, name, size, files, bytes, uploadedAt}; the file lives under uploads/<app>/<id>.zip.
+  upload                   TEXT,
+  UNIQUE (project_id, slug),
+  CHECK (kind <> 'compose' OR source_type IN ('github','git','raw')),
+  CHECK (source_type <> 'raw' OR (kind = 'compose' AND compose_file IS NOT NULL))
+);
+INSERT INTO applications_v12 (id, project_id, team_id, server_id, name, slug, description, kind, source_type, github_installation_id, repository, git_url, branch, image, build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, build_stage, buildpack_builder, system_packages, port, replicas, cpu_limit, memory_limit_mb, health_check_path, health_check_timeout_sec, strategy, auto_deploy, deploy_hook_token, deploy_key, deploy_public_key, status, active_deployment_id, config_updated_at, created_at, updated_at, template_id, compose_file, compose_path, host_access, parent_application_id, preview_pr_number, preview_pr_title, preview_pr_url, preview_pr_author, preview_head_sha, preview_comment_id, previews_enabled, preview_limit, preview_env_sealed) SELECT id, project_id, team_id, server_id, name, slug, description, kind, source_type, github_installation_id, repository, git_url, branch, image, build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, build_stage, buildpack_builder, system_packages, port, replicas, cpu_limit, memory_limit_mb, health_check_path, health_check_timeout_sec, strategy, auto_deploy, deploy_hook_token, deploy_key, deploy_public_key, status, active_deployment_id, config_updated_at, created_at, updated_at, template_id, compose_file, compose_path, host_access, parent_application_id, preview_pr_number, preview_pr_title, preview_pr_url, preview_pr_author, preview_head_sha, preview_comment_id, previews_enabled, preview_limit, preview_env_sealed FROM applications;
+DROP TABLE applications;
+ALTER TABLE applications_v12 RENAME TO applications;
+CREATE INDEX idx_applications_team ON applications(team_id);
+CREATE INDEX idx_applications_server ON applications(server_id);
+CREATE INDEX idx_applications_repo ON applications(repository, branch) WHERE source_type = 'github';
+CREATE UNIQUE INDEX idx_applications_preview ON applications(parent_application_id, preview_pr_number) WHERE parent_application_id IS NOT NULL;
+
+CREATE TABLE deployments_v12 (
+  id                   TEXT PRIMARY KEY,
+  application_id       TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  project_id           TEXT NOT NULL,
+  team_id              TEXT NOT NULL,
+  server_id            TEXT NOT NULL,
+  status               TEXT NOT NULL CHECK (status IN ('queued','building','deploying','succeeded','failed','cancelled')),
+  trigger              TEXT NOT NULL CHECK (trigger IN ('manual','push','rollback','redeploy','api','restart','upload')),
+  commit_sha           TEXT,
+  commit_message       TEXT,
+  commit_author        TEXT,
+  branch               TEXT,
+  image_tag            TEXT,
+  port                 INTEGER,
+  image_removed        INTEGER NOT NULL DEFAULT 0 CHECK (image_removed IN (0,1)),
+  containers           TEXT NOT NULL DEFAULT '[]',
+  source_deployment_id TEXT,
+  options              TEXT NOT NULL DEFAULT '{}',
+  error_message        TEXT,
+  error_code           TEXT,
+  created_by           TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at           TEXT NOT NULL,
+  started_at           TEXT,
+  build_duration_ms    INTEGER,
+  finished_at          TEXT,
+  duration_ms          INTEGER,
+  seq                  INTEGER,
+  -- The archive an upload-source deployment was built from (JSON, same shape as applications.upload).
+  upload               TEXT
+);
+INSERT INTO deployments_v12 (id, application_id, project_id, team_id, server_id, status, trigger, commit_sha, commit_message, commit_author, branch, image_tag, port, image_removed, containers, source_deployment_id, options, error_message, error_code, created_by, created_at, started_at, build_duration_ms, finished_at, duration_ms, seq) SELECT id, application_id, project_id, team_id, server_id, status, trigger, commit_sha, commit_message, commit_author, branch, image_tag, port, image_removed, containers, source_deployment_id, options, error_message, error_code, created_by, created_at, started_at, build_duration_ms, finished_at, duration_ms, seq FROM deployments;
+DROP TABLE deployments;
+ALTER TABLE deployments_v12 RENAME TO deployments;
+CREATE INDEX idx_deployments_app ON deployments(application_id, created_at DESC);
+CREATE INDEX idx_deployments_team ON deployments(team_id, created_at DESC);
+CREATE INDEX idx_deployments_open ON deployments(status, created_at) WHERE status IN ('queued','building','deploying');
+`;
+
 /** Append-only. Never edit a released migration; add a new one. */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'initial', sql: INITIAL },
@@ -796,6 +912,7 @@ CREATE TABLE github_pending_installations (
 );
 `,
   },
+  { version: 12, name: 'upload-sources', sql: UPLOAD_SOURCES_V12, rebuildsTables: true },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

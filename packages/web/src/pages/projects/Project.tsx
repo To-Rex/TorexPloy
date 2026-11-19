@@ -71,7 +71,7 @@ function AppCard({ app, selected, onSelect }: { app: ApplicationDto; selected: b
         ) : (
           <>
             {deployment.commitSha !== null ? <code>{deployment.commitSha.slice(0, 7)}</code> : <span>{m.trigger[deployment.trigger]}</span>}
-            <span className="truncate grow">{deployment.commitMessage ?? ''}</span>
+            <span className="truncate grow">{deployment.commitMessage ?? deployment.upload?.name ?? ''}</span>
             <span style={{ whiteSpace: 'nowrap' }}>
               <RelativeTime value={deployment.createdAt} />
             </span>

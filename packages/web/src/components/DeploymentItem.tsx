@@ -6,7 +6,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Ban, Check, Clock, Ellipsis, GitBranch, Hammer, History, Hourglass, LoaderCircle, Minus, Rocket, RotateCcw, ScrollText, Timer, Trash2, TriangleAlert, User, X } from 'lucide-react';
+import { Ban, Check, Clock, Ellipsis, FolderUp, GitBranch, Hammer, History, Hourglass, LoaderCircle, Minus, Rocket, RotateCcw, ScrollText, Timer, Trash2, TriangleAlert, User, X } from 'lucide-react';
 import { isTerminalDeployment, type DeploymentDto } from '@ploy/shared';
 import { useI18n } from '../i18n/index.tsx';
 import type { Messages } from '../i18n/uz.ts';
@@ -30,10 +30,12 @@ export function parseTime(value: string | null): number | null {
   return Number.isNaN(time) ? null : time;
 }
 
-/** The first line of the commit message, or what started the deployment. */
-export function deploymentTitle(m: Messages, deployment: Pick<DeploymentDto, 'commitMessage' | 'trigger'>): string {
+/** The first line of the commit message, the uploaded archive's name, or what started the deployment. */
+export function deploymentTitle(m: Messages, deployment: Pick<DeploymentDto, 'commitMessage' | 'trigger' | 'upload'>): string {
   const message = deployment.commitMessage?.split('\n')[0]?.trim() ?? '';
-  return message.length > 0 ? message : m.deployments.titles[deployment.trigger];
+  if (message.length > 0) return message;
+  if (deployment.upload !== null) return deployment.upload.name;
+  return m.deployments.titles[deployment.trigger];
 }
 
 export interface DeploymentTiming {
@@ -116,7 +118,7 @@ export function DeploymentItem({
   /** Query keys to refresh after an action, besides the application's own. */
   invalidate?: readonly (readonly unknown[])[];
 }) {
-  const { m, t, formatDate } = useI18n();
+  const { m, t, plural, formatDate, formatBytes } = useI18n();
   const confirm = useConfirm();
   const reason = useReasonText();
   const refresh = [keys.app(deployment.applicationId), keys.appPart(deployment.applicationId, 'deployments'), keys.appPart(deployment.applicationId, 'deployments-cleanup'), ...invalidate];
@@ -160,10 +162,16 @@ export function DeploymentItem({
               {deployment.commitSha !== null && <code>{deployment.commitSha.slice(0, 7)}</code>}
             </span>
           )}
-          {deployment.commitMessage !== null && (
+          {(deployment.commitMessage !== null || deployment.upload !== null) && (
             <span>
               <Rocket aria-hidden="true" />
               {m.trigger[deployment.trigger]}
+            </span>
+          )}
+          {deployment.upload !== null && (
+            <span>
+              <FolderUp aria-hidden="true" />
+              {plural(m.upload.files, deployment.upload.files)} · {formatBytes(deployment.upload.bytes, 0)}
             </span>
           )}
           {who !== null && (

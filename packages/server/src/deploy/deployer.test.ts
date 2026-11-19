@@ -9,9 +9,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { concatZip, createZip } from '@ploy/shared';
+import { uploadPath } from './uploads.ts';
+import { AppError } from '../lib/errors.ts';
 import { readTar } from '../lib/tar.ts';
 import { createContext } from '../main.ts';
 import type { Context } from '../context.ts';
@@ -452,6 +455,42 @@ test('a private image pulls with the team registry login; other images pull anon
     const second = ctx.deployer.enqueue({ app: ctx.stores.applications.get(app.id)!, trigger: 'manual', createdBy: null });
     assert.equal(await settle(ctx, second.id), 'succeeded');
     assert.deepEqual(docker.pulls.at(-1), { image: 'nginx:alpine', auth: null }, 'no stored login for Docker Hub: anonymous pull');
+  } finally {
+    await cleanup();
+  }
+});
+
+test('an upload application needs an archive, pins it at enqueue time, and reports a missing file plainly', async () => {
+  const { ctx, cleanup } = await setup();
+  try {
+    const { app } = createApp(ctx);
+    ctx.stores.applications.update(app.id, { sourceType: 'upload', image: null });
+    const bare = ctx.stores.applications.get(app.id)!;
+    assert.throws(
+      () => ctx.deployer.enqueue({ app: bare, trigger: 'manual', createdBy: null }),
+      (error: unknown) => error instanceof AppError && error.code === 'nothing_to_deploy' && error.params?.reason === 'no_upload',
+    );
+
+    // The record names an archive that is not on disk (a restored data directory, say): FETCH fails with its own reason.
+    ctx.stores.applications.setUpload(app.id, { id: 'upl_missing', name: 'site.zip', size: 10, files: 1, bytes: 5, uploadedAt: new Date().toISOString() });
+    const gone = ctx.deployer.enqueue({ app: ctx.stores.applications.get(app.id)!, trigger: 'manual', createdBy: null });
+    assert.equal(gone.upload?.id, 'upl_missing', 'the archive is pinned on the deployment');
+    assert.equal(await settle(ctx, gone.id), 'failed');
+    assert.equal(ctx.stores.deployments.get(gone.id)!.errorCode, 'upload_missing');
+
+    // A real archive is unpacked before the build (which the fake daemon cannot run; the failure is the build's, not FETCH's).
+    const archive = uploadPath(ctx.config.dataDir, app.id, 'upl_real');
+    mkdirSync(dirname(archive), { recursive: true });
+    writeFileSync(archive, concatZip(await createZip([{ path: 'site/index.html', data: new TextEncoder().encode('<h1>hi</h1>') }])));
+    ctx.stores.applications.setUpload(app.id, { id: 'upl_real', name: 'site.zip', size: 10, files: 1, bytes: 11, uploadedAt: new Date().toISOString() });
+    const real = ctx.deployer.enqueue({ app: ctx.stores.applications.get(app.id)!, trigger: 'upload', createdBy: null });
+    assert.equal(await settle(ctx, real.id, 120_000), 'failed');
+    assert.notEqual(ctx.stores.deployments.get(real.id)!.errorCode, 'upload_missing');
+    const log = readFileSync(join(ctx.config.dataDir, 'logs', 'deployments', `${real.id}.log`), 'utf8');
+    assert.match(log, /Unpacking site\.zip \(1 files/);
+    assert.match(log, /holds a single folder/);
+    assert.match(log, /1 files \(11 B\)/);
+    assert.match(log, /Static site · Caddy/, 'the stack was planned from the unpacked files');
   } finally {
     await cleanup();
   }

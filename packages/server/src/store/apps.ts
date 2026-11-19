@@ -10,6 +10,7 @@ import {
   type DeploymentStatus,
   type DeploymentTrigger,
   type SourceType,
+  type UploadInfoDto,
 } from '@ploy/shared';
 import type { Database } from '../db/database.ts';
 import { newId, nowIso, slugify, uniqueSlug } from '../lib/ids.ts';
@@ -153,6 +154,11 @@ export class ProjectStore {
 // Applications
 // ---------------------------------------------------------------------------
 
+/** An uploaded source archive as stored: the DTO plus the id that names its file (`uploads/<app>/<id>.zip`). */
+export interface UploadInfo extends UploadInfoDto {
+  id: string;
+}
+
 export interface ApplicationRecord {
   id: string;
   projectId: string;
@@ -215,6 +221,8 @@ export interface ApplicationRecord {
   previewsEnabled: boolean;
   previewLimit: number;
   previewEnvSealed: string | null;
+  /** Upload sources: the archive the next build unpacks; null until the first upload. */
+  upload: UploadInfo | null;
   status: AppStatus;
   activeDeploymentId: string | null;
   configUpdatedAt: string;
@@ -273,6 +281,7 @@ function mapApplication(row: Row): ApplicationRecord {
     previewsEnabled: bool(row.previews_enabled),
     previewLimit: num(row.preview_limit),
     previewEnvSealed: strOrNull(row.preview_env_sealed),
+    upload: json<UploadInfo | null>(row.upload, null),
     status: str(row.status) as AppStatus,
     activeDeploymentId: strOrNull(row.active_deployment_id),
     configUpdatedAt: str(row.config_updated_at),
@@ -536,6 +545,11 @@ export class ApplicationStore {
     this.db.run('UPDATE applications SET deploy_key = ?, deploy_public_key = ? WHERE id = ?', sealedPrivateKey, publicKey, id);
   }
 
+  /** Upload sources: record the archive the next build unpacks (null forgets it). */
+  setUpload(id: string, upload: UploadInfo | null): void {
+    this.db.run('UPDATE applications SET upload = ?, updated_at = ? WHERE id = ?', upload === null ? null : JSON.stringify(upload), nowIso(), id);
+  }
+
   setHookToken(id: string, sealed: string): void {
     this.db.run('UPDATE applications SET deploy_hook_token = ? WHERE id = ?', sealed, id);
   }
@@ -594,6 +608,8 @@ export interface DeploymentRecord {
   containers: string[];
   sourceDeploymentId: string | null;
   options: DeploymentOptions;
+  /** The archive this deployment was built from (upload sources). */
+  upload: UploadInfo | null;
   errorMessage: string | null;
   /** Stable reason code for a failure (translated in the dashboard). */
   errorCode: string | null;
@@ -627,6 +643,7 @@ function mapDeployment(row: Row): DeploymentRecord {
     containers: json<string[]>(row.containers, []),
     sourceDeploymentId: strOrNull(row.source_deployment_id),
     options: json<DeploymentOptions>(row.options, {}),
+    upload: json<UploadInfo | null>(row.upload, null),
     errorMessage: strOrNull(row.error_message),
     errorCode: strOrNull(row.error_code),
     createdBy: strOrNull(row.created_by),
@@ -659,13 +676,14 @@ export class DeploymentStore {
     imageTag?: string | null;
     sourceDeploymentId?: string | null;
     options?: DeploymentOptions;
+    upload?: UploadInfo | null;
   }): DeploymentRecord {
     const id = newId('dep');
     const app = input.application;
     this.db.run(
       `INSERT INTO deployments (id, application_id, project_id, team_id, server_id, status, trigger, commit_sha, commit_message,
-         commit_author, branch, image_tag, source_deployment_id, options, created_by, created_at, seq)
-       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM deployments WHERE application_id = ?))`,
+         commit_author, branch, image_tag, source_deployment_id, options, upload, created_by, created_at, seq)
+       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM deployments WHERE application_id = ?))`,
       id,
       app.id,
       app.projectId,
@@ -679,6 +697,7 @@ export class DeploymentStore {
       input.imageTag ?? null,
       input.sourceDeploymentId ?? null,
       JSON.stringify(input.options ?? {}),
+      input.upload == null ? null : JSON.stringify(input.upload),
       input.createdBy,
       nowIso(),
       app.id,

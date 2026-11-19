@@ -15,7 +15,7 @@
  * concurrency follows the platform's build-concurrency setting. A newer
  * queued deployment supersedes older queued ones for the same application.
  */
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isTerminalDeployment, type DeploymentTrigger } from '@ploy/shared';
 import { buildWorkDir, checkout, cloneUrl } from '../build/git.ts';
@@ -39,9 +39,10 @@ import {
 } from '../docker/naming.ts';
 import { AppError, errorMessage, reasonOf } from '../lib/errors.ts';
 import { DEFAULT_APP_PORT } from '../proxy/manager.ts';
-import type { ApplicationRecord, DeploymentRecord, VolumeRecord } from '../store/index.ts';
+import type { ApplicationRecord, DeploymentRecord, UploadInfo, VolumeRecord } from '../store/index.ts';
 import { resolveAppEnv, withPlatformEnv } from './env.ts';
 import { LogWriter, logPath, removeLog } from './logs.ts';
+import { humanBytes, removeUploads, unpackUpload, uploadPath } from './uploads.ts';
 
 /** Capabilities kept for application containers: Docker's default set minus NET_RAW, MKNOD, AUDIT_WRITE and SETFCAP. */
 export const APP_CAPABILITIES = ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'FSETID', 'KILL', 'SETGID', 'SETUID', 'SETPCAP', 'NET_BIND_SERVICE', 'SYS_CHROOT'];
@@ -62,6 +63,8 @@ export interface EnqueueInput {
   imageTag?: string | null;
   sourceDeploymentId?: string | null;
   clearCache?: boolean;
+  /** Upload sources: the archive to build (the application's current one when left out). */
+  upload?: UploadInfo | null;
 }
 
 export interface ContainerSpecInput {
@@ -156,7 +159,11 @@ export class Deployer {
   enqueue(input: EnqueueInput): DeploymentRecord {
     const { stores } = this.ctx;
     const { app } = input;
-    if (app.sourceType !== 'image' && app.sourceType !== 'raw' && input.imageTag == null && cloneUrl(app).length === 0) {
+    // Upload sources build the archive pinned here, so an archive uploaded while this waits in the queue never changes what it builds.
+    const upload = input.upload ?? (app.sourceType === 'upload' && input.imageTag == null ? app.upload : null);
+    if (app.sourceType === 'upload') {
+      if (input.imageTag == null && upload === null) throw new AppError('nothing_to_deploy', 'Upload a folder or a zip archive first', { params: { reason: 'no_upload' } });
+    } else if (app.sourceType !== 'image' && app.sourceType !== 'raw' && input.imageTag == null && cloneUrl(app).length === 0) {
       throw new AppError('nothing_to_deploy', 'Application has no source configured');
     }
 
@@ -178,6 +185,7 @@ export class Deployer {
       imageTag: input.imageTag ?? null,
       sourceDeploymentId: input.sourceDeploymentId ?? null,
       options: input.clearCache === true ? { clearCache: true } : {},
+      upload,
     });
     if (!this.running.has(app.id)) this.setAppStatus(app.id, 'queued');
     this.emitDeployment(deployment.id);
@@ -519,33 +527,10 @@ export class Deployer {
     scratchDir: string,
     signal: AbortSignal,
   ): Promise<{ image: string; plan: DeployPlan }> {
-    const { stores, config, secrets } = this.ctx;
-    const branch = app.branch ?? 'main';
-    const url = cloneUrl(app);
-    log.stage('fetch', `Cloning ${app.repository ?? url} (${branch}${deployment.commitSha ? ` @ ${deployment.commitSha.slice(0, 7)}` : ''})`);
-
-    const githubToken = app.sourceType === 'github' && app.githubInstallationId !== null
-      ? await this.ctx.github.installationToken(app.githubInstallationId)
-      : null;
-    if (githubToken !== null) log.mask([githubToken]);
-    await mkdir(workDir, { recursive: true });
-    const commit = await checkout({
-      url,
-      branch,
-      commitSha: deployment.commitSha,
-      workDir,
-      githubToken,
-      deployKey: app.deployKey === null ? null : secrets.open(app.deployKey, 'ssh'),
-      timeoutMs: 5 * 60_000,
-      signal,
-      onOutput: (line) => log.write(line, 'stdout'),
-    });
-    stores.deployments.setCommit(deployment.id, { ...commit, branch });
-    this.emitDeployment(deployment.id);
-    log.info(`Commit ${commit.sha.slice(0, 7)} — ${commit.message} (${commit.author})`);
-    if (app.sourceType === 'github' && app.githubInstallationId !== null) {
-      void this.ctx.github.commitStatus(app, commit.sha, 'pending', deployment.id).catch(() => undefined);
-    }
+    const { stores, config } = this.ctx;
+    if (app.sourceType === 'upload') await this.unpackSource(app, deployment, log, workDir);
+    else await this.fetchSource(app, deployment, log, workDir, signal);
+    throwIfAborted(signal);
 
     const contextDir = app.rootDirectory.length > 0 ? join(workDir, app.rootDirectory) : workDir;
     const image = makeImageTag(app, deployment.id);
@@ -581,6 +566,53 @@ export class Deployer {
     stores.deployments.setImage(deployment.id, image, durationMs);
     log.info(`✓ Built in ${(durationMs / 1000).toFixed(1)}s`);
     return { image, plan };
+  }
+
+  /** FETCH for repository sources: a shallow checkout of the branch head or the pushed commit. */
+  private async fetchSource(app: ApplicationRecord, deployment: DeploymentRecord, log: LogWriter, workDir: string, signal: AbortSignal): Promise<void> {
+    const { stores, secrets } = this.ctx;
+    const branch = app.branch ?? 'main';
+    const url = cloneUrl(app);
+    log.stage('fetch', `Cloning ${app.repository ?? url} (${branch}${deployment.commitSha ? ` @ ${deployment.commitSha.slice(0, 7)}` : ''})`);
+
+    const githubToken = app.sourceType === 'github' && app.githubInstallationId !== null
+      ? await this.ctx.github.installationToken(app.githubInstallationId)
+      : null;
+    if (githubToken !== null) log.mask([githubToken]);
+    await mkdir(workDir, { recursive: true });
+    const commit = await checkout({
+      url,
+      branch,
+      commitSha: deployment.commitSha,
+      workDir,
+      githubToken,
+      deployKey: app.deployKey === null ? null : secrets.open(app.deployKey, 'ssh'),
+      timeoutMs: 5 * 60_000,
+      signal,
+      onOutput: (line) => log.write(line, 'stdout'),
+    });
+    stores.deployments.setCommit(deployment.id, { ...commit, branch });
+    this.emitDeployment(deployment.id);
+    log.info(`Commit ${commit.sha.slice(0, 7)} — ${commit.message} (${commit.author})`);
+    if (app.sourceType === 'github' && app.githubInstallationId !== null) {
+      void this.ctx.github.commitStatus(app, commit.sha, 'pending', deployment.id).catch(() => undefined);
+    }
+  }
+
+  /** FETCH for upload sources: the archive pinned on the deployment (else the application's current one) is unpacked. */
+  private async unpackSource(app: ApplicationRecord, deployment: DeploymentRecord, log: LogWriter, workDir: string): Promise<void> {
+    const upload = deployment.upload ?? app.upload;
+    if (upload === null) throw new AppError('nothing_to_deploy', 'Upload a folder or a zip archive first', { params: { reason: 'no_upload' } });
+    const archive = uploadPath(this.ctx.config.dataDir, app.id, upload.id);
+    log.stage('fetch', `Unpacking ${upload.name} (${upload.files} files, ${humanBytes(upload.size)} compressed)`);
+    if ((await stat(archive).catch(() => null)) === null) {
+      throw new AppError('nothing_to_deploy', `The uploaded archive ${upload.name} is no longer on the control plane; upload it again`, { params: { reason: 'upload_missing' } });
+    }
+    await rm(workDir, { recursive: true, force: true });
+    await mkdir(workDir, { recursive: true, mode: 0o700 });
+    const result = await unpackUpload(archive, workDir);
+    if (result.unwrapped !== null) log.info(`The archive holds a single folder "${result.unwrapped}"; its contents are the project root`);
+    log.info(`✓ ${result.files} files (${humanBytes(result.bytes)})${result.skipped > 0 ? `, ${result.skipped} skipped (symlinks and system files)` : ''}`);
   }
 
   private async waitHealthy(
@@ -717,7 +749,7 @@ export class Deployer {
     if (active === undefined || active.imageTag === null || active.imageRemoved) {
       throw new AppError('nothing_to_deploy', 'The application has no running deployment to restart');
     }
-    return this.enqueue({ app, trigger: 'restart', createdBy: userId, imageTag: active.imageTag, sourceDeploymentId: active.id });
+    return this.enqueue({ app, trigger: 'restart', createdBy: userId, imageTag: active.imageTag, sourceDeploymentId: active.id, upload: active.upload });
   }
 
   /** Redeploy (or roll back to) the image of a previous deployment. */
@@ -735,6 +767,7 @@ export class Deployer {
       commitSha: source.commitSha,
       commitMessage: source.commitMessage,
       commitAuthor: source.commitAuthor,
+      upload: source.upload,
     });
   }
 
@@ -828,6 +861,7 @@ export class Deployer {
       .map((row) => String(row.id));
     stores.applications.delete(app.id);
     stores.metrics.deleteOwner(app.id);
+    await removeUploads(config.dataDir, app.id).catch(() => undefined);
     for (const id of deploymentIds) await removeLog(logPath(config.dataDir, 'deployments', id));
     for (const id of runIds) await removeLog(logPath(config.dataDir, 'cron', id));
     await this.ctx.proxy.requestSync(app.serverId).catch(() => undefined);

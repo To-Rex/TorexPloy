@@ -8,11 +8,12 @@
  * buildpacks by name only, since `pack` cannot plan without building — and
  * the checkout is removed. One plan per application at a time.
  */
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BuildPlanDto } from '@ploy/shared';
 import type { Context } from '../context.ts';
 import { resolveAppEnv } from '../deploy/env.ts';
+import { unpackUpload, uploadPath } from '../deploy/uploads.ts';
 import { AppError } from '../lib/errors.ts';
 import type { ApplicationRecord } from '../store/index.ts';
 import { buildpacksLabel } from './buildpacks.ts';
@@ -50,22 +51,11 @@ export async function previewBuildPlan(ctx: Context, app: ApplicationRecord): Pr
   const workDir = buildWorkDir(ctx.config.dataDir, `plan-${app.id}`);
   const scratchDir = `${workDir}.ploy`;
   try {
-    const url = cloneUrl(app);
-    const githubToken = app.sourceType === 'github' && app.githubInstallationId !== null ? await ctx.github.installationToken(app.githubInstallationId) : null;
-    await mkdir(workDir, { recursive: true });
-    const commit = await checkout({
-      url,
-      branch: app.branch ?? 'main',
-      workDir,
-      githubToken,
-      deployKey: app.deployKey === null ? null : ctx.secrets.open(app.deployKey, 'ssh'),
-      timeoutMs: CHECKOUT_TIMEOUT_MS,
-      onOutput: () => undefined,
-    });
+    const commit = await fetchForPlan(ctx, app, workDir);
     const contextDir = app.rootDirectory.length > 0 ? join(workDir, app.rootDirectory) : workDir;
     const settings = settingsOf(app);
     const warnings = settingsWarnings(settings);
-    const base = { builder: app.buildType, commit: { sha: commit.sha, message: commit.message } };
+    const base = { builder: app.buildType, commit };
 
     if (!isExternal(app.buildType)) {
       const plan = await planBuild(detectInput(contextDir, settings));
@@ -92,4 +82,30 @@ export async function previewBuildPlan(ctx: Context, app: ApplicationRecord): Pr
     await removeWorkDir(workDir);
     await removeWorkDir(scratchDir);
   }
+}
+
+/** The source as a deployment would fetch it: a shallow checkout, or the current uploaded archive unpacked. */
+async function fetchForPlan(ctx: Context, app: ApplicationRecord, workDir: string): Promise<BuildPlanDto['commit']> {
+  await removeWorkDir(workDir);
+  await mkdir(workDir, { recursive: true, mode: 0o700 });
+  if (app.sourceType === 'upload') {
+    if (app.upload === null) throw new AppError('nothing_to_deploy', 'Upload a folder or a zip archive first', { params: { reason: 'no_upload' } });
+    const archive = uploadPath(ctx.config.dataDir, app.id, app.upload.id);
+    if ((await stat(archive).catch(() => null)) === null) {
+      throw new AppError('nothing_to_deploy', `The uploaded archive ${app.upload.name} is no longer on the control plane; upload it again`, { params: { reason: 'upload_missing' } });
+    }
+    await unpackUpload(archive, workDir);
+    return null;
+  }
+  const githubToken = app.sourceType === 'github' && app.githubInstallationId !== null ? await ctx.github.installationToken(app.githubInstallationId) : null;
+  const commit = await checkout({
+    url: cloneUrl(app),
+    branch: app.branch ?? 'main',
+    workDir,
+    githubToken,
+    deployKey: app.deployKey === null ? null : ctx.secrets.open(app.deployKey, 'ssh'),
+    timeoutMs: CHECKOUT_TIMEOUT_MS,
+    onOutput: () => undefined,
+  });
+  return { sha: commit.sha, message: commit.message };
 }

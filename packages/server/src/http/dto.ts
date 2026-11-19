@@ -33,6 +33,7 @@ import {
   type TeamCronJobDto,
   type TeamDeploymentDto,
   type TeamDto,
+  type UploadInfoDto,
   type UserDto,
   type VolumeDto,
 } from '@ploy/shared';
@@ -63,6 +64,7 @@ import type {
   StorageBucketRecord,
   StorageKeyRecord,
   TeamCronJobRecord,
+  UploadInfo,
   UserRecord,
   VolumeRecord,
 } from '../store/index.ts';
@@ -188,7 +190,13 @@ export function sourceDto(app: ApplicationRecord): SourceDto {
   }
   if (app.sourceType === 'git') return { type: 'git', url: app.gitUrl ?? '', branch: app.branch ?? 'main' };
   if (app.sourceType === 'raw') return { type: 'raw' };
+  if (app.sourceType === 'upload') return { type: 'upload', upload: app.upload === null ? null : uploadInfoDto(app.upload) };
   return { type: 'image', image: app.image ?? '' };
+}
+
+/** The archive without its storage id. */
+export function uploadInfoDto(upload: UploadInfo): UploadInfoDto {
+  return { name: upload.name, size: upload.size, files: upload.files, bytes: upload.bytes, uploadedAt: upload.uploadedAt };
 }
 
 export function deploymentSummary(deployment: DeploymentRecord): DeploymentSummaryDto {
@@ -198,6 +206,7 @@ export function deploymentSummary(deployment: DeploymentRecord): DeploymentSumma
     trigger: deployment.trigger,
     commitSha: deployment.commitSha,
     commitMessage: deployment.commitMessage,
+    upload: deployment.upload === null ? null : uploadInfoDto(deployment.upload),
     createdAt: deployment.createdAt,
     finishedAt: deployment.finishedAt,
   };

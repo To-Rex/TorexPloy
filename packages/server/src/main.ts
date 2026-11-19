@@ -98,6 +98,9 @@ async function start(): Promise<void> {
   const server: ServerType = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
     logger.info('TorexPloy is listening', { url: `http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${info.port}`, version: config.version, dataDir: config.dataDir });
   });
+  // Source archives and file-store objects arrive as one body, which on a slow uplink takes longer than Node's
+  // default five minutes for a whole request. Headers still have to arrive within the default minute.
+  (server as Server).requestTimeout = 60 * 60_000;
 
   const terminals = new TerminalGateway(ctx);
   terminals.attach(server as Server);

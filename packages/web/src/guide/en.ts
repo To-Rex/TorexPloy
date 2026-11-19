@@ -92,14 +92,14 @@ export const guide: GuideContent = {
           id: "apps-create",
           icon: "rocket",
           title: "Creating an application",
-          summary: "Three sources: a GitHub repository, any Git URL, or a ready Docker image.",
+          summary: "Four sources: a GitHub repository, any Git URL, a ready Docker image, or an uploaded folder/zip (Netlify Drop style).",
           to: "/projects",
           blocks: [
             {
               type: "steps",
               items: [
                 { title: "Open the project → Create → Application", text: "Name, kind (web or background worker) and server." },
-                { title: "Pick the source", text: "**GitHub** — repository and branch from a list through the connected GitHub App, deploy on push. **Git** — any URL (a deploy key is issued; add it to the repository). **Docker** — an image such as `nginx:1.27` or `ghcr.io/team/app:latest`; private registry logins live in Settings → Registries." },
+                { title: "Pick the source", text: "**GitHub** — repository and branch from a list through the connected GitHub App, deploy on push. **Git** — any URL (a deploy key is issued; add it to the repository). **Docker** — an image such as `nginx:1.27` or `ghcr.io/team/app:latest`; private registry logins live in Settings → Registries. **Upload files** — drop a folder of a built site or a .zip: the panel unpacks it, detects the stack, builds and deploys; later versions are dropped in the same place or sent through the API with `curl`." },
                 { title: "Create", text: "The first deployment starts right away. The app page shows the process stage by stage." },
               ],
             },

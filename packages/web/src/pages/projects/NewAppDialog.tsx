@@ -1,20 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Boxes, Container, GitBranch, Workflow } from 'lucide-react';
+import { Boxes, Container, FolderUp, GitBranch, Workflow } from 'lucide-react';
 import { createApplicationSchema, DEFAULT_BUILD_TYPE, type ApplicationDto, type BuildType, type CreateApplicationInput } from '@ploy/shared';
 import { BuilderPicker } from '../../components/Builders.tsx';
 import { CopyButton } from '../../components/Copy.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
 import { RepoPicker } from '../../components/RepoPicker.tsx';
+import { UploadDrop } from '../../components/UploadDrop.tsx';
 import { Button, Field, GithubMark, Input, Select } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useGithub, useServers } from '../../lib/queries.ts';
+import { useArchiveUpload, type Picked } from '../../lib/upload.ts';
 import { validate } from '../../lib/validate.ts';
 
-type SourceKind = 'github' | 'git' | 'image';
+type SourceKind = 'github' | 'git' | 'image' | 'upload';
 
 export function NewAppDialog({ projectId, open, onClose }: { projectId: string; open: boolean; onClose: () => void }) {
   const { m } = useI18n();
@@ -29,6 +31,9 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
   const [branch, setBranch] = useState('');
   const [gitUrl, setGitUrl] = useState('');
   const [image, setImage] = useState('');
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const pickedRef = useRef<Picked | null>(null);
+  pickedRef.current = picked;
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
   const [serverId, setServerId] = useState('');
@@ -39,6 +44,9 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
   const [advanced, setAdvanced] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [created, setCreated] = useState<{ app: ApplicationDto; publicKey: string | null } | null>(null);
+  /** An upload application that exists but whose archive has not landed yet (the upload failed; submitting again retries it). */
+  const [pendingUpload, setPendingUpload] = useState<ApplicationDto | null>(null);
+  const archive = useArchiveUpload();
 
   useEffect(() => {
     if (serverId === '' && servers.data !== undefined && servers.data.length > 0) {
@@ -54,12 +62,12 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
     if (!nameTouched) setName(value.split('/').pop()?.replace(/\.git$/, '').replace(/[:@].*$/, '') ?? '');
   };
 
-
   const reset = () => {
     setRepository(null);
     setBranch('');
     setGitUrl('');
     setImage('');
+    setPicked(null);
     setName('');
     setNameTouched(false);
     setRootDirectory('');
@@ -67,17 +75,39 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
     setPort('');
     setErrors({});
     setCreated(null);
+    setPendingUpload(null);
+    archive.reset();
   };
 
   const close = () => {
+    if (archive.busy) return;
     reset();
     onClose();
+  };
+
+  /** Send the picked folder or zip to a freshly created upload application, then open its deployments. */
+  const finishUpload = async (app: ApplicationDto) => {
+    const current = pickedRef.current;
+    if (current === null) return;
+    setPendingUpload(app);
+    try {
+      await archive.run(app.id, current);
+      reset();
+      onClose();
+      void navigate(`/apps/${app.id}/deployments`);
+    } catch {
+      // The drop zone shows the reason; submitting again retries the upload for the same application.
+    }
   };
 
   const create = useAction((input: CreateApplicationInput) => api.post<{ application: ApplicationDto; deploymentId: string | null }>(`/api/projects/${projectId}/applications`, input), {
     invalidate: [keys.project(projectId), keys.projects, keys.apps],
     inlineValidation: true,
     onSuccess: async (result) => {
+      if (result.application.source.type === 'upload') {
+        await finishUpload(result.application);
+        return;
+      }
       if (result.deploymentId === null) {
         const key = await api.get<{ publicKey: string | null }>(`/api/applications/${result.application.id}/deploy-key`);
         setCreated({ app: result.application, publicKey: key.publicKey });
@@ -97,12 +127,25 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
   });
 
   const submit = () => {
+    if (source === 'upload') {
+      if (picked === null) {
+        setErrors({ upload: m.upload.needFile });
+        return;
+      }
+      // The application already exists from an attempt whose upload failed: only the upload is retried.
+      if (pendingUpload !== null) {
+        void finishUpload(pendingUpload);
+        return;
+      }
+    }
     const sourceInput =
       source === 'github'
         ? { type: 'github' as const, installationId: installationId ?? 0, repository: repository ?? '', branch }
         : source === 'git'
           ? { type: 'git' as const, url: gitUrl.trim(), branch: branch.trim() || 'main' }
-          : { type: 'image' as const, image: image.trim() };
+          : source === 'upload'
+            ? { type: 'upload' as const }
+            : { type: 'image' as const, image: image.trim() };
     const payload = {
       name: name.trim(),
       serverId,
@@ -144,6 +187,7 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
     );
   }
 
+  const busy = create.isPending || archive.busy;
   return (
     <Dialog
       open={open}
@@ -153,9 +197,11 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
       onSubmit={submit}
       footer={
         <>
-          <Button onClick={close}>{m.common.cancel}</Button>
-          <Button type="submit" variant="primary" busy={create.isPending}>
-            {source === 'git' && gitUrl.startsWith('git@') ? m.newApp.submitNoDeploy : m.newApp.submit}
+          <Button onClick={close} disabled={archive.busy}>
+            {m.common.cancel}
+          </Button>
+          <Button type="submit" variant="primary" busy={busy}>
+            {source === 'git' && gitUrl.startsWith('git@') ? m.newApp.submitNoDeploy : pendingUpload !== null ? m.common.retry : m.newApp.submit}
           </Button>
         </>
       }
@@ -169,6 +215,7 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
                 { value: 'github', icon: <GithubMark />, label: m.newApp.sourceGithub },
                 { value: 'git', icon: <GitBranch />, label: m.newApp.sourceGit },
                 { value: 'image', icon: <Container />, label: m.newApp.sourceImage },
+                { value: 'upload', icon: <FolderUp />, label: m.newApp.sourceUpload },
               ] as const
             ).map((option) => (
               <button
@@ -177,6 +224,7 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
                 role="radio"
                 className="choice"
                 aria-checked={source === option.value}
+                disabled={pendingUpload !== null}
                 onClick={() => {
                   setSource(option.value);
                   setErrors({});
@@ -223,12 +271,31 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
           </Field>
         )}
 
+        {source === 'upload' && (
+          <div className="field">
+            <span className="field__label">{m.upload.title}</span>
+            <UploadDrop
+              picked={picked}
+              state={archive.state}
+              disabled={busy}
+              onPick={(next) => {
+                setPicked(next);
+                setErrors({});
+                archive.reset();
+                if (next !== null) suggestName(next.name.replace(/\.zip$/i, ''));
+              }}
+            />
+            {errors.upload !== undefined && <p className="field__error">{errors.upload}</p>}
+            <p className="field__hint">{m.newApp.uploadHint}</p>
+          </div>
+        )}
+
         <div className="form-grid">
           <Field label={m.newApp.name} error={errors.name}>
-            <Input value={name} onChange={(event) => { setName(event.target.value); setNameTouched(true); }} />
+            <Input value={name} onChange={(event) => { setName(event.target.value); setNameTouched(true); }} disabled={pendingUpload !== null} />
           </Field>
           <Field label={m.newApp.server} error={errors.serverId}>
-            <Select value={serverId} onChange={(event) => setServerId(event.target.value)}>
+            <Select value={serverId} onChange={(event) => setServerId(event.target.value)} disabled={pendingUpload !== null}>
               {(servers.data ?? []).map((server) => (
                 <option key={server.id} value={server.id}>
                   {server.name}
@@ -248,7 +315,7 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
                 { value: 'worker', icon: <Workflow />, label: m.newApp.kindWorker, hint: m.newApp.kindWorkerHint },
               ] as const
             ).map((option) => (
-              <button key={option.value} type="button" role="radio" className="choice" aria-checked={kind === option.value} onClick={() => setKind(option.value)}>
+              <button key={option.value} type="button" role="radio" className="choice" aria-checked={kind === option.value} disabled={pendingUpload !== null} onClick={() => setKind(option.value)}>
                 <span className="choice__title">
                   {option.icon}
                   {option.label}

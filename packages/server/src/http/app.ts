@@ -35,6 +35,8 @@ const MAX_JSON_BYTES = 1024 * 1024;
 
 /** Object uploads into a file store are raw bodies with their own (much larger) limit. */
 const OBJECT_UPLOAD = /^\/api\/services\/[^/]+\/storage\/buckets\/[^/]+\/objects\//;
+/** Source archives of upload applications: raw zip bodies, bounded by `LIMITS.uploadMax` in their route. */
+const SOURCE_UPLOAD = /^\/api\/applications\/[^/]+\/upload$/;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -91,7 +93,8 @@ export function createHttpApp(ctx: Context): Hono<Env> {
 
   app.use('/api/*', async (c, next) => {
     const length = Number(c.req.header('content-length') ?? 0);
-    if (length > MAX_JSON_BYTES && !c.req.path.startsWith('/api/webhooks/') && !(c.req.method === 'PUT' && OBJECT_UPLOAD.test(c.req.path))) {
+    const rawUpload = (c.req.method === 'PUT' && OBJECT_UPLOAD.test(c.req.path)) || (c.req.method === 'POST' && SOURCE_UPLOAD.test(c.req.path));
+    if (length > MAX_JSON_BYTES && !c.req.path.startsWith('/api/webhooks/') && !rawUpload) {
       throw new AppError('payload_too_large', 'Request body too large');
     }
     c.header('Cache-Control', 'no-store');

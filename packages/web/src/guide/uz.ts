@@ -92,14 +92,14 @@ export const guide: GuideContent = {
           id: "apps-create",
           icon: "rocket",
           title: "Ilova yaratish",
-          summary: "Uch manba: GitHub repozitoriya, istalgan Git URL yoki tayyor Docker image.",
+          summary: "Toʻrt manba: GitHub repozitoriya, istalgan Git URL, tayyor Docker image yoki papka/zip yuklash (Netlify Drop kabi).",
           to: "/projects",
           blocks: [
             {
               type: "steps",
               items: [
                 { title: "Loyihani oching → Yaratish → Ilova", text: "Nomi, turi (veb yoki fon ishchisi) va server tanlanadi." },
-                { title: "Manbani tanlang", text: "**GitHub** — ulangan GitHub App orqali repozitoriya va branch roʻyxatdan tanlanadi, push’da avtomatik deploy yoqiladi. **Git** — istalgan URL (deploy kaliti beriladi, uni repozitoriyaga qoʻshasiz). **Docker** — `nginx:1.27` yoki `ghcr.io/jamoa/ilova:latest` kabi image; xususiy registr loginlari Sozlamalar → Registrlar’da." },
+                { title: "Manbani tanlang", text: "**GitHub** — ulangan GitHub App orqali repozitoriya va branch roʻyxatdan tanlanadi, push’da avtomatik deploy yoqiladi. **Git** — istalgan URL (deploy kaliti beriladi, uni repozitoriyaga qoʻshasiz). **Docker** — `nginx:1.27` yoki `ghcr.io/jamoa/ilova:latest` kabi image; xususiy registr loginlari Sozlamalar → Registrlar’da. **Fayl yuklash** — tayyor sayt papkasini yoki .zip arxivni tashlang: panel uni ochadi, stack’ni aniqlab yigʻadi va joylashtiradi; keyingi versiyalar ham shu yerga tashlanadi yoki `curl` bilan API orqali yuboriladi." },
                 { title: "Yarating", text: "Birinchi joylashtirish darhol boshlanadi. Ilova sahifasida jarayon bosqichma-bosqich koʻrinadi." },
               ],
             },

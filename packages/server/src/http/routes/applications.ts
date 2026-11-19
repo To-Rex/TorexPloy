@@ -1,6 +1,8 @@
 /**
  * Applications and everything attached to them.
  */
+import { Readable } from 'node:stream';
+import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import type { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
@@ -20,6 +22,7 @@ import {
   updateApplicationSchema,
   updateCronJobSchema,
   updateDomainSchema,
+  uploadQuerySchema,
   type ContainerDto,
   type SourceInput,
   type VariablesDto,
@@ -28,6 +31,7 @@ import { previewBuildPlan } from '../../build/plan.ts';
 import { requireBuilder } from '../../build/tools.ts';
 import { emit, type Context } from '../../context.ts';
 import { resolveAppEnv } from '../../deploy/env.ts';
+import { pruneUploads, receiveUpload, uploadName } from '../../deploy/uploads.ts';
 import { generateDomain } from '../../domains/generate.ts';
 import { logPath, readLog, removeLog } from '../../deploy/logs.ts';
 import { appVolume } from '../../docker/naming.ts';
@@ -79,6 +83,8 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
       return { sourceType: 'github', githubInstallationId: source.installationId, repository: source.repository, gitUrl: null, branch: source.branch, image: null };
     }
     if (source.type === 'git') return { sourceType: 'git', githubInstallationId: null, repository: null, gitUrl: source.url, branch: source.branch, image: null };
+    // The archive of an upload source arrives through its own endpoint; a previous one, if any, stays on the record.
+    if (source.type === 'upload') return { sourceType: 'upload', githubInstallationId: null, repository: null, gitUrl: null, branch: null, image: null };
     return { sourceType: 'image', githubInstallationId: null, repository: null, gitUrl: null, branch: null, image: source.image };
   };
 
@@ -120,9 +126,10 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     audit(ctx, c, 'application.created', { type: 'application', id: application.id, name: application.name }, { source: source.sourceType });
     changed(application);
 
-    // Deploy right away unless the source is a private git repo whose deploy key the user still has to install.
+    // Deploy right away unless the source is a private git repo whose deploy key the user still has to install,
+    // or an upload whose archive the dashboard sends next (that upload starts the first deployment).
     const needsKey = source.sourceType === 'git' && source.gitUrl?.startsWith('git@') === true;
-    const deployment = needsKey ? null : ctx.deployer.enqueue({ app: stores.applications.get(application.id)!, trigger: 'manual', createdBy: auth.user.id });
+    const deployment = needsKey || source.sourceType === 'upload' ? null : ctx.deployer.enqueue({ app: stores.applications.get(application.id)!, trigger: 'manual', createdBy: auth.user.id });
     return c.json({ application: applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)), deploymentId: deployment?.id ?? null }, 201);
   });
 
@@ -134,6 +141,10 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const input = await body(c, updateApplicationSchema);
     const { source, previewEnv, ...rest } = input;
     const patch: ApplicationPatch = { ...rest };
+    // A compose stack is a file plus a repository or stored text; it is never an image or an uploaded archive.
+    if (source !== undefined && application.kind === 'compose' && (source.type === 'image' || source.type === 'upload')) {
+      throw new AppError('validation_failed', 'A compose stack cannot use this source', { issues: [{ path: 'source.type', code: 'custom', message: 'Compose stacks come from a repository or a stored file', params: { reason: 'compose_source' } }] });
+    }
     if (source !== undefined) Object.assign(patch, sourceColumns(auth.teamId, source));
     // A builder whose CLI is not on this control plane cannot be chosen; the dashboard lists the ones that can.
     if (patch.buildType !== undefined) requireBuilder(patch.buildType);
@@ -180,6 +191,33 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const deployment = ctx.deployer.enqueue({ app: application, trigger: 'manual', createdBy: auth.user.id, clearCache: input.clearCache ?? false });
     audit(ctx, c, 'application.deploy', { type: 'application', id: application.id, name: application.name }, { deploymentId: deployment.id });
     return c.json(deploymentDto(deployment, application), 202);
+  });
+
+  /**
+   * A new source archive for an upload application: the raw zip as the body
+   * (`Content-Length` required, `?name=` for the file or folder name). It
+   * replaces the current archive and, unless `?deploy=0`, starts a deployment.
+   */
+  app.post('/api/applications/:id/upload', async (c) => {
+    const application = loadApp(ctx, c, 'developer');
+    const auth = requireTeam(c, 'developer');
+    if (application.sourceType !== 'upload') {
+      throw new AppError('conflict', 'This application is not built from uploads; switch its source to "Upload" first', { params: { reason: 'not_upload_source' } });
+    }
+    const options = query(c, uploadQuerySchema);
+    const length = c.req.header('content-length');
+    if (length === undefined || !/^\d+$/.test(length)) throw new AppError('bad_request', 'Content-Length is required', { params: { reason: 'length_required' } });
+    const raw = c.req.raw.body;
+    const upload = await receiveUpload(ctx.config.dataDir, application.id, raw === null ? null : Readable.fromWeb(raw as unknown as WebReadableStream), Number(length), uploadName(options.name));
+    stores.applications.setUpload(application.id, upload);
+    // Deployments still queued or running keep the archive they were pinned to; everything else is replaced.
+    const pinned = stores.deployments.listOpen().filter((open) => open.applicationId === application.id).map((open) => open.upload?.id);
+    await pruneUploads(ctx.config.dataDir, application.id, [upload.id, ...pinned]);
+    const current = stores.applications.get(application.id)!;
+    const deployment = options.deploy === '0' ? null : ctx.deployer.enqueue({ app: current, trigger: 'upload', createdBy: auth.user.id, clearCache: options.clearCache === '1', upload });
+    audit(ctx, c, 'application.upload', { type: 'application', id: application.id, name: application.name }, { name: upload.name, size: upload.size, files: upload.files, deploymentId: deployment?.id ?? null });
+    changed(current);
+    return c.json({ application: applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)), deployment: deployment === null ? null : deploymentDto(deployment, current) }, 202);
   });
 
   app.post('/api/applications/:id/restart', async (c) => {

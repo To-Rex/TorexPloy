@@ -255,8 +255,18 @@ export const sourceSchema = z.discriminatedUnion('type', [
     type: z.literal('image'),
     image: z.string().trim().max(300).regex(IMAGE_RE),
   }),
+  /** The archive itself travels separately (`POST /api/applications/:id/upload`). */
+  z.object({ type: z.literal('upload') }),
 ]);
 export type SourceInput = z.infer<typeof sourceSchema>;
+
+/** `POST /api/applications/:id/upload` query: how the archive is called and whether to deploy it right away. */
+export const uploadQuerySchema = z.object({
+  name: z.string().trim().max(LIMITS.uploadNameMax).optional(),
+  deploy: z.enum(['0', '1']).optional(),
+  clearCache: z.enum(['0', '1']).optional(),
+});
+export type UploadQueryInput = z.infer<typeof uploadQuerySchema>;
 
 /** A Docker Compose file as text; the server parses and validates its structure. */
 export const composeFileSchema = z
