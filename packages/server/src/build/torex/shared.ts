@@ -285,7 +285,36 @@ export function addUser(family: ImageFamily, name = 'app'): string {
     : `RUN useradd --system --uid 10001 --create-home --home-dir /home/${name} --shell /usr/sbin/nologin ${name}`;
 }
 
-/** A Caddy image serving `sourceDir` (from `sourceStage`, or the context) with SPA fallback and immutable asset caching. */
+/**
+ * Caching for static sites, Netlify style: every file is revalidated on each
+ * visit (an ETag round trip, so a new deployment shows at once), except build
+ * output whose name carries a content hash — that never changes under its
+ * name and may be kept for a year.
+ *
+ * Directories where a framework guarantees hashed names are trusted as a
+ * whole. Under `/assets` and `/static`, which hand-written sites use for
+ * plain `style.css` too, a file counts as hashed only when its name ends in
+ * a hash-like run of eight or more characters that includes a digit
+ * (`index-BxzU3Ks9.js`, `main.3f2a91c0.css`), so `assets/my-component.js`
+ * is revalidated like everything else.
+ */
+export const IMMUTABLE_DIRS = ['/_next/static/*', '/_app/immutable/*', '/_astro/*'];
+export const HASHED_DIRS = ['/assets/*', '/static/*'];
+/** One hash character. The run is spelled out rather than `{8,}`: a Caddyfile token with curly braces is not worth the doubt. */
+const HASH_CHAR = '[A-Za-z0-9_-]';
+/** The file name ends in `-` or `.`, then at least eight hash characters, then the extension. */
+export const HASHED_NAME_RE = String.raw`[.-]${HASH_CHAR.repeat(7)}${HASH_CHAR}+\.[a-z0-9]+$`;
+/** Paths without a single digit are human-named, however long. */
+export const DIGITLESS_PATH_RE = String.raw`^/[^0-9]*$`;
+
+/** Whether a request path gets the one-year immutable cache header under the rules above (the Caddyfile's logic, for tests). */
+export function isImmutablePath(path: string): boolean {
+  const glob = (pattern: string) => path.toLowerCase().startsWith(pattern.slice(0, -1).toLowerCase());
+  if (IMMUTABLE_DIRS.some(glob)) return true;
+  return HASHED_DIRS.some(glob) && new RegExp(HASHED_NAME_RE).test(path) && !new RegExp(DIGITLESS_PATH_RE).test(path);
+}
+
+/** A Caddy image serving `sourceDir` (from `sourceStage`, or the context) with SPA fallback and the caching rules above. */
 export function staticRuntime(sourceStage: string | null, sourceDir: string, extra: string[] = []): string[] {
   const caddyfile = [
     '{',
@@ -295,8 +324,16 @@ export function staticRuntime(sourceStage: string | null, sourceDir: string, ext
     ':8080 {',
     '  root * /srv',
     '  encode zstd gzip',
-    '  @immutable path /assets/* /_next/static/* /static/* /_app/immutable/* /_astro/*',
+    `  @immutable path ${IMMUTABLE_DIRS.join(' ')}`,
+    '  @hashed {',
+    `    path ${HASHED_DIRS.join(' ')}`,
+    `    path_regexp ${HASHED_NAME_RE}`,
+    `    not path_regexp ${DIGITLESS_PATH_RE}`,
+    '  }',
     '  header @immutable Cache-Control "public, max-age=31536000, immutable"',
+    '  header @hashed Cache-Control "public, max-age=31536000, immutable"',
+    // `?` sets a default (deferred, so it never overrides the two above, whatever order Caddy runs them in).
+    '  header ?Cache-Control "public, max-age=0, must-revalidate"',
     '  try_files {path} {path}/ {path}.html /index.html',
     '  file_server',
     '}',

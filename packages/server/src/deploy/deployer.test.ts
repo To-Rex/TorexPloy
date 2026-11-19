@@ -491,6 +491,27 @@ test('an upload application needs an archive, pins it at enqueue time, and repor
     assert.match(log, /holds a single folder/);
     assert.match(log, /1 files \(11 B\)/);
     assert.match(log, /Static site · Caddy/, 'the stack was planned from the unpacked files');
+
+    // A second upload replaces the first: the next deployment unpacks the new archive, not the one it was created with.
+    const second = uploadPath(ctx.config.dataDir, app.id, 'upl_v2');
+    writeFileSync(second, concatZip(await createZip([
+      { path: 'index.html', data: new TextEncoder().encode('<h1>version two</h1>') },
+      { path: 'assets/style.css', data: new TextEncoder().encode('h1{color:red}') },
+      { path: 'about.html', data: new TextEncoder().encode('<p>about</p>') },
+    ])));
+    const v2 = { id: 'upl_v2', name: 'v2.zip', size: 10, files: 3, bytes: 20 + 13 + 12, uploadedAt: new Date().toISOString() };
+    ctx.stores.applications.setUpload(app.id, v2);
+    const next = ctx.deployer.enqueue({ app: ctx.stores.applications.get(app.id)!, trigger: 'upload', createdBy: null, upload: v2 });
+    assert.equal(next.upload?.id, 'upl_v2');
+    assert.equal(await settle(ctx, next.id, 120_000), 'failed');
+    const nextLog = readFileSync(join(ctx.config.dataDir, 'logs', 'deployments', `${next.id}.log`), 'utf8');
+    assert.match(nextLog, /Unpacking v2\.zip \(3 files/);
+    assert.match(nextLog, /3 files \(45 B\)/, 'the new archive was unpacked into a fresh work directory');
+    assert.doesNotMatch(nextLog, /holds a single folder|site\.zip/, 'nothing of the first archive is in play');
+    // The web form always sends the archive it just stored; a plain "Deploy" after an upload takes the application's current one too.
+    const manual = ctx.deployer.enqueue({ app: ctx.stores.applications.get(app.id)!, trigger: 'manual', createdBy: null });
+    assert.equal(manual.upload?.id, 'upl_v2');
+    ctx.deployer.cancel(manual.id);
   } finally {
     await cleanup();
   }

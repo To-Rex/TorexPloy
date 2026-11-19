@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { AppError } from '../lib/errors.ts';
 import { nodeMajor, planBuild, renderEnvFile, type BuildInput, type BuildPlan } from './detect.ts';
+import { isImmutablePath } from './torex/shared.ts';
 
 function repo(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'ploy-detect-'));
@@ -77,6 +78,26 @@ test('Node: a Vite SPA without a server becomes a static Caddy image', async () 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('static sites are revalidated on every visit; only content-hashed output is cached as immutable', async () => {
+  const site = await plan({ 'index.html': '<h1>hi</h1>' });
+  // A new deployment must show at once: the default is Netlify's, and it is a default (`?`) so it never overrides the immutable rules.
+  assert.match(site.dockerfile!, /header \?Cache-Control \\"public, max-age=0, must-revalidate\\"/);
+  assert.match(site.dockerfile!, /header @hashed Cache-Control \\"public, max-age=31536000, immutable\\"/);
+  assert.match(site.dockerfile!, /@immutable path \/_next\/static\/\* \/_app\/immutable\/\* \/_astro\/\*/);
+  assert.match(site.dockerfile!, /@hashed \{/);
+  assert.match(site.dockerfile!, /path \/assets\/\* \/static\/\*/);
+  assert.match(site.dockerfile!, /path_regexp \[\.-\](?:\[A-Za-z0-9_-\]){7}\[A-Za-z0-9_-\]\+\\\\\.\[a-z0-9\]\+\$'/);
+  assert.doesNotMatch(site.dockerfile!, /path_regexp [^']*[{}]/, 'no curly braces inside the regex token');
+  assert.match(site.dockerfile!, /not path_regexp \^\/\[\^0-9\]\*\$/);
+  assert.doesNotMatch(site.dockerfile!, /@immutable path [^']*\/assets/, 'a hand-written site keeps plain files under /assets');
+
+  // The matcher logic, on the names build tools and people produce.
+  const immutable = ['/assets/index-BxzU3Ks9.js', '/assets/vendor-C3xkP0ab.css', '/static/js/main.3f2a91c0.js', '/static/css/main.a1b2c3d4e5f6.css', '/assets/logo-9f8e7d6c5b.png', '/_next/static/chunks/webpack-abc.js', '/_app/immutable/entry/start.js', '/_astro/index.css'];
+  const revalidated = ['/', '/index.html', '/about', '/assets/style.css', '/assets/app.js', '/assets/my-component.js', '/assets/style-responsive.css', '/static/logo.png', '/assets/jquery-3.7.1.min.js', '/css/site-12345678.css', '/assets/v2/app.js'];
+  for (const path of immutable) assert.equal(isImmutablePath(path), true, `${path} is content-hashed`);
+  for (const path of revalidated) assert.equal(isImmutablePath(path), false, `${path} is revalidated`);
 });
 
 test('Node: an app with no way to start fails with an actionable error', async () => {
