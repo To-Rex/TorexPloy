@@ -8,7 +8,6 @@ import { Rocket } from 'lucide-react';
 import type { DeploymentStatusFilter } from '@ploy/shared';
 import { DeploymentItem } from '../components/DeploymentItem.tsx';
 import { Frame } from '../components/Frame.tsx';
-import { AppMark } from '../components/KindMark.tsx';
 import { usePageMeta } from '../components/PageMeta.tsx';
 import { Button, EmptyState, Segmented, SkeletonRows } from '../components/ui.tsx';
 import { useI18n } from '../i18n/index.tsx';
@@ -53,10 +52,8 @@ export function DeploymentsPage() {
                 deployment={deployment}
                 invalidate={[keys.teamDeployments]}
                 heading={
-                  <Link to={`/apps/${deployment.applicationId}/deployments`} className="deploy-item__app">
-                    <AppMark kind={deployment.applicationKind} />
+                  <Link to={`/apps/${deployment.applicationId}/deployments`} className="deploy-item__app" title={deployment.projectName}>
                     <span className="truncate">{deployment.applicationName}</span>
-                    <span className="faint truncate">{deployment.projectName}</span>
                   </Link>
                 }
               />

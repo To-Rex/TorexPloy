@@ -319,7 +319,7 @@
     height: 32px;
     padding: 0 6px 0 10px;
     border: 1px solid var(--line);
-    border-radius: var(--r-sm);
+    border-radius: var(--r-md);
     background: var(--surface);
     box-shadow: var(--shadow-xs);
     color: var(--ink-3);

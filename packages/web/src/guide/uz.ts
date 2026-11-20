@@ -123,7 +123,7 @@ export const guide: GuideContent = {
                 ["Statik", "HTML/CSS/JS yoki SPA: build buyrugʻi va chiqish papkasi koʻrsatiladi, natija yengil veb-server bilan tarqatiladi."],
               ],
             },
-            { type: "p", text: "Ilova → Umumiy → **Yigʻish** kartasida usul, root papka, install/build/start buyruqlari va tizim paketlari sozlanadi. **Rejani koʻrish** tugmasi yigʻishdan oldin nima aniqlanganini va ogohlantirishlarni koʻrsatadi." },
+            { type: "p", text: "Ilova → Umumiy → **Yigʻish** kartasida usul tanlanadi. Root papka, install/build buyruqlari va tizim paketlari shu kartadagi **Qoʻshimcha sozlamalar** ostida; odatda ularga tegish shart emas. Oʻrnatilmagan yigʻuvchilar kartaning pastidagi havola orqali koʻrinadi. **Rejani koʻrish** tugmasi yigʻishdan oldin nima aniqlanganini va ogohlantirishlarni koʻrsatadi." },
           ],
         },
         {

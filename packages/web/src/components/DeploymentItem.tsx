@@ -6,7 +6,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Ban, Check, Clock, Ellipsis, FolderUp, GitBranch, Hammer, History, Hourglass, LoaderCircle, Minus, Rocket, RotateCcw, ScrollText, Timer, Trash2, TriangleAlert, User, X } from 'lucide-react';
+import { Ban, Check, Ellipsis, FolderUp, GitBranch, Hammer, History, Hourglass, LoaderCircle, Minus, RotateCcw, ScrollText, Timer, Trash2, TriangleAlert, User, X } from 'lucide-react';
 import { isTerminalDeployment, type DeploymentDto } from '@ploy/shared';
 import { useI18n } from '../i18n/index.tsx';
 import type { Messages } from '../i18n/uz.ts';
@@ -78,11 +78,16 @@ function useSecondTick(active: boolean): number {
   return now;
 }
 
-/** Timing facts shared by the list item and the deployment page. */
-export function DeploymentTimingFacts({ deployment }: { deployment: DeploymentDto }) {
+/**
+ * Timing facts shared by the list item and the deployment page. A list item
+ * shows how long it took and nothing else (`compact`), unless the wait in
+ * the queue is the story; the page shows every part.
+ */
+export function DeploymentTimingFacts({ deployment, compact = false }: { deployment: DeploymentDto; compact?: boolean }) {
   const { m, t, formatDuration } = useI18n();
   const now = useSecondTick(!isTerminalDeployment(deployment.status));
   const timing = deploymentTiming(deployment, now);
+  const waitedWorthShowing = timing.waited !== null && (deployment.status === 'queued' || timing.waited >= (compact ? 30_000 : 2_000));
   return (
     <>
       {timing.total !== null && (
@@ -91,13 +96,13 @@ export function DeploymentTimingFacts({ deployment }: { deployment: DeploymentDt
           {t(timing.live ? m.deployments.running : m.deployments.took, { time: formatDuration(timing.total) })}
         </span>
       )}
-      {timing.waited !== null && (timing.waited >= 2_000 || deployment.status === 'queued') && (
+      {waitedWorthShowing && (
         <span className="fact tabular">
           <Hourglass aria-hidden="true" />
-          {t(m.deployments.waited, { time: formatDuration(timing.waited) })}
+          {t(m.deployments.waited, { time: formatDuration(timing.waited!) })}
         </span>
       )}
-      {timing.build !== null && (
+      {!compact && timing.build !== null && (
         <span className="fact tabular">
           <Hammer aria-hidden="true" />
           {t(m.deployments.built, { time: formatDuration(timing.build) })}
@@ -118,7 +123,7 @@ export function DeploymentItem({
   /** Query keys to refresh after an action, besides the application's own. */
   invalidate?: readonly (readonly unknown[])[];
 }) {
-  const { m, t, plural, formatDate, formatBytes } = useI18n();
+  const { m, t, plural, formatBytes } = useI18n();
   const confirm = useConfirm();
   const reason = useReasonText();
   const refresh = [keys.app(deployment.applicationId), keys.appPart(deployment.applicationId, 'deployments'), keys.appPart(deployment.applicationId, 'deployments-cleanup'), ...invalidate];
@@ -129,49 +134,41 @@ export function DeploymentItem({
   const tone = deploymentTone[deployment.status];
   const Icon = ICONS[tone];
   const detail = `/deployments/${deployment.id}`;
-  const created = parseTime(deployment.createdAt);
   const who = deployment.createdBy?.name ?? (deployment.trigger === 'push' ? deployment.commitAuthor : null);
 
+  const title = deploymentTitle(m, deployment);
+  // A pushed commit says where it came from by itself; any other trigger is worth a word.
+  const showTrigger = deployment.trigger !== 'push' && (deployment.commitMessage !== null || deployment.upload !== null);
+
   return (
-    <article className="deploy-item" data-tone={tone} aria-label={`${t(m.deployments.number, { n: deployment.number })} ${deploymentTitle(m, deployment)}`}>
-      <div className="deploy-item__rail" aria-hidden="true">
-        <span className="deploy-item__dot">
-          <Icon className={tone === 'work' ? 'spin' : undefined} />
-        </span>
-      </div>
+    <article className="deploy-item" data-tone={tone} aria-label={`${t(m.deployments.number, { n: deployment.number })} ${title}`}>
+      <span className="deploy-item__dot" aria-hidden="true">
+        <Icon className={tone === 'work' ? 'spin' : undefined} />
+      </span>
       <div className="deploy-item__body">
         <div className="deploy-item__head">
-          {heading}
-          <Badge tone={tone}>{m.status.deployment[deployment.status]}</Badge>
-          <span className="deploy-item__num tabular">{t(m.deployments.number, { n: deployment.number })}</span>
+          <Link to={detail} className="deploy-item__title truncate">
+            {title}
+          </Link>
           {deployment.isActive && <Badge tone="ok">{m.deployments.active}</Badge>}
           {deployment.status === 'succeeded' && !deployment.canRollback && !deployment.isActive && <span className="deploy-item__note">{m.deployments.imageGone}</span>}
-          <span className="deploy-item__when">
-            <RelativeTime value={deployment.createdAt} />
-          </span>
         </div>
-        <Link to={detail} className="deploy-item__title truncate">
-          {deploymentTitle(m, deployment)}
-        </Link>
         <div className="deploy-item__facts">
+          {heading}
+          <span className="deploy-item__status">{m.status.deployment[deployment.status]}</span>
+          <span className="tabular">{t(m.deployments.number, { n: deployment.number })}</span>
           {(deployment.branch !== null || deployment.commitSha !== null) && (
             <span>
               <GitBranch aria-hidden="true" />
               {deployment.branch}
-              {deployment.branch !== null && deployment.commitSha !== null && ' · '}
               {deployment.commitSha !== null && <code>{deployment.commitSha.slice(0, 7)}</code>}
             </span>
           )}
-          {(deployment.commitMessage !== null || deployment.upload !== null) && (
-            <span>
-              <Rocket aria-hidden="true" />
-              {m.trigger[deployment.trigger]}
-            </span>
-          )}
+          {showTrigger && <span>{m.trigger[deployment.trigger]}</span>}
           {deployment.upload !== null && (
             <span>
               <FolderUp aria-hidden="true" />
-              {plural(m.upload.files, deployment.upload.files)} · {formatBytes(deployment.upload.bytes, 0)}
+              {plural(m.upload.files, deployment.upload.files)}, {formatBytes(deployment.upload.bytes, 0)}
             </span>
           )}
           {who !== null && (
@@ -180,13 +177,7 @@ export function DeploymentItem({
               {who}
             </span>
           )}
-          {created !== null && (
-            <span className="tabular" title={formatDate(created, { dateStyle: 'full', timeStyle: 'medium' })}>
-              <Clock aria-hidden="true" />
-              {formatDate(created, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          <DeploymentTimingFacts deployment={deployment} />
+          <DeploymentTimingFacts deployment={deployment} compact />
         </div>
         {deployment.status === 'failed' && deployment.errorMessage !== null && (
           <div className="deploy-item__error">
@@ -196,6 +187,9 @@ export function DeploymentItem({
         )}
       </div>
       <div className="deploy-item__side">
+        <span className="deploy-item__when">
+          <RelativeTime value={deployment.createdAt} />
+        </span>
         <Link className="btn btn--sm btn--ghost deploy-item__log" to={detail}>
           <ScrollText width={14} height={14} aria-hidden="true" />
           {m.deployments.viewLog}

@@ -25,6 +25,7 @@ import { useAction } from '../../lib/mutate.ts';
 import { keys, useProject, useProjectVariables, useTemplates } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 import { NotFound } from '../../app/RouteError.tsx';
+import { projectColor } from '../../app/Shell.tsx';
 import { NewAppDialog } from './NewAppDialog.tsx';
 import { NewComposeDialog } from './NewComposeDialog.tsx';
 import { NewServiceDialog } from './NewServiceDialog.tsx';
@@ -227,6 +228,11 @@ export function ProjectPage() {
   return (
     <div className="page">
       <Frame
+        mark={
+          <span className="project-card__mark project-card__mark--lg" aria-hidden="true" style={{ ['--project-color' as string]: projectColor(projectId) }}>
+            {(data?.project.name ?? ' ').slice(0, 1).toUpperCase()}
+          </span>
+        }
         title={data?.project.name ?? <Skeleton width={220} height={26} />}
         description={data === undefined ? undefined : (data.project.description ?? m.projects.noDescription)}
         actions={

@@ -1700,6 +1700,8 @@ export const ru: Messages = {
     description: 'Как код превращается в образ. TorexBuilder подходит большинству проектов; остальные — для особых случаев.',
     recommended: 'Рекомендуется',
     notInstalled: 'Не установлен',
+    showMissing: 'Ещё {count} (не установлены)',
+    hideMissing: 'Скрыть неустановленные',
     unavailable: 'Этот сборщик не установлен на панели управления. Обновите TorexPloy на сервере.',
     names: {
       torex: 'TorexBuilder',

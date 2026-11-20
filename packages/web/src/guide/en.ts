@@ -123,7 +123,7 @@ export const guide: GuideContent = {
                 ["Static", "HTML/CSS/JS or an SPA: a build command and an output folder, served by a lightweight web server."],
               ],
             },
-            { type: "p", text: "In Application → General → the **Build** card you set the method, root folder, install/build/start commands and system packages. **Show plan** reveals what was detected, with warnings, before building." },
+            { type: "p", text: "In Application → General → the **Build** card you choose the method. The root folder, install/build commands and system packages sit in the same card under **More options**; most projects never need them. Builders that are not installed show up through the link at the bottom of the card. **Show plan** reveals what was detected, with warnings, before building." },
           ],
         },
         {

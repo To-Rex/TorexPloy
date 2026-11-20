@@ -1,50 +1,51 @@
 /*
- * Page frames, cards and the resource screens built from them (Dokploy's
- * layout): a muted frame around one raised sheet, cards inside it.
+ * Pages, cards and the resource screens built from them: a header on the
+ * canvas, then cards. Minimal the way Dokploy is, with one layer less.
  */
 @layer components {
-  /* -------------------------------------------------------------- frame */
-  .frame {
-    padding: 6px;
-    border: 1px solid var(--chrome-line);
-    border-radius: 16px;
-    background: var(--chrome);
-  }
+  /* --------------------------------------------------------------- page */
+  /* A page is a column on the canvas: a header saying what this is and what
+     can be done here, then cards. Nothing wraps the column, so the cards
+     are the only surfaces and every border on screen means something. */
+  .frame,
   .frame__sheet {
     min-width: 0;
-    border: 1px solid var(--line);
-    border-radius: var(--r-lg);
-    background: var(--surface);
-    box-shadow: var(--shadow-card);
   }
   .frame__head {
     display: flex;
-    align-items: flex-start;
-    gap: 16px;
-    padding: 22px 24px 18px;
+    align-items: center;
+    gap: 14px;
+    padding: 2px 0 24px;
+  }
+  .frame__icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    color: var(--ink-2);
+    flex: none;
+  }
+  .frame__icon svg {
+    width: 19px;
+    height: 19px;
   }
   .frame__title {
     flex: 1;
     min-width: 0;
   }
   .frame__title h1 {
-    display: flex;
-    align-items: center;
-    gap: 10px;
     font-size: var(--text-xl);
-    line-height: var(--lh-xl);
+    line-height: 26px;
     font-weight: 620;
-    letter-spacing: -0.012em;
-  }
-  .frame__title h1 > svg {
-    width: 20px;
-    height: 20px;
-    color: var(--ink-2);
-    flex: none;
+    letter-spacing: -0.015em;
   }
   .frame__title p {
-    margin-top: 2px;
+    margin-top: 1px;
     color: var(--ink-2);
+    max-width: 72ch;
   }
   .frame__actions {
     display: flex;
@@ -52,12 +53,14 @@
     justify-content: flex-end;
     gap: 8px;
   }
+  .frame__actions:empty {
+    display: none;
+  }
   .frame__body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
     min-width: 0;
-    padding: 0 24px 24px;
   }
   /* Pages whose sections share one form (settings) keep the card rhythm. */
   .frame__body > form {
@@ -67,20 +70,17 @@
     min-width: 0;
   }
   @media (max-width: 720px) {
-    .frame {
-      margin: 0 -10px;
-      padding: 4px;
-      border-radius: 14px;
-    }
     .frame__head {
-      flex-direction: column;
-      padding: 18px 16px 14px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      padding-bottom: 18px;
+    }
+    .frame__title {
+      flex: 1 1 calc(100% - 60px);
     }
     .frame__actions {
+      width: 100%;
       justify-content: flex-start;
-    }
-    .frame__body {
-      padding: 0 14px 16px;
     }
   }
 
@@ -93,22 +93,22 @@
     box-shadow: var(--shadow-xs);
   }
   .card[data-tone='bad'] {
-    border-color: color-mix(in srgb, var(--bad) 38%, var(--line));
+    border-color: color-mix(in srgb, var(--bad) 34%, var(--line));
   }
   .card__head {
     display: flex;
     align-items: flex-start;
     gap: 12px;
-    padding: 18px 20px 0;
+    padding: 20px 22px 0;
   }
   .card__head:last-child {
-    padding-bottom: 18px;
+    padding-bottom: 20px;
   }
   .card__icon {
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     border: 1px solid var(--line);
     border-radius: var(--r-md);
     background: var(--surface-sunken);
@@ -124,16 +124,17 @@
     min-width: 0;
   }
   .card__title {
-    font-size: var(--text-lg);
-    line-height: var(--lh-lg);
+    font-size: 15px;
+    line-height: 22px;
     font-weight: 600;
+    letter-spacing: -0.005em;
   }
   .card__desc {
     margin-top: 2px;
     color: var(--ink-2);
     font-size: var(--text-sm);
     line-height: var(--lh-sm);
-    max-width: 78ch;
+    max-width: 76ch;
   }
   .card__actions {
     display: flex;
@@ -146,28 +147,45 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
     min-width: 0;
-    padding: 16px 20px 20px;
+    padding: 18px 22px 22px;
   }
   .card__body--flush {
-    padding: 14px 0 0;
+    padding: 16px 0 0;
     gap: 0;
   }
-  .card__body--flush > .list {
+  .card__body--flush > .list,
+  .card__body--flush > .deploy-list {
     border: 0;
     border-top: 1px solid var(--line);
     border-radius: 0 0 var(--r-lg) var(--r-lg);
+    box-shadow: none;
   }
+  /* The save bar of a form card: the note on the left, the buttons on the right. */
   .card__foot {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 8px;
-    margin-top: -4px;
-    padding: 0 20px 18px;
+    padding: 12px 22px;
+    border-top: 1px solid var(--line);
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
+    background: color-mix(in srgb, var(--surface-sunken) 55%, var(--surface));
+  }
+  .card__foot:empty {
+    display: none;
+  }
+  .card__foot:not(:empty) {
+    animation: foot-in var(--dur) var(--ease);
+  }
+  @keyframes foot-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
   }
   .card__foot-note {
     margin-right: auto;
-    color: var(--ink-3);
+    color: var(--ink-2);
     font-size: var(--text-sm);
   }
   @media (max-width: 720px) {
@@ -175,11 +193,17 @@
       flex-wrap: wrap;
       padding: 16px 16px 0;
     }
+    .card__head:last-child {
+      padding-bottom: 16px;
+    }
     .card__body {
       padding: 14px 16px 16px;
     }
+    .card__body--flush {
+      padding: 14px 0 0;
+    }
     .card__foot {
-      padding: 0 16px 16px;
+      padding: 10px 16px;
     }
   }
 
@@ -205,6 +229,7 @@
   }
 
   /* ---------------------------------------------- resource header (apps) */
+  /* An app, a database, a server: its mark, name and state, then tabs. */
   .resource {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -213,7 +238,7 @@
     display: flex;
     align-items: flex-start;
     gap: 14px;
-    padding: 20px 24px 16px;
+    padding: 2px 0 18px;
   }
   .resource__icon {
     display: grid;
@@ -221,47 +246,78 @@
     width: 44px;
     height: 44px;
     border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    background: var(--surface-sunken);
+    border-radius: var(--r-lg);
+    background: var(--surface);
     color: var(--ink-2);
     flex: none;
     overflow: hidden;
   }
   .resource__icon svg {
-    width: 22px;
-    height: 22px;
+    width: 21px;
+    height: 21px;
+  }
+  .resource__icon > .kind-mark {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+  /* A deployment has no mark of its own: its tile says how it went. */
+  .resource__icon--status {
+    border-color: color-mix(in srgb, var(--status, var(--line-strong)) 22%, var(--line));
+    background: var(--status-soft, var(--surface));
+    color: var(--status-ink, var(--ink-2));
+  }
+  .resource__icon--status svg {
+    stroke-width: 2.2;
+  }
+  .card--pipeline {
+    padding: 18px 22px 14px;
   }
   .resource__title {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 6px 12px;
+    min-height: 26px;
   }
   .resource__title h1 {
     font-size: var(--text-xl);
-    line-height: var(--lh-xl);
+    line-height: 26px;
     font-weight: 620;
-    letter-spacing: -0.012em;
+    letter-spacing: -0.015em;
+  }
+  /* Next to a name the state is a pill: the first thing read after "what is this" is "is it up". */
+  .resource__title .status {
+    height: 22px;
+    padding: 0 9px 0 8px;
+    border-radius: var(--r-full);
+    background: var(--status-soft, var(--muted));
+    font-size: var(--text-xs);
   }
   .resource__desc {
-    margin-top: 2px;
+    margin-top: 1px;
     color: var(--ink-2);
   }
   .resource__meta {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px 14px;
-    margin-top: 6px;
+    gap: 4px 16px;
+    margin-top: 3px;
     font-size: var(--text-sm);
     color: var(--ink-2);
   }
   .resource__meta a {
     color: inherit;
   }
+  .resource__meta a:hover {
+    color: var(--ink);
+  }
   .resource__meta svg {
     width: 14px;
     height: 14px;
+    color: var(--ink-3);
   }
   .resource__actions {
     display: flex;
@@ -271,35 +327,34 @@
     margin-left: auto;
   }
   .resource__notice {
-    padding: 0 24px 14px;
+    padding: 0 0 14px;
   }
   .resource__tabs {
-    padding: 0 24px;
+    min-width: 0;
   }
   .resource__body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
     min-width: 0;
-    padding: 18px 24px 24px;
+    padding: 20px 0 0;
   }
   @media (max-width: 720px) {
     .resource__head {
       flex-wrap: wrap;
-      padding: 16px 16px 12px;
+      padding-bottom: 14px;
+    }
+    /* The mark and the name share the first line; `.grow` lives in the utilities layer, which outranks this one. */
+    .resource__head > .grow {
+      flex: 1 1 0 !important;
     }
     .resource__actions {
       width: 100%;
       justify-content: flex-start;
       margin-left: 0;
     }
-    .resource__notice,
-    .resource__tabs {
-      padding-left: 14px;
-      padding-right: 14px;
-    }
     .resource__body {
-      padding: 14px 14px 16px;
+      padding-top: 16px;
     }
   }
 
@@ -487,31 +542,106 @@
   .action-row {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
+  }
+  .action-row__spacer {
+    flex: 1;
+  }
+  /* A primary button with its menu attached: "Deploy" and, behind the caret, the rarer variants. */
+  .btn-split {
+    display: inline-flex;
+  }
+  .btn-split > .btn:first-child:not(:only-child) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .btn-split > .btn:last-child:not(:only-child) {
+    width: 30px;
+    padding: 0;
+    border-left-color: color-mix(in srgb, var(--btn-ink) 22%, transparent);
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+  .btn-split > .btn:last-child:not(:only-child) svg {
+    width: 14px;
+    height: 14px;
+  }
+  /* "Show me the rest": a line of text that opens what most people never need. */
+  .link-btn {
+    justify-self: start;
+    width: fit-content;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 3px;
+  }
+  .link-btn:hover {
+    color: var(--ink);
+    text-decoration-color: currentColor;
+  }
+  .disclosure {
+    min-width: 0;
+  }
+  .disclosure > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+  }
+  .disclosure > summary::-webkit-details-marker {
+    display: none;
+  }
+  .disclosure > summary:hover,
+  .disclosure[open] > summary {
+    color: var(--ink);
+  }
+  .disclosure > summary svg {
+    width: 14px;
+    height: 14px;
+    transition: transform var(--dur-fast) var(--ease);
+  }
+  .disclosure[open] > summary svg {
+    transform: rotate(90deg);
+  }
+  .disclosure__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding-top: 14px;
   }
   .toggle-row {
     display: flex;
     flex-wrap: wrap;
     gap: 12px 28px;
-    padding-top: 14px;
+    padding-top: 16px;
     border-top: 1px solid var(--line);
   }
+  /* Facts about the thing a card is about, as quiet tiles: a small label, the value under it. */
   .facts-strip {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 1px;
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    background: var(--line);
-    overflow: hidden;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
   }
   .facts-strip > div {
     min-width: 0;
-    padding: 10px 14px;
-    background: var(--surface);
+    padding: 10px 14px 11px;
+    border-radius: var(--r-md);
+    background: var(--surface-sunken);
   }
   .facts-strip dt {
     font-size: var(--text-xs);
+    line-height: var(--lh-xs);
     color: var(--ink-3);
   }
   .facts-strip dd {
@@ -524,38 +654,46 @@
   .facts-strip dd a {
     color: inherit;
   }
+  .facts-strip dd code {
+    font-size: var(--text-sm);
+  }
 
   /* ------------------------------------------------ provider / build pickers */
+  /* One of a few: a row of quiet buttons, the chosen one drawn in ink. */
   .picker {
-    display: flex;
+    display: inline-flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 2px;
+    width: fit-content;
+    max-width: 100%;
+    padding: 3px;
+    border-radius: 10px;
+    background: var(--muted);
   }
   .picker button {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    height: 36px;
-    padding: 0 14px;
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    background: var(--surface);
+    gap: 7px;
+    height: 32px;
+    padding: 0 13px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
     color: var(--ink-2);
     font-weight: 500;
-    box-shadow: var(--shadow-xs);
+    white-space: nowrap;
   }
   .picker button svg {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
   }
   .picker button:hover {
-    border-color: var(--line-strong);
     color: var(--ink);
   }
   .picker button[aria-pressed='true'] {
-    border-color: var(--ink);
+    background: var(--tab-active);
     color: var(--ink);
-    box-shadow: 0 0 0 1px var(--ink) inset;
+    box-shadow: var(--shadow-card);
   }
   .radio-list {
     display: grid;
@@ -572,13 +710,16 @@
     background: var(--surface);
     text-align: left;
     cursor: pointer;
+    transition:
+      border-color var(--dur-fast) var(--ease),
+      background var(--dur-fast) var(--ease);
   }
   .radio-item:hover {
     border-color: var(--line-strong);
   }
   .radio-item[aria-checked='true'] {
     border-color: var(--ink);
-    box-shadow: 0 0 0 1px var(--ink) inset;
+    background: color-mix(in srgb, var(--surface-sunken) 60%, var(--surface));
   }
   .radio-item__dot {
     position: relative;
@@ -587,6 +728,7 @@
     margin-top: 2px;
     border: 1.5px solid var(--line-strong);
     border-radius: 50%;
+    background: var(--surface);
     flex: none;
   }
   .radio-item[aria-checked='true'] .radio-item__dot {
@@ -704,10 +846,15 @@
 
 @layer components {
   /* ------------------------------------------------------- builder picker */
+  .builders-wrap {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+  }
   .builders {
     display: grid;
     gap: 8px;
-    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   }
   .builders--compact {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -731,7 +878,7 @@
   }
   .builder[aria-checked='true'] {
     border-color: var(--ink);
-    box-shadow: 0 0 0 1px var(--ink) inset;
+    background: color-mix(in srgb, var(--surface-sunken) 60%, var(--surface));
   }
   .builder[aria-disabled='true'] {
     opacity: 0.55;
@@ -1143,23 +1290,23 @@
 
 @layer components {
   /* ------------------------------------------------ server clock + zones */
+  /* The server's clock is a fact, not a control: plain text until pointed at. */
   .clock {
     display: inline-flex;
     align-items: center;
     gap: 7px;
     height: 32px;
-    padding: 0 10px;
-    border: 1px solid var(--line);
-    border-radius: var(--r-sm);
-    background: var(--surface);
-    box-shadow: var(--shadow-xs);
-    color: var(--ink-2);
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--ink-3);
     font-size: var(--text-sm);
     white-space: nowrap;
     flex: none;
   }
   .clock:hover {
-    border-color: var(--line-strong);
+    background: var(--surface-hover);
     color: var(--ink);
   }
   .clock svg {
@@ -1168,8 +1315,8 @@
     color: var(--ink-3);
   }
   .clock__time {
-    font-weight: 600;
-    color: var(--ink);
+    font-weight: 540;
+    color: var(--ink-2);
     font-variant-numeric: tabular-nums;
   }
   .clock__zone {

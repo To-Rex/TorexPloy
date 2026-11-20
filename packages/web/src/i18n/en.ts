@@ -1692,6 +1692,8 @@ export const en: Messages = {
     description: 'How the code becomes an image. TorexBuilder covers most projects; the others are for special cases.',
     recommended: 'Recommended',
     notInstalled: 'Not installed',
+    showMissing: '{count} more (not installed)',
+    hideMissing: 'Hide the ones not installed',
     unavailable: 'This builder is not installed on the control plane. Update TorexPloy on the server.',
     names: {
       torex: 'TorexBuilder',

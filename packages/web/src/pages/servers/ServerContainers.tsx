@@ -4,13 +4,13 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Ellipsis, Play, RotateCcw, ScrollText, Search, Square } from 'lucide-react';
+import { Container, Ellipsis, Play, RotateCcw, ScrollText, Search, Square } from 'lucide-react';
 import type { ServerContainerDto } from '@ploy/shared';
 import { Dialog, useConfirm } from '../../components/Dialog.tsx';
 import { parseAnsi } from '../../components/LogViewer.tsx';
 import { Menu, MenuItem } from '../../components/Menu.tsx';
 import { StatusMark } from '../../components/Status.tsx';
-import { Badge, Button, Segmented, Skeleton } from '../../components/ui.tsx';
+import { Badge, Button, EmptyState, Segmented, Skeleton } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { useAction } from '../../lib/mutate.ts';
@@ -89,7 +89,7 @@ export function ServerContainers({ serverId }: { serverId: string }) {
   }, [containers.data, filter, query]);
 
   if (containers.isPending) return <Skeleton height={160} />;
-  if (containers.isError) return <p className="muted">{m.containers.unavailable}</p>;
+  if (containers.isError) return <EmptyState icon={<Container />}>{m.containers.unavailable}</EmptyState>;
   const external = (containers.data ?? []).filter((container) => container.owner.kind === 'external').length;
 
   return (

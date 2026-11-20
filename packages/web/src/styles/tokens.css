@@ -2,12 +2,12 @@
  * Design tokens.
  *
  * Neutral zinc in both themes, the way Dokploy (shadcn) draws a control
- * panel: white or near-black surfaces, hairline borders, a primary that is
- * simply the ink colour, and colour reserved for status — green for
- * healthy, amber for work in progress, red for failure. `--lapis` keeps its
- * name as "the primary" so components need not change. Status is never
- * conveyed by colour alone — every status pairs a colour with a shape and
- * a word.
+ * panel: a quiet canvas (`--bg`), white or raised-graphite cards on it
+ * (`--surface`), hairline borders, a primary that is simply the ink colour,
+ * and colour reserved for status — green for healthy, amber for work in
+ * progress, red for failure. `--lapis` keeps its name as "the primary" so
+ * components need not change. Status is never conveyed by colour alone —
+ * every status pairs a colour with a shape and a word.
  */
 
 @layer tokens {
@@ -36,11 +36,12 @@
     --r-sm: 6px;
     --r-md: 8px;
     --r-lg: 12px;
+    --r-xl: 16px;
     --r-full: 999px;
 
     --sidebar-width: 252px;
     --sidebar-rail: 56px;
-    --content-max: 1240px;
+    --content-max: 1200px;
     --topbar-height: 52px;
 
     --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -54,14 +55,14 @@
     --z-menu: 60;
     --z-toast: 70;
 
-    /* Light — zinc paper, as Dokploy and shadcn draw it: white surfaces,
-       hairline zinc borders, a near-black primary. */
-    --bg: #ffffff;
+    /* Light — zinc paper: an off-white canvas, white cards, hairline zinc
+       borders, a near-black primary. */
+    --bg: #fafafa;
     --surface: #ffffff;
     --surface-raised: #ffffff;
-    --surface-sunken: #f4f4f5;
+    --surface-sunken: #f6f6f7;
     --surface-hover: #f4f4f5;
-    --line: #e4e4e7;
+    --line: #e7e7ea;
     --line-strong: #d4d4d8;
     --ink: #09090b;
     --ink-2: #52525b;
@@ -70,8 +71,8 @@
 
     /* Chrome around content: the sidebar and the frame pages sit in. */
     --chrome: #fafafa;
-    --chrome-line: #e4e4e7;
-    --muted: #f4f4f5;
+    --chrome-line: #e7e7ea;
+    --muted: #f0f0f2;
     --tab-active: #ffffff;
 
     --lapis: #18181b;
@@ -81,23 +82,23 @@
     --link: #09090b;
 
     --ok: #16a34a;
-    --ok-soft: #dcfce7;
+    --ok-soft: #e9faf0;
     --ok-ink: #15803d;
     --work: #d97706;
-    --work-soft: #fef3c7;
+    --work-soft: #fff7e0;
     --work-ink: #b45309;
     --bad: #dc2626;
-    --bad-soft: #fee2e2;
+    --bad-soft: #fef0ef;
     --bad-ink: #b91c1c;
     --idle: #a1a1aa;
     --idle-soft: #f4f4f5;
     --info: #2563eb;
-    --info-soft: #eff6ff;
+    --info-soft: #eef5ff;
     --info-ink: #1d4ed8;
 
-    --focus: rgb(24 24 27 / 0.22);
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
-    --shadow-card: 0 1px 3px rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+    --focus: rgb(24 24 27 / 0.16);
+    --shadow-xs: 0 1px 2px rgb(9 9 11 / 0.04);
+    --shadow-card: 0 1px 3px rgb(9 9 11 / 0.07), 0 1px 2px -1px rgb(9 9 11 / 0.05);
     --shadow-float: 0 12px 32px -12px rgb(9 9 11 / 0.24), 0 2px 6px rgb(9 9 11 / 0.06);
     --overlay: rgb(9 9 11 / 0.45);
     --code-bg: #09090b;
@@ -120,9 +121,9 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) {
       --bg: #09090b;
-      --surface: #0c0c0e;
+      --surface: #111113;
       --surface-raised: #18181b;
-      --surface-sunken: #141416;
+      --surface-sunken: #19191c;
       --surface-hover: #1c1c1f;
       --line: #27272a;
       --line-strong: #3f3f46;
@@ -174,9 +175,9 @@
 
   :root[data-theme='dark'] {
     --bg: #09090b;
-    --surface: #0c0c0e;
+    --surface: #111113;
     --surface-raised: #18181b;
-    --surface-sunken: #141416;
+    --surface-sunken: #19191c;
     --surface-hover: #1c1c1f;
     --line: #27272a;
     --line-strong: #3f3f46;

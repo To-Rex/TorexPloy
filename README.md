@@ -26,8 +26,9 @@ Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy 
 - **Veb-terminal:** ilova yoki baza konteyneriga brauzerdan kirish (replika va shell tanlash, audit).
 - **Bildirishnomalar:** Telegram, Discord, Slack va imzolangan webhook: xato joylashtirish, crash-loop, zaxira nusxa xatosi, server uzilishi.
 - **Proksi:** har bir domen qaysi konteynerga yoʻnaltirilgani, Caddy konfiguratsiyasini koʻrish va uni qayta yuklash.
-- **Interfeys:** Dokploy uslubida.
+- **Interfeys:** Dokploy uslubida, minimalistik: och fon ustida sarlavha va oq kartalar, ortiqcha ramkalarsiz.
   - Guruhlangan yon panelni ikonkalar qatoriga yigʻish mumkin.
+  - Kam kerak boʻladigan sozlamalar yashirin turadi, saqlash paneli faqat oʻzgarish boʻlganda chiqadi.
   - Loyiha sahifasida barcha xizmatlar bitta panjarada, ularni belgilab birdaniga boshqarish mumkin.
   - Ilova sahifasi tablarga boʻlingan: Umumiy, Oʻzgaruvchilar, Domenlar, PR preview, Joylashtirishlar, Loglar, Monitoring, Cron vazifalar, Kengaytirilgan.
   - Tillar: oʻzbek (asosiy), rus va ingliz. Temalar: yorugʻ, qorongʻi va tizim. ⌘K buyruqlar paneli bor.

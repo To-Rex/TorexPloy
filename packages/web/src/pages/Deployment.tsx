@@ -1,12 +1,12 @@
 import { Link, useParams } from 'react-router';
-import { Ban, Download, FolderUp, History } from 'lucide-react';
+import { Ban, Check, Download, FolderUp, History, LoaderCircle, Minus, X } from 'lucide-react';
 import { isTerminalDeployment } from '@ploy/shared';
 import { DeploymentTimingFacts, deploymentTitle } from '../components/DeploymentItem.tsx';
 import { useConfirm } from '../components/Dialog.tsx';
 import { LogViewer } from '../components/LogViewer.tsx';
 import { usePageMeta } from '../components/PageMeta.tsx';
 import { computeStages, PipelineRail } from '../components/Pipeline.tsx';
-import { Status } from '../components/Status.tsx';
+import { deploymentTone, Status } from '../components/Status.tsx';
 import { RelativeTime } from '../components/Time.tsx';
 import { Button, ButtonLink, Callout, Skeleton } from '../components/ui.tsx';
 import { useI18n } from '../i18n/index.tsx';
@@ -55,6 +55,9 @@ export function DeploymentPage() {
       <section className="frame">
       <div className="frame__sheet resource">
       <header className="resource__head">
+        <span className="resource__icon resource__icon--status" data-tone={deploymentTone[data.status]} aria-hidden="true">
+          {data.status === 'succeeded' ? <Check /> : data.status === 'failed' ? <X /> : data.status === 'cancelled' ? <Minus /> : <LoaderCircle className="spin" />}
+        </span>
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="resource__title">
             <h1 className="truncate">
@@ -114,7 +117,7 @@ export function DeploymentPage() {
       </header>
 
       <div className="resource__body" style={{ paddingTop: 0 }}>
-      <div className="card" style={{ padding: '16px 18px 12px' }}>
+      <div className="card card--pipeline">
         <PipelineRail stages={stages} />
       </div>
 

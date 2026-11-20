@@ -1706,6 +1706,8 @@ export const uz = {
     description: 'Kod image’ga qanday aylanadi. TorexBuilder koʻpchilik loyihalar uchun yetarli; qolganlari maxsus holatlar uchun.',
     recommended: 'Tavsiya etiladi',
     notInstalled: 'Oʻrnatilmagan',
+    showMissing: 'Yana {count} ta usul (oʻrnatilmagan)',
+    hideMissing: 'Oʻrnatilmaganlarini yashirish',
     unavailable: 'Bu yigʻuvchi boshqaruv panelida oʻrnatilmagan. Serverdagi TorexPloy’ni yangilang.',
     names: {
       torex: 'TorexBuilder',

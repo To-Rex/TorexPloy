@@ -4,7 +4,7 @@
  * deploy would do — stack, commands, the Dockerfile — without building.
  */
 import { useState } from 'react';
-import { ClipboardList, FileCode2 } from 'lucide-react';
+import { ChevronRight, ClipboardList, FileCode2 } from 'lucide-react';
 import type { ApplicationDto, BuildPlanDto, BuildType } from '@ploy/shared';
 import { BuilderPicker } from '../../components/Builders.tsx';
 import { CopyButton } from '../../components/Copy.tsx';
@@ -65,6 +65,15 @@ export function BuildCard({ app }: { app: ApplicationDto }) {
   const [planning, setPlanning] = useState(false);
   const type = form.buildType;
   const commands = type === 'torex' || type === 'nixpacks' || type === 'railpack';
+  // The advanced fields start open when the application already uses one of them.
+  const customised =
+    app.rootDirectory.length > 0 ||
+    (app.buildType === 'torex' && app.dockerfilePath !== 'Dockerfile') ||
+    [app.installCommand, app.buildCommand, app.systemPackages].some((value) => value !== null && value.length > 0) ||
+    (app.buildType === 'torex' && app.outputDirectory !== null && app.outputDirectory.length > 0);
+  const [advancedOpen, setAdvancedOpen] = useState(customised);
+  const advancedError = ['rootDirectory', 'installCommand', 'buildCommand', 'systemPackages', 'outputDirectory', 'dockerfilePath'].some((key) => errors[key] !== undefined);
+  if (advancedError && !advancedOpen) setAdvancedOpen(true);
   const showPlan = async () => {
     setPlanning(true);
     try {
@@ -90,67 +99,80 @@ export function BuildCard({ app }: { app: ApplicationDto }) {
       <BuilderPicker value={type} onChange={(value) => set('buildType', value)} />
       {errors.buildType !== undefined && <p className="field__error">{errors.buildType}</p>}
 
-      <div className="form-grid">
-        <Field label={m.appSettings.rootDirectory} hint={m.newApp.rootDirectoryHint} error={errors.rootDirectory}>
-          <Input mono {...text('rootDirectory')} placeholder="./" spellCheck={false} />
-        </Field>
-        {type === 'dockerfile' && (
-          <>
-            <Field label={m.appSettings.dockerfilePath} error={errors.dockerfilePath}>
-              <Input mono {...text('dockerfilePath')} spellCheck={false} />
-            </Field>
-            <Field label={b.buildStage} hint={b.buildStageHint} optional={m.common.optional} error={errors.buildStage}>
-              <Input mono {...text('buildStage')} placeholder="runtime" spellCheck={false} />
-            </Field>
-          </>
-        )}
-        {type === 'torex' && (
-          <Field label={m.appSettings.dockerfilePath} hint={b.dockerfileAutoHint} error={errors.dockerfilePath}>
-            <Input mono {...text('dockerfilePath')} spellCheck={false} />
-          </Field>
-        )}
-        {(type === 'heroku' || type === 'paketo') && (
-          <Field label={b.buildpackBuilder} hint={b.buildpackBuilderHint} optional={m.common.optional} error={errors.buildpackBuilder}>
-            <Input mono {...text('buildpackBuilder')} placeholder={BUILDPACK_DEFAULTS[type]} spellCheck={false} />
-          </Field>
-        )}
-        {type === 'static' && (
-          <Field label={m.appSettings.outputDirectory} hint={b.staticOutputHint} error={errors.outputDirectory}>
-            <Input mono {...text('outputDirectory')} placeholder="dist" spellCheck={false} />
-          </Field>
-        )}
-      </div>
-
-      {commands && (
+      {(type === 'dockerfile' || type === 'static' || type === 'heroku' || type === 'paketo') && (
         <div className="form-grid">
-          <Field label={m.appSettings.installCommand} error={errors.installCommand}>
-            <Input mono {...text('installCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
-          </Field>
-          <Field label={m.appSettings.buildCommand} error={errors.buildCommand}>
-            <Input mono {...text('buildCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
-          </Field>
-          {type === 'torex' && (
-            <Field label={m.appSettings.outputDirectory} hint={m.appSettings.outputDirectoryHint} optional={m.common.optional} error={errors.outputDirectory}>
+          {type === 'dockerfile' && (
+            <>
+              <Field label={m.appSettings.dockerfilePath} error={errors.dockerfilePath}>
+                <Input mono {...text('dockerfilePath')} spellCheck={false} />
+              </Field>
+              <Field label={b.buildStage} hint={b.buildStageHint} optional={m.common.optional} error={errors.buildStage}>
+                <Input mono {...text('buildStage')} placeholder="runtime" spellCheck={false} />
+              </Field>
+            </>
+          )}
+          {(type === 'heroku' || type === 'paketo') && (
+            <Field label={b.buildpackBuilder} hint={b.buildpackBuilderHint} optional={m.common.optional} error={errors.buildpackBuilder}>
+              <Input mono {...text('buildpackBuilder')} placeholder={BUILDPACK_DEFAULTS[type]} spellCheck={false} />
+            </Field>
+          )}
+          {type === 'static' && (
+            <Field label={m.appSettings.outputDirectory} hint={b.staticOutputHint} error={errors.outputDirectory}>
               <Input mono {...text('outputDirectory')} placeholder="dist" spellCheck={false} />
             </Field>
           )}
         </div>
       )}
-      {type === 'static' && (
-        <div className="form-grid">
-          <Field label={m.appSettings.installCommand} optional={m.common.optional} error={errors.installCommand}>
-            <Input mono {...text('installCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
-          </Field>
-          <Field label={m.appSettings.buildCommand} optional={m.common.optional} hint={b.staticBuildHint} error={errors.buildCommand}>
-            <Input mono {...text('buildCommand')} placeholder="npm run build" spellCheck={false} />
-          </Field>
+
+      {/* Everything most projects never touch: open only when something in it is set (or was just refused). */}
+      <details className="disclosure" open={advancedOpen || undefined} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
+        <summary>
+          <ChevronRight aria-hidden="true" />
+          {m.newApp.advanced}
+        </summary>
+        <div className="disclosure__body">
+          <div className="form-grid">
+            <Field label={m.appSettings.rootDirectory} hint={m.newApp.rootDirectoryHint} error={errors.rootDirectory}>
+              <Input mono {...text('rootDirectory')} placeholder="./" spellCheck={false} />
+            </Field>
+            {type === 'torex' && (
+              <Field label={m.appSettings.dockerfilePath} hint={b.dockerfileAutoHint} error={errors.dockerfilePath}>
+                <Input mono {...text('dockerfilePath')} spellCheck={false} />
+              </Field>
+            )}
+          </div>
+          {commands && (
+            <div className="form-grid">
+              <Field label={m.appSettings.installCommand} error={errors.installCommand}>
+                <Input mono {...text('installCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
+              </Field>
+              <Field label={m.appSettings.buildCommand} error={errors.buildCommand}>
+                <Input mono {...text('buildCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
+              </Field>
+              {type === 'torex' && (
+                <Field label={m.appSettings.outputDirectory} hint={m.appSettings.outputDirectoryHint} optional={m.common.optional} error={errors.outputDirectory}>
+                  <Input mono {...text('outputDirectory')} placeholder="dist" spellCheck={false} />
+                </Field>
+              )}
+            </div>
+          )}
+          {type === 'static' && (
+            <div className="form-grid">
+              <Field label={m.appSettings.installCommand} optional={m.common.optional} error={errors.installCommand}>
+                <Input mono {...text('installCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
+              </Field>
+              <Field label={m.appSettings.buildCommand} optional={m.common.optional} hint={b.staticBuildHint} error={errors.buildCommand}>
+                <Input mono {...text('buildCommand')} placeholder="npm run build" spellCheck={false} />
+              </Field>
+            </div>
+          )}
+          {type === 'torex' && (
+            <Field label={b.systemPackages} optional={m.common.optional} hint={b.systemPackagesHint} error={errors.systemPackages}>
+              <Input mono {...text('systemPackages')} placeholder="imagemagick ffmpeg" spellCheck={false} />
+            </Field>
+          )}
         </div>
-      )}
-      {type === 'torex' && (
-        <Field label={b.systemPackages} optional={m.common.optional} hint={b.systemPackagesHint} error={errors.systemPackages}>
-          <Input mono {...text('systemPackages')} placeholder="imagemagick ffmpeg" spellCheck={false} />
-        </Field>
-      )}
+      </details>
       {type === 'nixpacks' && <Callout tone="info">{b.nixpacksNote}</Callout>}
       {type === 'railpack' && <Callout tone="info">{b.railpackNote}</Callout>}
       {(type === 'heroku' || type === 'paketo') && <Callout tone="info">{b.buildpacksNote}</Callout>}

@@ -1,9 +1,9 @@
 /**
- * Page chrome in Dokploy's shape. A page sits in a muted frame holding one
- * raised sheet (title, description, actions, then content); inside the
- * sheet, content is grouped into cards with their own title, description
- * and footer. Every page is built from these two, so every page reads the
- * same way: what this is, what you can do here, then the details.
+ * Page chrome. A page is a header on the canvas (its mark, title,
+ * description and actions) followed by cards, each with its own title,
+ * description and footer. Every page is built from these two, so every
+ * page reads the same way: what this is, what you can do here, then the
+ * details.
  */
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -20,6 +20,7 @@ export function FrameActions({ children }: { children: ReactNode }) {
 
 export function Frame({
   icon,
+  mark,
   title,
   description,
   actions,
@@ -28,6 +29,8 @@ export function Frame({
   children,
 }: {
   icon?: ReactNode;
+  /** A ready-made mark (a project's initial, a brand tile) shown in place of the icon tile. */
+  mark?: ReactNode;
   title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
@@ -44,11 +47,14 @@ export function Frame({
       <div className="frame__sheet">
         {head ?? (
           <header className="frame__head">
+            {mark ??
+              (icon !== undefined && (
+                <span className="frame__icon" aria-hidden="true">
+                  {icon}
+                </span>
+              ))}
             <div className="frame__title">
-              <h1>
-                {icon}
-                {title}
-              </h1>
+              <h1>{title}</h1>
               {description !== undefined && description !== null && <p>{description}</p>}
             </div>
             {actions !== undefined && <div className="frame__actions">{actions}</div>}
@@ -101,18 +107,21 @@ export function Card({
   );
 }
 
-/** A card footer for a form: discard while there are changes, save when there are. */
+/**
+ * A card footer for a form. It is not there until something changes: then
+ * the card grows a bar with what saving means, "discard" and "save". A page
+ * of untouched settings stays a page of settings, not a column of buttons.
+ */
 export function SaveFooter({ dirty, saving, onSave, onReset, note, label }: { dirty: boolean; saving: boolean; onSave: () => void; onReset: () => void; note?: ReactNode; label?: string }) {
   const { m } = useI18n();
+  if (!dirty && !saving) return null;
   return (
     <>
-      {note !== undefined && <span className="card__foot-note">{note}</span>}
-      {dirty && (
-        <Button variant="ghost" onClick={onReset}>
-          {m.common.discard}
-        </Button>
-      )}
-      <Button variant="primary" disabled={!dirty} busy={saving} onClick={onSave}>
+      <span className="card__foot-note">{note ?? m.common.unsavedChanges}</span>
+      <Button variant="ghost" onClick={onReset} disabled={saving}>
+        {m.common.discard}
+      </Button>
+      <Button variant="primary" busy={saving} onClick={onSave}>
         {label ?? m.common.save}
       </Button>
     </>

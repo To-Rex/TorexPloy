@@ -497,14 +497,19 @@ diagnostika esa yoʻqolmaydi.
   - **Asosiy:** Loyihalar, Joylashtirishlar, Monitoring, Rejalashtirilgan vazifalar, Docker, Proksi.
   - **Sozlamalar:** Veb-server, Serverlar, Profil, Xavfsizlik, Jamoa, Git, Registrlar, S3 manzillar, Bildirishnomalar, API tokenlar, Audit.
   - Panel ikonkalar qatoriga yigʻiladi; tanlov `localStorage`da saqlanadi.
-- Har bir sahifa bitta shablonda: kulrang ramka ichida oq varaq turadi. Unda sarlavha, qisqa tavsif va asosiy amallar, pastida kartalar boʻladi (`components/Frame.tsx`: `Frame`, `Card`, `SaveFooter`).
+- Har bir sahifa bitta shablonda (`components/Frame.tsx`: `Frame`, `Card`, `SaveFooter`): och kulrang fon ustida sarlavha (belgi, nom, qisqa tavsif, asosiy amallar), pastida oq kartalar. Sahifani oʻrab turuvchi ramka yoʻq: ekrandagi har bir chegara bitta kartani bildiradi.
+  - Ilova, baza, server va joylashtirish sahifalari bir xil sarlavha bilan boshlanadi: belgi, nom, holat (yorliq koʻrinishida), manba va server; pastida tagiga chizilgan tablar.
   - Har bir sozlamalar kartasi faqat oʻz maydonlarini saqlaydi, shuning uchun kartalar bir-birining oʻzgarishini bosib ketmaydi (`pages/app/appForm.ts`).
+  - Saqlash paneli karta ostida faqat biror narsa oʻzgarganda paydo boʻladi ("Bekor qilish" va "Saqlash"). Oʻzgartirilmagan sozlamalar sahifasida tugmalar ustuni turmaydi.
+  - Kam kerak boʻladigan narsalar yashirin turadi va soʻralganda ochiladi: oʻrnatilmagan yigʻuvchilar, yigʻishning qoʻshimcha maydonlari, yuklash uchun `curl` namunasi.
+  - Karta ichidagi faktlar (holat, versiya, protsessor, xotira) chegarasiz yumshoq plitkalarda; karta ichida karta chizilmaydi.
 - Loyiha sahifasida ilovalar, compose steklar va bazalar bitta panjarada koʻrinadi.
   - Qidiruv va tur boʻyicha filtr bor.
   - Bir nechtasini belgilab, bir yoʻla joylashtirish, ishga tushirish yoki toʻxtatish mumkin.
   - Barcha yaratish amallari bitta "Yaratish" menyusida.
 - Ilova tablari: Umumiy, Oʻzgaruvchilar, Domenlar, PR preview, Joylashtirishlar, Loglar, Monitoring, Cron vazifalar, Kengaytirilgan.
-  - "Umumiy" tabida joylashtirish kartasi (joylashtirish, qayta yuklash, keshsiz yigʻish, toʻxtatish, terminal, avtomatik deploy), manba (GitHub, Git yoki Docker) va yigʻish usuli bor.
+  - "Umumiy" tabida joylashtirish kartasi (joylashtirish va uning menyusida keshsiz yigʻish, qayta yuklash, toʻxtatish, terminal, avtomatik deploy), manba (GitHub, Git, Docker yoki fayl yuklash) va yigʻish usuli bor.
+  - Joylashtirishlar roʻyxatida har bir qator bitta gap kabi oʻqiladi: natija belgisi, sarlavha, soʻng holat, raqam, branch va commit, muallif, davomiyligi. Navbatda kutish va yigʻish vaqti faqat joylashtirish sahifasida koʻrinadi.
   - "Kengaytirilgan" tabida ishga tushirish buyrugʻi, port va replikalar, resurslar, sogʻliq tekshiruvi, strategiya va disklar bor.
   - Terminal dialog oynada ochiladi.
   - Eski manzillar (`/overview`, `/settings`, `/variables` va boshqalar) yangi tablarga yoʻnaltiriladi.
@@ -515,7 +520,7 @@ diagnostika esa yoʻqolmaydi.
   toʻliq ekran (Esc bilan chiqiladi), oxirini kuzatish. Jonli loglarda qatorlar soni (`tail`, 100…5000 yoki
   hammasi) va vaqt oraligʻi (`since`, soniya) serverga `logWindow` orqali beriladi; replika va compose servis
   boʻyicha filtr ham bor.
-- Ranglar shadcn'ning zinc palitrasida. Asosiy tugma siyoh rangida (yorugʻ temada qora, qorongʻida oq). Rang faqat holat uchun ishlatiladi: yashil, sariq va qizil.
+- Ranglar shadcn'ning zinc palitrasida: fon (`--bg`) och kulrang yoki qora, kartalar (`--surface`) undan bir pogʻona yorugʻroq. Asosiy tugma siyoh rangida (yorugʻ temada qora, qorongʻida oq). Rang faqat holat uchun ishlatiladi: yashil, sariq va qizil.
 - Tezlik: route-level splitting, `staleTime`, skeleton (layout shift yo'q), optimistik mutatsiyalar.
 - Klaviatura: ⌘K command palette, ko'rinadigan fokus halqalari, to'liq tab-navigatsiya, `Esc` bilan yopish.
 - Accessibility: semantik HTML, ARIA faqat kerak joyda, WCAG AA kontrast (ikkala temada), `prefers-reduced-motion`.

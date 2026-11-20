@@ -7,11 +7,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Container, Database, ExternalLink, FileArchive, Folder, FolderUp, GitBranch, Hammer, KeyRound, Play, RotateCcw, Rocket, ScrollText, Square, SquareTerminal, Variable } from 'lucide-react';
+import { ChevronDown, ChevronRight, Container, Database, ExternalLink, FileArchive, Folder, FolderUp, GitBranch, Hammer, KeyRound, Play, RotateCcw, Rocket, ScrollText, Square, SquareTerminal, Variable } from 'lucide-react';
 import { updateApplicationSchema, type ApplicationDto, type ContainerDto, type SourceInput } from '@ploy/shared';
 import { CopyButton } from '../../components/Copy.tsx';
 import { useConfirm } from '../../components/Dialog.tsx';
 import { Card, SaveFooter } from '../../components/Frame.tsx';
+import { Menu, MenuItem } from '../../components/Menu.tsx';
 import { useReasonText } from '../../components/Reason.tsx';
 import { RepoPicker, type RepoChoice } from '../../components/RepoPicker.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
@@ -146,17 +147,30 @@ function DeployCard({ app, containers }: { app: ApplicationDto; containers: Cont
   return (
     <Card title={d.title} description={app.kind === 'compose' ? d.composeDescription : d.description}>
       <div className="action-row">
-        <Button variant="primary" icon={<Rocket />} busy={deploy.isPending && deploy.variables === false} onClick={() => deploy.mutate(false)} title={d.deployHint}>
-          {m.app.deploy}
-        </Button>
+        <span className="btn-split">
+          <Button variant="primary" icon={<Rocket />} busy={deploy.isPending} onClick={() => deploy.mutate(false)} title={d.deployHint}>
+            {m.app.deploy}
+          </Button>
+          {!image && (
+            <Menu
+              trigger={(props) => (
+                <Button {...props} variant="primary" iconOnly icon={<ChevronDown />} disabled={deploy.isPending}>
+                  {m.common.more}
+                </Button>
+              )}
+            >
+              <MenuItem icon={<Hammer />} onSelect={() => deploy.mutate(true)}>
+                <span className="menu__rich">
+                  <span>{d.rebuild}</span>
+                  <small>{d.rebuildHint}</small>
+                </span>
+              </MenuItem>
+            </Menu>
+          )}
+        </span>
         <Button icon={<RotateCcw />} disabled={!live || busy} busy={reload.isPending} onClick={() => reload.mutate()} title={d.reloadHint}>
           {d.reload}
         </Button>
-        {!image && (
-          <Button icon={<Hammer />} busy={deploy.isPending && deploy.variables === true} onClick={() => deploy.mutate(true)} title={d.rebuildHint}>
-            {d.rebuild}
-          </Button>
-        )}
         {app.status === 'stopped' ? (
           <Button icon={<Play />} busy={start.isPending} onClick={() => start.mutate()} title={d.startHint}>
             {m.app.start}
@@ -175,7 +189,8 @@ function DeployCard({ app, containers }: { app: ApplicationDto; containers: Cont
             {m.app.stop}
           </Button>
         )}
-        <Button icon={<SquareTerminal />} disabled={!live} onClick={openTerminal} title={d.terminalHint}>
+        <span className="action-row__spacer" />
+        <Button variant="ghost" icon={<SquareTerminal />} disabled={!live} onClick={openTerminal} title={d.terminalHint}>
           {d.terminal}
         </Button>
       </div>
@@ -365,12 +380,20 @@ function UploadSection({ app }: { app: ApplicationDto }) {
       <Field label={current === null ? u.title : u.replaceTitle} hint={app.source.type === 'upload' ? u.replaceHint : u.switchNote}>
         <UploadDrop picked={picked} onPick={(next) => void send(next)} state={archive.state} title={current === null ? undefined : u.replaceTitle} />
       </Field>
-      <Field label={u.curlTitle} hint={u.curlHint}>
-        <div className="codeblock">
-          {curl}
-          <CopyButton value={curl} />
+      {/* The same upload from a terminal or CI: there for those who need it, out of the way for those who drop a folder. */}
+      <details className="disclosure">
+        <summary>
+          <ChevronRight aria-hidden="true" />
+          {u.curlTitle}
+        </summary>
+        <div className="disclosure__body" style={{ gap: 6 }}>
+          <div className="codeblock">
+            {curl}
+            <CopyButton value={curl} />
+          </div>
+          <p className="field__hint">{u.curlHint}</p>
         </div>
-      </Field>
+      </details>
     </div>
   );
 }
