@@ -282,6 +282,7 @@
   /* A card lays its content out as a grid: a row of choices keeps its own width instead of stretching. */
   .card__body > .segmented,
   .card__body > .picker,
+  .field > .segmented,
   .dialog__body .stack > .segmented {
     justify-self: start;
     align-self: flex-start;
