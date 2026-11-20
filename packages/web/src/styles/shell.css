@@ -219,6 +219,19 @@
     color: var(--ink-3);
     white-space: nowrap;
   }
+  button.sidebar__version {
+    display: block;
+    border: 0;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+  }
+  button.sidebar__version:hover,
+  button.sidebar__version:focus-visible {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
   .user-button {
     display: flex;
     align-items: center;

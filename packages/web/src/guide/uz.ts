@@ -357,7 +357,7 @@ export const guide: GuideContent = {
                 ["Dasturchi", "Ilova va baza yaratadi, joylashtiradi, oʻzgaruvchilar va domenlarni boshqaradi, zaxira oladi."],
                 ["Administrator", "Qoʻshimcha: registrlar, S3 manzillar, bildirishnomalar, serverlar, Docker va Proksi, xizmatlarni oʻchirish."],
                 ["Egasi", "Jamoa egasi: aʼzolar va rollar, jamoani oʻchirish."],
-                ["Instansiya administratori", "Platforma sozlamalari (domen, vaqt mintaqasi, image saqlash), yangilash."],
+                ["Instansiya administratori", "Platforma sozlamalari (domen, vaqt mintaqasi, image saqlash), yangilash. Panelni uning jamoasidagi admin va egalar ham yangilay oladi."],
               ],
             },
             { type: "p", text: "**Taklif**: Sozlamalar → Jamoa → Taklif qilish → havolani nusxalab yuboring (kutilayotgan takliflar roʻyxatidan qayta nusxalash mumkin). Bir kishi bir nechta jamoada boʻlishi mumkin — yon panel yuqorisidan almashtiriladi." },
@@ -455,7 +455,7 @@ export const guide: GuideContent = {
               type: "steps",
               items: [
                 { title: "Xabar", text: "Har 6 soatda (`PLOY_UPDATE_INTERVAL_SEC`, kamida 600) kuzatilayotgan branch tekshiriladi; yangi commit boʻlsa yon panelda **Yangilanish mavjud**, Sozlamalar → Veb-server’da oʻzgarishlar roʻyxati." },
-                { title: "Yangilash", text: "Instansiya administratori tugmani bosadi: vaqtinchalik `ploy-updater` konteyneri yangi image’ni tayyorlab, panelni xuddi shu portlar va disklar bilan qayta yaratadi, sogʻlomligini tekshiradi." },
+                { title: "Yangilash", text: "Instansiya administratori yoki uning jamoasidagi admin tugmani bosadi (yon paneldagi **Yangilanish mavjud** tugmasi yoki pastdagi versiya yozuvi orqali): vaqtinchalik `ploy-updater` konteyneri yangi image’ni tayyorlab, panelni xuddi shu portlar va disklar bilan qayta yaratadi, sogʻlomligini tekshiradi." },
                 { title: "Xato boʻlsa", text: "Eski versiya avtomatik qaytariladi va sabab paneldagi holatda koʻrinadi. Qoʻlda yangilash — oʻrnatish buyrugʻining `update` rejimi:" },
                 { title: "Qoʻlda yangilash buyrugʻi", text: "`curl -fsSL https://raw.githubusercontent.com/To-Rex/TorexPloy/main/deploy/install.sh | sudo TORXPLOY_SOURCE=https://github.com/To-Rex/TorexPloy.git sh -s update`" },
               ],

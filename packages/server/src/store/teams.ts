@@ -131,6 +131,21 @@ export class TeamStore {
     this.db.run('DELETE FROM team_members WHERE team_id = ? AND user_id = ?', teamId, userId);
   }
 
+  /**
+   * Whether an instance administrator runs this team (is its owner or one of its admins). The instance
+   * administrator's own team is the one whose administrators are trusted with the platform itself; a team
+   * somebody else created for themselves is not.
+   */
+  runByInstanceAdmin(teamId: string): boolean {
+    return (
+      this.db.scalar(
+        `SELECT 1 FROM team_members m JOIN users u ON u.id = m.user_id
+          WHERE m.team_id = ? AND u.is_instance_admin = 1 AND m.role IN ('owner', 'admin') LIMIT 1`,
+        teamId,
+      ) !== undefined
+    );
+  }
+
   countOwners(teamId: string): number {
     return num(this.db.scalar("SELECT COUNT(*) FROM team_members WHERE team_id = ? AND role = 'owner'", teamId));
   }

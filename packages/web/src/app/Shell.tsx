@@ -94,6 +94,8 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
   const user = bootstrap.user!;
   const team = bootstrap.teams.find((candidate) => candidate.id === bootstrap.currentTeamId) ?? bootstrap.teams[0];
   const admin = team !== undefined && roleAtLeast(team.role, 'admin');
+  // The same rule as the server's: the instance administrator, or an admin or owner of the team in use.
+  const seesUpdates = admin || user.isInstanceAdmin;
   const mac = navigator.platform.includes('Mac');
 
   usePaletteShortcut(useCallback(() => setPalette(true), []));
@@ -254,7 +256,14 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
               {m.nav.signOut}
             </MenuItem>
           </Menu>
-          <div className="sidebar__version">TorexPloy v{bootstrap.version}</div>
+          {/* Administrators reach the version, the check and the update from here at any time, not only when one is waiting. */}
+          {seesUpdates ? (
+            <button type="button" className="sidebar__version" onClick={() => setUpdates(true)} title={m.updates.openFromVersion}>
+              TorexPloy v{bootstrap.version}
+            </button>
+          ) : (
+            <div className="sidebar__version">TorexPloy v{bootstrap.version}</div>
+          )}
         </div>
       </aside>
       <div className="drawer-backdrop" onClick={() => setDrawer(false)} aria-hidden="true" />
@@ -304,7 +313,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} onNewProject={() => setNewProject(true)} />
       <NewProjectDialog open={newProject} onClose={() => setNewProject(false)} />
-      {admin && <UpdateDialog open={updates} onClose={() => setUpdates(false)} />}
+      {seesUpdates && <UpdateDialog open={updates} onClose={() => setUpdates(false)} />}
     </div>
   );
 }

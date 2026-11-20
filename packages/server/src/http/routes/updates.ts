@@ -8,11 +8,22 @@ import type { Context } from '../../context.ts';
 import { AppError, forbidden, notFound } from '../../lib/errors.ts';
 import { launchUpdater, UPDATER_CONTAINER, updaterState } from '../../updates/launcher.ts';
 import { parseProgress, stripTimestamps } from '../../updates/progress.ts';
-import { audit, requireAuth, requireInstanceAdmin, type Auth, type Ctx, type Env } from '../core.ts';
+import { audit, requireAuth, type Auth, type Ctx, type Env } from '../core.ts';
 
 /** Administrators see update state: the instance administrator, or an admin/owner of the current team. */
 export function canSeeUpdates(auth: Auth | null): boolean {
   return auth !== null && (auth.user.isInstanceAdmin || (auth.role !== null && roleAtLeast(auth.role, 'admin')));
+}
+
+/**
+ * Who may start an update: the instance administrator, and the administrators (admin or owner) of a team the
+ * instance administrator runs. A role alone is not enough: anyone can create a team and be its owner, and that
+ * must not let them replace the control plane everybody shares.
+ */
+export function canApplyUpdates(ctx: Context, auth: Auth | null): boolean {
+  if (auth === null) return false;
+  if (auth.user.isInstanceAdmin) return true;
+  return auth.teamId !== null && auth.role !== null && roleAtLeast(auth.role, 'admin') && ctx.stores.teams.runByInstanceAdmin(auth.teamId);
 }
 
 function requireUpdateViewer(c: Ctx): Auth {
@@ -53,7 +64,7 @@ export function registerUpdateRoutes(app: Hono<Env>, ctx: Context): void {
       state,
       error,
       progress,
-      canApply: auth.user.isInstanceAdmin && mode !== 'manual' && check.available && state !== 'updating',
+      canApply: canApplyUpdates(ctx, auth) && mode !== 'manual' && check.available && state !== 'updating',
     };
   };
 
@@ -110,7 +121,8 @@ export function registerUpdateRoutes(app: Hono<Env>, ctx: Context): void {
   });
 
   app.post('/api/updates/apply', async (c) => {
-    requireInstanceAdmin(c);
+    const auth = requireAuth(c);
+    if (!canApplyUpdates(ctx, auth)) throw forbidden('Only the instance administrator and the administrators of their team can update the panel');
     const { updates, config } = ctx;
     const self = await updates.self.locate();
     if (self === null) {
@@ -125,7 +137,15 @@ export function registerUpdateRoutes(app: Hono<Env>, ctx: Context): void {
 
     const mode = config.updates.image === null ? 'source' : 'image';
     const id = await launchUpdater(docker, self, config, check.latest.commit);
-    audit(ctx, c, 'platform.update_started', { type: 'platform', teamId: null }, { commit: check.latest.commit, mode, repository: config.updates.repository, branch: config.updates.branch, image: config.updates.image });
+    audit(ctx, c, 'platform.update_started', { type: 'platform', teamId: null }, {
+      commit: check.latest.commit,
+      mode,
+      repository: config.updates.repository,
+      branch: config.updates.branch,
+      image: config.updates.image,
+      // Whose right it was: the instance administrator's own, or a team administrator's.
+      as: auth.user.isInstanceAdmin ? 'instance_admin' : 'team_admin',
+    });
     ctx.logger.info('Update started', { commit: check.latest.commit.slice(0, 7), mode, updater: id.slice(0, 12), target: self.name });
     return c.json({ ok: true }, 202);
   });

@@ -1169,7 +1169,7 @@ test('POST /api/applications/:id/build-plan plans the branch head without buildi
   }
 });
 
-test('updates: administrators see the status, only the instance administrator applies it, and viewers never learn of it', async () => {
+test('updates: administrators see the status, the instance administrator and the administrators of their team apply it, and viewers never learn of it', async () => {
   const A = 'a'.repeat(40);
   const B = 'b'.repeat(40);
   const updates: AppConfig['updates'] = { enabled: true, repository: 'To-Rex/TorexPloy', branch: 'main', image: null, container: 'ploy-control', intervalMs: 3_600_000 };
@@ -1206,7 +1206,7 @@ test('updates: administrators see the status, only the instance administrator ap
     assert.equal(checked.body.latest?.commit, B);
     assert.deepEqual(checked.body.commits.map((commit) => commit.sha), [B, 'c'.repeat(40)]);
     assert.equal(checked.body.checkError, null);
-    assert.equal(checked.body.canApply, false, 'a team owner cannot apply');
+    assert.equal(checked.body.canApply, false, 'outside Docker there is nothing to apply it with, whoever asks');
     assert.deepEqual(auditActions(), ['platform.update_checked']);
     assert.equal((await h.call(h.tokens.viewer, 'POST', '/api/updates/check')).status, 403);
 
@@ -1218,7 +1218,10 @@ test('updates: administrators see the status, only the instance administrator ap
     const health = await h.call<HealthDto>(h.tokens.viewer, 'GET', '/api/health');
     assert.equal(health.body.commit, A, 'the dashboard watches /api/health for the new commit during an update');
 
-    assert.equal((await h.call(h.tokens.owner, 'POST', '/api/updates/apply')).status, 403);
+    // Who may ask at all: the instance administrator and the administrators of their team (Acme). An owner of a
+    // team of their own (Rival) may not, nor anyone below administrator.
+    for (const token of [h.tokens.rival, h.tokens.developer, h.tokens.viewer]) assert.equal((await h.call(token, 'POST', '/api/updates/apply')).status, 403);
+    assert.equal((await h.call<ApiErrorBody>(h.tokens.owner, 'POST', '/api/updates/apply')).body.error.code, 'update_unsupported', 'allowed to ask, and told why it cannot be done here');
     const manual = await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
     assert.equal(manual.status, 422);
     assert.equal(manual.body.error.code, 'update_unsupported');
@@ -1238,7 +1241,8 @@ test('updates: administrators see the status, only the instance administrator ap
     assert.equal(ready.body.mode, 'source');
     assert.equal(ready.body.state, 'idle');
     assert.equal(ready.body.canApply, true);
-    assert.equal((await h.call<UpdateStatusDto>(h.tokens.owner, 'GET', '/api/updates')).body.canApply, false);
+    assert.equal((await h.call<UpdateStatusDto>(h.tokens.owner, 'GET', '/api/updates')).body.canApply, true, 'an owner of the instance administrator’s team');
+    assert.equal((await h.call<UpdateStatusDto>(h.tokens.rival, 'GET', '/api/updates')).body.canApply, false, 'an owner of some other team sees it, and cannot apply it');
 
     // An updater already running: 409, the status says so and carries the last reported step.
     const live = fakeInspect('ploy-updater', { running: true });
@@ -1323,6 +1327,79 @@ test('updates: administrators see the status, only the instance administrator ap
     const upToDate = await h.call<ApiErrorBody>(h.tokens.instanceAdmin, 'POST', '/api/updates/apply');
     assert.equal(upToDate.status, 400);
     assert.equal(upToDate.body.error.params?.reason, 'up_to_date');
+  } finally {
+    await h.close();
+  }
+});
+
+test('updates: an administrator of the instance administrator’s team starts one; a role in any other team does not count', async () => {
+  const A = 'a'.repeat(40);
+  const B = 'b'.repeat(40);
+  const updates: AppConfig['updates'] = { enabled: true, repository: 'To-Rex/TorexPloy', branch: 'main', image: null, container: 'ploy-control', intervalMs: 3_600_000 };
+  const h = await harness({ config: { commit: A, builtAt: '2026-10-01T00:00:00Z', updates } });
+  try {
+    const { stores } = h.ctx;
+    const github: typeof fetch = async (input) => {
+      const url = String(input);
+      const commit = (sha: string) => ({ sha, html_url: `https://github.com/To-Rex/TorexPloy/commit/${sha}`, commit: { message: 'Change', author: { name: 'Dev', date: '2026-10-02T00:00:00Z' }, committer: null }, author: null });
+      if (url.includes('/commits/')) return new Response(JSON.stringify(commit(B)), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (url.includes('/compare/')) return new Response(JSON.stringify({ ahead_by: 1, total_commits: 1, commits: [commit(B)] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response('{}', { status: 404 });
+    };
+    h.ctx.updates = new UpdateChecker(h.ctx, { fetch: github, self: { inDocker: true, hostname: 'c0ffee000001', cacheMs: 0 } });
+    h.inspects.set('ploy-control', fakeInspect('ploy-control', { id: 'c0ffee000001' + '0'.repeat(52), env: ['PLOY_PORT=3000'] }));
+    await h.ctx.updates.check();
+
+    /** A member with an API token, as the harness makes them. */
+    const join = (teamId: string, email: string, role: 'viewer' | 'developer' | 'admin' | 'owner'): string => {
+      const user = stores.users.getByEmail(email) ?? stores.users.create({ email, name: email.split('@')[0]!, passwordHash: null, isInstanceAdmin: false });
+      stores.teams.addMember(teamId, user.id, role);
+      return stores.tokens.create({ userId: user.id, teamId, name: 'test', expiresAt: null, tokenPrefix: API_TOKEN_PREFIX }).token;
+    };
+    const canApply = async (token: string) => (await h.call<UpdateStatusDto>(token, 'GET', '/api/updates')).body.canApply;
+    const apply = (token: string) => h.call<{ ok: boolean } & ApiErrorBody>(token, 'POST', '/api/updates/apply');
+
+    // Acme is the instance administrator's team: its admins and owners may update the panel, its developers may not.
+    const admin = join(h.teamA.id, 'admin@acme.uz', 'admin');
+    assert.deepEqual([await canApply(admin), await canApply(h.tokens.owner), await canApply(h.tokens.instanceAdmin)], [true, true, true]);
+    assert.equal((await h.call(h.tokens.developer, 'GET', '/api/updates')).status, 403);
+    assert.equal((await apply(h.tokens.developer)).status, 403);
+
+    // Rival is somebody's own team. Being its owner means nothing here: anyone can make a team and own it.
+    assert.equal(await canApply(h.tokens.rival), false);
+    const refused = await apply(h.tokens.rival);
+    assert.deepEqual([refused.status, refused.body.error.code], [403, 'forbidden']);
+    // Not even with the instance administrator among its members, as long as they do not run it…
+    const root = join(h.teamB.id, 'root@acme.uz', 'developer');
+    assert.equal(await canApply(h.tokens.rival), false);
+    assert.equal((await apply(h.tokens.rival)).status, 403);
+    assert.equal(await canApply(root), true, 'the instance administrator can from any team: the right is theirs, not the team’s');
+    // …and it does once they do.
+    stores.teams.setRole(h.teamB.id, stores.users.getByEmail('root@acme.uz')!.id, 'admin');
+    assert.equal(await canApply(h.tokens.rival), true);
+    stores.teams.setRole(h.teamB.id, stores.users.getByEmail('root@acme.uz')!.id, 'developer');
+    assert.equal(h.created.length, 0, 'nothing was started by any of the refusals');
+
+    // The team administrator starts it: the same updater the instance administrator would start, and the log says whose right it was.
+    const started = await apply(admin);
+    assert.equal(started.status, 202, JSON.stringify(started.body));
+    assert.equal(h.created.length, 1);
+    assert.equal(h.created[0]!.name, 'ploy-updater');
+    assert.ok((h.created[0]!.spec.Env as string[]).includes(`PLOY_UPDATER_COMMIT=${B}`), 'the commit comes from the check, not from the request');
+    const logged = stores.db.all("SELECT user_id, metadata FROM audit_log WHERE action = 'platform.update_started'");
+    assert.equal(logged.length, 1);
+    assert.equal(String(logged[0]!.user_id), stores.users.getByEmail('admin@acme.uz')!.id);
+    assert.equal((JSON.parse(String(logged[0]!.metadata)) as { as: string }).as, 'team_admin');
+    // One at a time, whoever asks next.
+    assert.equal((await apply(h.tokens.owner)).status, 409);
+    assert.equal((await apply(h.tokens.instanceAdmin)).status, 409);
+    assert.equal(await canApply(admin), false, 'nothing to apply while one runs');
+
+    // Demoted, the right goes with the role.
+    h.inspects.delete('ploy-updater');
+    stores.teams.setRole(h.teamA.id, stores.users.getByEmail('admin@acme.uz')!.id, 'developer');
+    assert.equal((await h.call(admin, 'GET', '/api/updates')).status, 403);
+    assert.equal((await apply(admin)).status, 403);
   } finally {
     await h.close();
   }

@@ -339,7 +339,11 @@ yangilovchining oʻzi `updater.ts` (alohida kirish nuqtasi, `cli.ts` kabi).
   (`idle`). Panel yangilanish vaqtida `/api/health` ni soʻrab turadi va `commit` yangisiga teng boʻlgach sahifani
   qayta yuklaydi. `BootstrapDto.features.updateAvailable` faqat jamoa admin/egasi va instansiya administratoriga
   `true` — viewer va developer yangilanish borligini bilmaydi.
-- **Xavfsizlik.** Tekshirish va holat — jamoa admin yoki egasi; qoʻllash — faqat instansiya administratori.
+- **Xavfsizlik.** Tekshirish va holat — jamoa admin yoki egasi. Qoʻllash — instansiya administratori va u
+  boshqaradigan (egasi yoki admini boʻlgan) jamoaning admin/egalari (`canApplyUpdates`, `teams.runByInstanceAdmin`).
+  Rolning oʻzi yetarli emas: istalgan foydalanuvchi oʻz jamoasini yaratib, uning egasi boʻla oladi, bu esa hamma
+  ishlatadigan panelni almashtirish huquqini bermasligi kerak. Kim boshlagani auditda turadi (`as`:
+  `instance_admin` yoki `team_admin`).
   Repozitoriya, branch va image soʻrovdan emas, muhitdan olinadi (`PLOY_UPDATE_*`, ishga tushishda tekshiriladi),
   commit esa tekshiruv natijasidan — mijoz "qaysi koddan qurilsin" deya olmaydi. Updater panel kabi docker soketiga
   ega (panelni almashtirishi kerak), lekin DB va `secret.key` ga tegmaydi. Audit: `platform.update_checked`,
@@ -475,7 +479,7 @@ Manbasi `upload` boʻlgan ilova repozitoriyasiz, boshqaruv serveridagi zip arxiv
 | S3 | Kalitlar shifrlanadi; manzil saqlanishidan oldin yozib/o'chirib tekshiriladi; SigV4 AWS namunasi bilan tekshirilgan |
 | Registrlar | Faqat admin boshqaradi; parol shifrlangan, API'da qaytarilmaydi; saqlashdan oldin `POST /auth` bilan tekshiriladi; CLI config har deploy uchun alohida (0600) va keyin o'chiriladi |
 | Bildirishnomalar | Kanallarni faqat admin boshqaradi; manzil/token shifrlanadi; Discord/Slack uchun faqat rasmiy hostlar; webhook HMAC (`X-Ploy-Signature`), redirect'lar ta'qiqlangan, 10 s taymaut |
-| Oʻz-oʻzini yangilash | Faqat instansiya admini qoʻllaydi; repo/branch/image muhitdan, commit tekshiruv natijasidan (soʻrovdan emas); updater DB va sirlarsiz; health boʻlmasa eski versiya qaytariladi |
+| Oʻz-oʻzini yangilash | Instansiya admini va u boshqaradigan jamoaning admin/egalari qoʻllaydi (boshqa jamoaning egasi emas); repo/branch/image muhitdan, commit tekshiruv natijasidan (soʻrovdan emas); updater DB va sirlarsiz; health boʻlmasa eski versiya qaytariladi |
 
 ### 6.1 Passkey (WebAuthn)
 

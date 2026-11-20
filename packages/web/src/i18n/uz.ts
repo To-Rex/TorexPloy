@@ -2116,7 +2116,7 @@ export const uz = {
     checkFailedShort: 'Tekshirib boʻlmadi',
     manualText: 'Panel Docker konteynerida ishlamayapti, shuning uchun oʻzini yangilay olmaydi. Serverda install.sh update buyrugʻini bajaring.',
     manualShort: 'Faqat qoʻlda yangilanadi',
-    adminOnly: 'Faqat instansiya administratori',
+    adminOnly: 'Yangilashni instansiya administratori yoki uning jamoasidagi admin boshlay oladi.',
     progressTitle: 'Yangilash jarayoni',
     stages: { fetch: 'Kod', build: 'Yigʻish', replace: 'Almashtirish', health: 'Tekshiruv', done: 'Tayyor' },
     percent: '{percent}%',
@@ -2125,6 +2125,7 @@ export const uz = {
     restartingHint: 'Eski panel toʻxtatildi, yangisi koʻtarilmoqda. Bu bir necha soniya davom etadi; yangi versiya javob berishi bilan sahifa oʻzi yangilanadi. Ilovalaringiz ishlashda davom etmoqda.',
     stoppedAt: '“{stage}” bosqichida toʻxtadi',
     waitingLog: 'Updater logi kutilmoqda…',
+    openFromVersion: 'Versiya va yangilanishlar',
   },
 
   fileStore: {

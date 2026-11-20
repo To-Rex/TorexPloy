@@ -2102,7 +2102,7 @@ export const en: Messages = {
     checkFailedShort: 'Check failed',
     manualText: 'The panel is not running in a Docker container, so it cannot update itself. Run install.sh update on the server.',
     manualShort: 'Manual update only',
-    adminOnly: 'Instance administrator only',
+    adminOnly: 'The instance administrator or an admin of their team can start an update.',
     progressTitle: 'Update progress',
     stages: { fetch: 'Code', build: 'Build', replace: 'Swap', health: 'Health', done: 'Done' },
     percent: '{percent}%',
@@ -2111,6 +2111,7 @@ export const en: Messages = {
     restartingHint: 'The old panel stopped and the new one is coming up. This takes a few seconds; the page reloads by itself once the new version answers. Your apps keep running.',
     stoppedAt: 'Stopped at “{stage}”',
     waitingLog: 'Waiting for the updater log…',
+    openFromVersion: 'Version and updates',
   },
 
   fileStore: {

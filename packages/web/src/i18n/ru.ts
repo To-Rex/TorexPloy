@@ -2121,7 +2121,7 @@ export const ru: Messages = {
     checkFailedShort: 'Не удалось проверить',
     manualText: 'Панель работает не в Docker-контейнере, поэтому не может обновить себя. Выполните install.sh update на сервере.',
     manualShort: 'Только вручную',
-    adminOnly: 'Только администратор инстанса',
+    adminOnly: 'Запустить обновление может администратор инстанса или администратор его команды.',
     progressTitle: 'Ход обновления',
     stages: { fetch: 'Код', build: 'Сборка', replace: 'Замена', health: 'Проверка', done: 'Готово' },
     percent: '{percent}%',
@@ -2130,6 +2130,7 @@ export const ru: Messages = {
     restartingHint: 'Старая панель остановлена, новая поднимается. Это займёт несколько секунд; как только новая версия ответит, страница обновится сама. Ваши приложения продолжают работать.',
     stoppedAt: 'Остановилось на этапе «{stage}»',
     waitingLog: 'Ожидание лога updater…',
+    openFromVersion: 'Версия и обновления',
   },
 
   fileStore: {

@@ -15,7 +15,7 @@ import { Dialog } from './Dialog.tsx';
 import { UpdateProgress } from './UpdateProgress.tsx';
 import { RelativeTime } from './Time.tsx';
 import { useToast } from './Toast.tsx';
-import { Badge, Button, Callout, Skeleton } from './ui.tsx';
+import { Button, Callout, Skeleton } from './ui.tsx';
 
 const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(0, 7));
 
@@ -164,6 +164,12 @@ export function UpdateDialog({ open, onClose }: { open: boolean; onClose: () => 
           )}
 
           <div className="row" style={{ justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+            {/* An administrator of some other team sees what is new, and why the button is not theirs to press. */}
+            {data.available && !data.canApply && data.mode !== 'manual' && (
+              <span className="faint" style={{ flexBasis: '100%', fontSize: 'var(--text-sm)', textAlign: 'right' }}>
+                {u.adminOnly}
+              </span>
+            )}
             <Button icon={<RefreshCw />} busy={check.isPending} disabled={data.state === 'updating'} onClick={() => check.mutate()}>
               {u.checkNow}
             </Button>
@@ -172,7 +178,6 @@ export function UpdateDialog({ open, onClose }: { open: boolean; onClose: () => 
                 {data.state === 'failed' ? u.retry : u.update}
               </Button>
             )}
-            {data.available && !data.canApply && data.mode !== 'manual' && <Badge>{u.adminOnly}</Badge>}
           </div>
         </div>
       )}

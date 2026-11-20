@@ -357,7 +357,7 @@ export const guide: GuideContent = {
                 ["Developer", "Creates apps and databases, deploys, manages variables and domains, takes backups."],
                 ["Admin", "Additionally: registries, S3 destinations, notifications, servers, Docker and Proxy, deleting services."],
                 ["Owner", "The team’s owner: members and roles, deleting the team."],
-                ["Instance administrator", "Platform settings (domain, time zone, image retention), updates."],
+                ["Instance administrator", "Platform settings (domain, time zone, image retention), updates. Admins and owners of their team can update the panel too."],
               ],
             },
             { type: "p", text: "**Inviting**: Settings → Team → Invite → copy the link and send it (it can be copied again from the pending invitations list). One person can be in several teams — switch at the top of the sidebar." },
@@ -455,7 +455,7 @@ export const guide: GuideContent = {
               type: "steps",
               items: [
                 { title: "Notice", text: "Every 6 hours (`PLOY_UPDATE_INTERVAL_SEC`, at least 600) the tracked branch is checked; on a new commit the sidebar shows **Update available** and Settings → Web server lists the changes." },
-                { title: "Update", text: "An instance administrator presses the button: a temporary `ploy-updater` container prepares the new image, recreates the panel with the same ports and volumes, and checks its health." },
+                { title: "Update", text: "The instance administrator, or an admin of their team, presses the button (from **Update available** in the sidebar, or the version label at its foot): a temporary `ploy-updater` container prepares the new image, recreates the panel with the same ports and volumes, and checks its health." },
                 { title: "If it fails", text: "The old version comes back automatically and the reason shows in the status. By hand — the install command in `update` mode:" },
                 { title: "Manual update command", text: "`curl -fsSL https://raw.githubusercontent.com/To-Rex/TorexPloy/main/deploy/install.sh | sudo TORXPLOY_SOURCE=https://github.com/To-Rex/TorexPloy.git sh -s update`" },
               ],
