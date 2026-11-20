@@ -1,6 +1,6 @@
 {
   "name": "torexploy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "TorexPloy — self-hosted PaaS: git push → build → zero-downtime deploy → HTTPS",
@@ -20,7 +20,8 @@
     "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/web",
     "test": "node --test --test-concurrency=4 --test-timeout=60000 'packages/shared/src/**/*.test.ts' 'packages/server/src/**/*.test.ts'",
     "verify": "npm run typecheck && npm test && npm run build",
-    "admin": "node packages/server/src/cli.ts"
+    "admin": "node packages/server/src/cli.ts",
+    "bump": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

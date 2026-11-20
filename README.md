@@ -68,6 +68,8 @@ Domen sozlangandan keyin ochiq portni yopib qoʻyish mumkin: xuddi shu oʻrnatis
 
 Panel oʻzini oʻzi yangilaydi. Kuzatilayotgan branch (`main`) oldinga ketganini har 6 soatda GitHub orqali tekshiradi; yangi commit bor boʻlsa yon panelda **Yangilanish mavjud** tugmasi chiqadi, **Sozlamalar → Veb-server** boʻlimida esa oʻzgarishlar roʻyxati va **Yangilash** tugmasi. Yangilashni instansiya administratori va uning jamoasidagi admin yoki egalar boshlay oladi; ular oynani yon panel pastidagi versiya yozuvini bosib ham ochadi. Boshqa jamoaning egasi yangilanishni koʻradi, lekin boshlay olmaydi. Bosilganda `ploy-updater` nomli vaqtinchalik konteyner ishga tushadi: u yangi image’ni tayyorlaydi, `ploy-control`ni xuddi shu portlar, disklar va tarmoqlar bilan qayta yaratadi, `/api/health` javob berishini kutadi va eskisini oʻchiradi. Yangi versiya koʻtarilmasa, eskisi qaytariladi va xato paneldagi holatda koʻrinadi. Ilovalar, bazalar va proxy bu vaqtda toʻxtamaydi; panelning oʻzi bir necha soniya ochilmaydi.
 
+Versiya raqami (`package.json`, yon panel pastida koʻrinadi) har bir oʻzgarish bilan oshadi: tuzatish uchun oxirgi raqam (`npm run bump -- patch`), yangi imkoniyat uchun oʻrtadagisi (`npm run bump -- minor`). Yangilanishni panel bu raqamga emas, commit’larga qarab topadi; raqam odamlar uchun, nima ishlayotganini bir qarashda bilish uchun.
+
 Ikki rejim bor:
 
 - **Manbadan (default).** `install.sh` qaysi GitHub repozitoriya va branch’dan qurgan boʻlsa (`PLOY_UPDATE_REPO`, `PLOY_UPDATE_BRANCH`), yangilovchi shu branch’ning yangi commit’ini klon qilib, image’ni serverning oʻzida yigʻadi (`torexploy:latest`).
