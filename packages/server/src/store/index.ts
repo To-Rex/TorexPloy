@@ -4,7 +4,7 @@
 import type { Database } from '../db/database.ts';
 import type { Secrets } from '../lib/secrets.ts';
 import { ApplicationStore, DeploymentStore, ProjectStore } from './apps.ts';
-import { ApiTokenStore, SessionStore, UserStore } from './identity.ts';
+import { ApiTokenStore, PasskeyStore, SessionStore, UserStore } from './identity.ts';
 import { BackupStore, CronStore, DomainStore, EnvStore, InstallationStore, LinkStore, MetricStore, ServiceStore, VolumeStore } from './resources.ts';
 import { NotificationStore } from './notifications.ts';
 import { RegistryStore } from './registries.ts';
@@ -17,6 +17,7 @@ export interface Stores {
   db: Database;
   users: UserStore;
   sessions: SessionStore;
+  passkeys: PasskeyStore;
   tokens: ApiTokenStore;
   teams: TeamStore;
   audit: AuditStore;
@@ -46,6 +47,7 @@ export function createStores(db: Database, secrets: Secrets): Stores {
     db,
     users: new UserStore(db),
     sessions: new SessionStore(db),
+    passkeys: new PasskeyStore(db),
     tokens: new ApiTokenStore(db),
     teams: new TeamStore(db),
     audit: new AuditStore(db),

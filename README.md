@@ -12,7 +12,7 @@ Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy 
 - **Servislar:** PostgreSQL, MySQL, MariaDB, MongoDB, Redis, RabbitMQ, MinIO, ClickHouse. Ilovaga ulash, zaxira nusxa va tiklash.
 - **Fayl ombori:** S3-mos obyekt ombori (SeaweedFS) bir bosishda: bucket’lar va fayl brauzeri, vaqtinchalik (presigned) havolalar, cheklangan kirish kalitlari, ochiq bucket’lar, domen orqali HTTPS bilan tashqi kirish; boshqa servislarning zaxira nusxalari shu omborga yoziladi.
 - **Kuzatuv:** real vaqtdagi build va runtime loglar (qidiruv, daraja boʻyicha filtr, replika va vaqt oraligʻi tanlovi, pauza, nusxalash, yuklab olish, toʻliq ekran), CPU/RAM/disk/tarmoq metrikalari, audit jurnali.
-- **Jamoa:** rollar (egasi/admin/dasturchi/kuzatuvchi), taklifnomalar, 2FA (TOTP), API tokenlar, GitHub orqali kirish.
+- **Jamoa:** rollar (egasi/admin/dasturchi/kuzatuvchi), taklifnomalar, passkey (barmoq izi, yuz yoki PIN bilan parolsiz kirish), 2FA (TOTP), API tokenlar, GitHub orqali kirish.
 - **Bir nechta server:** SSH orqali qoʻshiladi. Masofaviy serverga faqat Docker kerak, agent oʻrnatilmaydi.
 - **PR preview:** har bir pull request alohida manzilda vaqtinchalik nusxa sifatida ochiladi (`pr-7-web-…`): yangi push’da qayta joylashtiriladi, PR yopilganda oʻchiriladi, manzil PR’ga izoh sifatida yoziladi. Ota ilovaning sozlamalari, oʻzgaruvchilari va bazalari ishlatiladi, ustidan alohida preview oʻzgaruvchilari qoʻyiladi. Fork’dan kelgan PR’lar sirlar xavfsizligi uchun joylashtirilmaydi.
 - **Docker Compose:** bir nechta servisdan iborat steklar, fayl panelda yoki repozitoriyada; har bir servisga domen, log va terminal.
@@ -177,7 +177,7 @@ Laravel: `config/filesystems.php` dagi `s3` diski uchun `AWS_ENDPOINT=${S3_ENDPO
 - Registr loginlari shifrlangan holda saqlanadi va API’da qaytarilmaydi. Build va compose uchun ular har bir deploy’ning alohida CLI config’iga (0600) yoziladi va ish tugashi bilan oʻchiriladi: bir jamoa logini boshqa jamoaga koʻrinmaydi.
 - Caddy admin API faqat proxy konteynerining ichki loopback’ida ochiq, ilovalar uni koʻra olmaydi.
 
-`ploy-control` konteyneri Docker soketiga ega, ya’ni server ustidan root darajasidagi huquqqa ega. Panelga kirishni 2FA va kuchli parollar bilan himoyalang.
+`ploy-control` konteyneri Docker soketiga ega, ya’ni server ustidan root darajasidagi huquqqa ega. Panelga kirishni passkey yoki 2FA va kuchli parollar bilan himoyalang. Passkey uchun panel HTTPS domenida ochilgan boʻlishi kerak.
 
 ## Ishlab chiqish
 

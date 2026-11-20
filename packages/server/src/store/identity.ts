@@ -1,9 +1,10 @@
 /**
- * Users, sessions, API tokens and external identities.
+ * Users, sessions, passkeys, API tokens and external identities.
  */
 import type { Locale, Theme } from '@ploy/shared';
 import type { Database } from '../db/database.ts';
 import { generateToken, sha256 } from '../lib/crypto.ts';
+import type { PasskeyPublicKey } from '../lib/webauthn.ts';
 import { newId, nowIso } from '../lib/ids.ts';
 import { bool, int01, json, num, numOrNull, str, strOrNull, type Row } from './util.ts';
 
@@ -268,6 +269,107 @@ export class SessionStore {
 
   pruneExpired(): number {
     return this.db.run('DELETE FROM sessions WHERE expires_at <= ?', nowIso()).changes;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Passkeys (WebAuthn credentials)
+// ---------------------------------------------------------------------------
+
+export interface PasskeyRecord {
+  id: string;
+  userId: string;
+  /** base64url of the credential id the authenticator answers to. */
+  credentialId: string;
+  publicKey: PasskeyPublicKey;
+  signCount: number;
+  /** How the authenticator can be reached (`internal`, `hybrid`, `usb`…), as the browser reported at registration. */
+  transports: string[];
+  aaguid: string | null;
+  rpId: string;
+  backupEligible: boolean;
+  backedUp: boolean;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+function mapPasskey(row: Row): PasskeyRecord {
+  return {
+    id: str(row.id),
+    userId: str(row.user_id),
+    credentialId: str(row.credential_id),
+    publicKey: { algorithm: num(row.algorithm) as PasskeyPublicKey['algorithm'], jwk: json<PasskeyPublicKey['jwk']>(row.public_key, {}) },
+    signCount: num(row.sign_count),
+    transports: json<string[]>(row.transports, []),
+    aaguid: strOrNull(row.aaguid),
+    rpId: str(row.rp_id),
+    backupEligible: bool(row.backup_eligible),
+    backedUp: bool(row.backed_up),
+    name: str(row.name),
+    createdAt: str(row.created_at),
+    lastUsedAt: strOrNull(row.last_used_at),
+  };
+}
+
+export class PasskeyStore {
+  private readonly db: Database;
+
+  constructor(db: Database) {
+    this.db = db;
+  }
+
+  create(input: Omit<PasskeyRecord, 'id' | 'createdAt' | 'lastUsedAt'>): PasskeyRecord {
+    const id = newId('pk');
+    this.db.run(
+      `INSERT INTO passkeys (id, user_id, credential_id, public_key, algorithm, sign_count, transports, aaguid, rp_id, backup_eligible, backed_up, name, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      input.userId,
+      input.credentialId,
+      JSON.stringify(input.publicKey.jwk),
+      input.publicKey.algorithm,
+      input.signCount,
+      JSON.stringify(input.transports),
+      input.aaguid,
+      input.rpId,
+      int01(input.backupEligible),
+      int01(input.backedUp),
+      input.name,
+      nowIso(),
+    );
+    return this.get(id)!;
+  }
+
+  get(id: string): PasskeyRecord | undefined {
+    const row = this.db.get('SELECT * FROM passkeys WHERE id = ?', id);
+    return row === undefined ? undefined : mapPasskey(row);
+  }
+
+  getByCredentialId(credentialId: string): PasskeyRecord | undefined {
+    const row = this.db.get('SELECT * FROM passkeys WHERE credential_id = ?', credentialId);
+    return row === undefined ? undefined : mapPasskey(row);
+  }
+
+  listForUser(userId: string): PasskeyRecord[] {
+    return this.db.all('SELECT * FROM passkeys WHERE user_id = ? ORDER BY created_at, id', userId).map(mapPasskey);
+  }
+
+  countForUser(userId: string): number {
+    return num(this.db.get('SELECT COUNT(*) AS n FROM passkeys WHERE user_id = ?', userId)!.n);
+  }
+
+  rename(id: string, name: string): void {
+    this.db.run('UPDATE passkeys SET name = ? WHERE id = ?', name, id);
+  }
+
+  /** A successful sign-in: the counter the authenticator reported, whether the key is synced now, and when. */
+  markUsed(id: string, signCount: number, backedUp: boolean): void {
+    this.db.run('UPDATE passkeys SET sign_count = ?, backed_up = ?, last_used_at = ? WHERE id = ?', signCount, int01(backedUp), nowIso(), id);
+  }
+
+  delete(id: string): void {
+    this.db.run('DELETE FROM passkeys WHERE id = ?', id);
   }
 }
 

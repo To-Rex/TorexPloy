@@ -442,6 +442,7 @@ Manbasi `upload` boʻlgan ilova repozitoriyasiz, boshqaruv serveridagi zip arxiv
 | CSRF | Mutatsiyalarda `Origin` tekshiruvi + `X-Ploy-Request` header (cross-site formdan yuborib bo'lmaydi) |
 | Brute-force | IP + email bo'yicha token bucket, audit log |
 | 2FA | TOTP (RFC 6238) + bir martalik recovery kodlar |
+| Passkey | WebAuthn, tashqi kutubxonasiz (`lib/webauthn.ts`): origin, challenge, RP ID, foydalanuvchi tasdigʻi (UV) va imzo tekshiriladi; hisoblagich orqaga qaytsa (klon) kirish rad etiladi. Batafsil: 6.1 |
 | Sirlar | AES-256-GCM, HKDF bilan ajratilgan sub-key'lar, master key `data/secret.key` (0600) |
 | Webhook | `X-Hub-Signature-256` HMAC, constant-time |
 | PR preview | Fork'dan kelgan PR'lar joylashtirilmaydi (begona kod sirlarni olmaydi); preview o'zgaruvchilari shifrlangan; branch nomi va commit SHA tekshiriladi |
@@ -457,6 +458,36 @@ Manbasi `upload` boʻlgan ilova repozitoriyasiz, boshqaruv serveridagi zip arxiv
 | Registrlar | Faqat admin boshqaradi; parol shifrlangan, API'da qaytarilmaydi; saqlashdan oldin `POST /auth` bilan tekshiriladi; CLI config har deploy uchun alohida (0600) va keyin o'chiriladi |
 | Bildirishnomalar | Kanallarni faqat admin boshqaradi; manzil/token shifrlanadi; Discord/Slack uchun faqat rasmiy hostlar; webhook HMAC (`X-Ploy-Signature`), redirect'lar ta'qiqlangan, 10 s taymaut |
 | Oʻz-oʻzini yangilash | Faqat instansiya admini qoʻllaydi; repo/branch/image muhitdan, commit tekshiruv natijasidan (soʻrovdan emas); updater DB va sirlarsiz; health boʻlmasa eski versiya qaytariladi |
+
+### 6.1 Passkey (WebAuthn)
+
+Passkey bilan kirish parol va TOTP oʻrnini bosadi: qurilma egasini oʻzi tasdiqlaydi (barmoq izi, yuz yoki PIN), shuning
+uchun bu bitta qadamda ikki omil. Parol zaxira yoʻl sifatida qoladi.
+
+- **Qayerda ishlaydi.** Passkey xostga bogʻlanadi (`rp_id`). `passkeyScope` (`http/routes/passkeys.ts`) soʻrov kelgan
+  manzilni panelning ishonchli manzili bilan solishtiradi: `PLOY_PUBLIC_URL` yoki `https://<panel domeni>`. IP manzil,
+  oddiy HTTP yoki boshqa xost boʻlsa, sababi bilan rad etiladi (`no_domain`, `insecure`, `other_origin`) va panel "qayerda
+  ochish kerak"ligini aytadi. `localhost` faqat production'dan tashqarida ruxsat etiladi. Ishonchli origin hech qachon
+  soʻrovning oʻzidan olinmaydi: oʻxshash saytda berilgan javob origin tekshiruvidan oʻtmaydi. Panel domeni oʻzgarsa, eski
+  passkey'lar ishlamaydi va roʻyxatda "boshqa domen uchun" deb koʻrinadi.
+- **Marosimlar.** Har biri ikki soʻrov: birinchisi yangi challenge bilan chipta beradi, ikkinchisi brauzer javobini shu
+  chipta ostida qaytaradi. Chipta 5 daqiqa yashaydi, bir marta ishlaydi (javob notoʻgʻri boʻlsa ham sarflanadi) va
+  originni hamda (roʻyxatdan oʻtkazishda) foydalanuvchini eslab qoladi. Chiptalar xotirada, soni chegaralangan.
+- **Roʻyxatdan oʻtkazish** (`POST /api/me/passkeys/options`, `POST /api/me/passkeys`): faqat brauzer sessiyasidan (API
+  token bilan emas) va parol tasdiqlangandan keyin, aks holda oʻgʻirlangan sessiya parol oʻzgargandan keyin ham qoladigan
+  kirish yoʻlini qoʻshib qoʻyardi. Kalit "discoverable" (`residentKey: required`), UV majburiy, attestation `none`:
+  attestation bayonoti baholanmaydi, chunki panelda autentifikator modeli boʻyicha siyosat yoʻq. Qabul qilinadigan
+  algoritmlar: ES256 (P-256), RS256 (kamida 2048 bit), EdDSA (Ed25519). Bitta hisobda koʻpi bilan 10 ta.
+- **Kirish** (`POST /api/auth/passkey/options`, `POST /api/auth/passkey`): email soʻralmaydi, credential oʻzi kimniki
+  ekanini aytadi (`userHandle` = foydalanuvchi id'si). Imzo `authenticatorData || SHA-256(clientDataJSON)` ustidan
+  tekshiriladi. Qurilmaga bogʻlangan kalitda hisoblagich oʻsishi shart; sinxronlanadigan passkey'larda u nolda turadi.
+  Bu endpointlar sessiyasiz, shuning uchun `X-Ploy-Request` va `Origin` shu yerda alohida tekshiriladi (login CSRF).
+  Har bir rad etish audit jurnaliga sababi bilan yoziladi.
+- **Saqlash.** `passkeys` jadvali: credential id, ochiq kalit (JWK), algoritm, hisoblagich, transportlar, AAGUID,
+  `rp_id`, sinxronlanish bayroqlari, nom. Maxfiy kalit hech qachon serverga kelmaydi.
+- **Brauzer tomoni** (`web/src/lib/passkey.ts`): javoblar `toJSON()`siz, qoʻlda base64url qilinadi (parol menejeri
+  kengaytmalari `navigator.credentials`ni almashtiradi). Login sahifasida tugma va email maydonining avtomatik
+  toʻldirishi (conditional mediation) bor; kutib turgan soʻrov challenge eskirmasidan yangilanadi.
 
 ## 7. Realtime va observability
 

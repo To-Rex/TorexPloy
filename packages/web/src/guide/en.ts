@@ -367,12 +367,13 @@ export const guide: GuideContent = {
           id: "security",
           icon: "shield",
           title: "Security",
-          summary: "Two-factor authentication, API tokens, the deploy hook, the audit log.",
+          summary: "Passkeys, two-factor authentication, API tokens, the deploy hook, the audit log.",
           to: "/settings/security",
           blocks: [
             {
               type: "list",
               items: [
+                "**Passkeys** — Settings → Security → **Add a passkey**: sign in with a fingerprint, your face or the device PIN, with no password and no code. The sign-in page gains a **Sign in with a passkey** button, and passkeys also appear in the email field's suggestions. A passkey works only on the panel's HTTPS domain (not on an IP address) and is bound to that domain: if the domain changes, passkeys have to be added again. The password stays as the fallback.",
                 "**2FA** — Settings → Security: an authenticator app (TOTP) and backup codes.",
                 "**API tokens** — [Settings → API tokens](/settings/tokens): for CI and scripts; each token belongs to a team and can expire.",
                 "**Deploy hook** — at the bottom of Application → Deployments: a secret URL; a `POST` to it starts a deployment (from GitLab CI, say). The link can be rotated at any time.",

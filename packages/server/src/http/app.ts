@@ -16,6 +16,7 @@ import { authMiddleware, csrfMiddleware, isHttps, requestOrigin, type Env } from
 import { registerAccountRoutes } from './routes/account.ts';
 import { registerApplicationRoutes } from './routes/applications.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerPasskeyRoutes } from './routes/passkeys.ts';
 import { registerComposeRoutes } from './routes/composes.ts';
 import { registerDeploymentRoutes } from './routes/deployments.ts';
 import { registerGithubRoutes } from './routes/github.ts';
@@ -104,6 +105,7 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   app.use('/api/*', csrfMiddleware());
 
   registerAuthRoutes(app, ctx);
+  registerPasskeyRoutes(app, ctx);
   registerAccountRoutes(app, ctx);
   registerPlatformRoutes(app, ctx);
   registerUpdateRoutes(app, ctx);

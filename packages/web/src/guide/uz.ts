@@ -367,12 +367,13 @@ export const guide: GuideContent = {
           id: "security",
           icon: "shield",
           title: "Xavfsizlik",
-          summary: "Ikki bosqichli tasdiqlash, API tokenlar, deploy hook, audit jurnali.",
+          summary: "Passkey, ikki bosqichli tasdiqlash, API tokenlar, deploy hook, audit jurnali.",
           to: "/settings/security",
           blocks: [
             {
               type: "list",
               items: [
+                "**Passkey** — Sozlamalar → Xavfsizlik → **Passkey qoʻshish**: barmoq izi, yuz yoki qurilma PIN-kodi bilan kirasiz, parol ham, kod ham soʻralmaydi. Kirish sahifasida **Passkey bilan kirish** tugmasi chiqadi, email maydonining tavsiyalarida ham koʻrinadi. Passkey faqat panelning HTTPS domenida ishlaydi (IP manzilda emas) va oʻsha domenga bogʻlanadi: domen oʻzgarsa, passkey’larni qaytadan qoʻshish kerak. Parol zaxira yoʻl sifatida qoladi.",
                 "**2FA** — Sozlamalar → Xavfsizlik: autentifikator ilovasi (TOTP) va zaxira kodlar.",
                 "**API tokenlar** — [Sozlamalar → API tokenlar](/settings/tokens): CI yoki skriptlar uchun; har bir token jamoaga bogʻlangan, muddatini belgilash mumkin.",
                 "**Deploy hook** — Ilova → Joylashtirishlar pastida: maxfiy URL, unga `POST` yuborilsa joylashtirish boshlanadi (masalan, GitLab CI’dan). Havolani istalgan vaqt yangilash mumkin.",

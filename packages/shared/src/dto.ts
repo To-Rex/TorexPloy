@@ -80,6 +80,8 @@ export interface BootstrapDto {
     builders: BuildType[];
     /** A newer TorexPloy is published (shown to administrators; details at `GET /api/updates`). */
     updateAvailable: boolean;
+    /** Passkeys can be used at the address this response was asked from (the panel's HTTPS domain, or localhost in development). */
+    passkeys: boolean;
   };
 }
 
@@ -146,6 +148,63 @@ export interface SessionDto {
   ip: string | null;
   createdAt: string;
   lastUsedAt: string;
+}
+
+/** Why passkeys cannot be used at the address the panel was opened at, when they cannot. */
+export type PasskeyUnavailableReason =
+  /** The panel has no domain: browsers only allow passkeys on an HTTPS domain. */
+  | 'no_domain'
+  /** The panel's configured address is plain HTTP. */
+  | 'insecure'
+  /** The panel has an HTTPS domain, but was opened at another address (an IP, say). */
+  | 'other_origin';
+
+export interface PasskeyDto {
+  id: string;
+  name: string;
+  /** The host the passkey is bound to. */
+  rpId: string;
+  /** It can sign in at the address this list was asked from. */
+  usableHere: boolean;
+  /** The passkey is synced by its provider (iCloud Keychain, Google Password Manager…) rather than held by one device. */
+  synced: boolean;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface PasskeyListDto {
+  available: boolean;
+  reason: PasskeyUnavailableReason | null;
+  /** Where passkeys do work, when that is not here. */
+  origin: string | null;
+  limit: number;
+  items: PasskeyDto[];
+}
+
+/** `PublicKeyCredentialCreationOptions` in JSON: binary fields are base64url. */
+export interface PasskeyCreationOptionsDto {
+  ticket: string;
+  publicKey: {
+    rp: { id: string; name: string };
+    user: { id: string; name: string; displayName: string };
+    challenge: string;
+    pubKeyCredParams: { type: 'public-key'; alg: number }[];
+    timeout: number;
+    attestation: 'none';
+    excludeCredentials: { type: 'public-key'; id: string; transports?: string[] }[];
+    authenticatorSelection: { residentKey: 'required'; requireResidentKey: true; userVerification: 'required' };
+  };
+}
+
+/** `PublicKeyCredentialRequestOptions` in JSON. No credential list: the passkey itself says whose it is. */
+export interface PasskeyRequestOptionsDto {
+  ticket: string;
+  publicKey: {
+    rpId: string;
+    challenge: string;
+    timeout: number;
+    userVerification: 'required';
+  };
 }
 
 export interface TwoFactorSetupDto {

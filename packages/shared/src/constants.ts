@@ -188,6 +188,9 @@ export const LIMITS = {
   memoryMbMax: 262_144,
   passwordMin: 8,
   passwordMax: 256,
+  /** Passkeys one account may register: a phone, a laptop, a password manager, a couple of security keys. */
+  passkeysMax: 10,
+  passkeyNameMax: 60,
   /** A pasted SSH private key (the largest common ones, 4096-bit RSA, are ~3.3 KB). */
   sshKeyMax: 16_384,
   composeFileMax: 256 * 1024,

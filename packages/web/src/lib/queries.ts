@@ -44,6 +44,7 @@ import type {
   ServiceCatalogEntryDto,
   ServiceCredentialsDto,
   ServiceDto,
+  PasskeyListDto,
   SessionDto,
   StorageBucketDto,
   StorageKeyDto,
@@ -87,6 +88,7 @@ export const keys = {
   invitations: ['team', 'invitations'] as const,
   tokens: ['tokens'] as const,
   sessions: ['sessions'] as const,
+  passkeys: ['passkeys'] as const,
   audit: ['audit'] as const,
   notifications: ['notifications'] as const,
   s3: ['s3-destinations'] as const,
@@ -243,6 +245,7 @@ export const useMembers = () => useQuery({ queryKey: keys.members, queryFn: () =
 export const useInvitations = (enabled: boolean) => useQuery({ queryKey: keys.invitations, queryFn: () => api.get<InvitationDto[]>('/api/team/invitations'), enabled });
 export const useTokens = () => useQuery({ queryKey: keys.tokens, queryFn: () => api.get<ApiTokenDto[]>('/api/tokens') });
 export const useSessions = () => useQuery({ queryKey: keys.sessions, queryFn: () => api.get<SessionDto[]>('/api/me/sessions') });
+export const usePasskeys = () => useQuery({ queryKey: keys.passkeys, queryFn: () => api.get<PasskeyListDto>('/api/me/passkeys') });
 export const useNotificationChannels = (enabled = true) => useQuery({ queryKey: keys.notifications, queryFn: () => api.get<NotificationChannelDto[]>('/api/notifications'), enabled });
 export const useS3Destinations = (enabled = true) => useQuery({ queryKey: keys.s3, queryFn: () => api.get<S3DestinationDto[]>('/api/s3-destinations'), enabled });
 /** The running version against the tracked branch; polls fast while an update runs. */

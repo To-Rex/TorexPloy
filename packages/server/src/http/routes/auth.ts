@@ -1,5 +1,6 @@
 /**
  * Setup, sign-in (password + TOTP, or GitHub), sign-out and invitations.
+ * Signing in with a passkey lives in `passkeys.ts`.
  */
 import type { Hono } from 'hono';
 import { acceptInvitationSchema, loginSchema, setupSchema, twoFactorLoginSchema, type BootstrapDto, type InvitationPreviewDto } from '@ploy/shared';
@@ -9,6 +10,7 @@ import { dummyPasswordDigest, generateToken, hashPassword, passwordNeedsRehash, 
 import { AppError } from '../../lib/errors.ts';
 import { audit, body, clearSessionCookie, limit, RateLimiter, requireAuth, setSessionCookie, type Ctx, type Env } from '../core.ts';
 import { teamDto, userDto } from '../dto.ts';
+import { passkeyScope } from './passkeys.ts';
 import { canSeeUpdates } from './updates.ts';
 
 const TICKET_TTL_MS = 5 * 60_000;
@@ -36,6 +38,7 @@ export function bootstrapDto(ctx: Context, c: Ctx): BootstrapDto {
       builders: availableBuilders(),
       // Viewers and developers cannot act on it, so they are not told.
       updateAvailable: canSeeUpdates(auth) && ctx.updates.available,
+      passkeys: passkeyScope(ctx, c).available,
     },
   };
 }

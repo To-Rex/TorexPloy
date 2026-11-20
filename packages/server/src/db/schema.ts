@@ -913,6 +913,35 @@ CREATE TABLE github_pending_installations (
 `,
   },
   { version: 12, name: 'upload-sources', sql: UPLOAD_SOURCES_V12, rebuildsTables: true },
+  {
+    version: 13,
+    name: 'passkeys',
+    sql: `
+-- WebAuthn credentials a user signs in with. The private key never leaves the authenticator:
+-- what is stored is the credential id it answers to and the public key that checks its signatures.
+CREATE TABLE passkeys (
+  id              TEXT PRIMARY KEY,
+  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- base64url; unique across users, so one credential signs into exactly one account.
+  credential_id   TEXT NOT NULL UNIQUE,
+  -- JWK, public part only.
+  public_key      TEXT NOT NULL,
+  -- COSE algorithm: -7 ES256, -8 EdDSA, -257 RS256.
+  algorithm       INTEGER NOT NULL CHECK (algorithm IN (-7, -8, -257)),
+  sign_count      INTEGER NOT NULL DEFAULT 0,
+  transports      TEXT NOT NULL DEFAULT '[]',
+  aaguid          TEXT,
+  -- The host the passkey is scoped to; it stops working when the panel moves to another domain.
+  rp_id           TEXT NOT NULL,
+  backup_eligible INTEGER NOT NULL DEFAULT 0 CHECK (backup_eligible IN (0,1)),
+  backed_up       INTEGER NOT NULL DEFAULT 0 CHECK (backed_up IN (0,1)),
+  name            TEXT NOT NULL,
+  created_at      TEXT NOT NULL,
+  last_used_at    TEXT
+);
+CREATE INDEX idx_passkeys_user ON passkeys(user_id, created_at);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

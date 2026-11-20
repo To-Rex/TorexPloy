@@ -12,6 +12,7 @@ import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useMe, useSessions } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
+import { PasskeysSection } from './Passkeys.tsx';
 import { SettingsSection } from './SettingsLayout.tsx';
 
 function describeAgent(agent: string | null): string {
@@ -123,6 +124,8 @@ export function SecurityPage() {
           </div>
         </form>
       </SettingsSection>
+
+      <PasskeysSection me={me.data} />
 
       <SettingsSection title={m.security.twoFactor} hint={m.security.twoFactorHint}>
         <div className="row">

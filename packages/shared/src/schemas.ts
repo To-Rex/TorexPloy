@@ -108,6 +108,60 @@ export const twoFactorDisableSchema = z.object({
 export type TwoFactorDisableInput = z.infer<typeof twoFactorDisableSchema>;
 
 // ---------------------------------------------------------------------------
+// Passkeys (WebAuthn)
+// ---------------------------------------------------------------------------
+
+/** Binary WebAuthn fields travel as unpadded base64url. */
+const base64Url = (max: number) =>
+  z
+    .string()
+    .min(1)
+    .max(max)
+    .regex(/^[A-Za-z0-9_-]+$/);
+const passkeyTicketSchema = z.string().min(16).max(128);
+
+/** Adding a passkey is a change of how the account is entered, so the password is confirmed first (empty for accounts without one). */
+export const passkeyRegisterOptionsSchema = z.object({ password: z.string().max(LIMITS.passwordMax).optional() });
+export type PasskeyRegisterOptionsInput = z.infer<typeof passkeyRegisterOptionsSchema>;
+
+export const passkeyNameSchema = z.string().trim().min(1).max(LIMITS.passkeyNameMax);
+
+/** What `navigator.credentials.create()` returned, with the ticket its challenge was issued under. */
+export const passkeyRegisterSchema = z.object({
+  ticket: passkeyTicketSchema,
+  name: passkeyNameSchema.optional(),
+  credential: z.object({
+    id: base64Url(1_400),
+    type: z.literal('public-key'),
+    response: z.object({
+      clientDataJSON: base64Url(8_192),
+      attestationObject: base64Url(65_536),
+      transports: z.array(z.string().max(32)).max(8).optional(),
+    }),
+  }),
+});
+export type PasskeyRegisterInput = z.infer<typeof passkeyRegisterSchema>;
+
+/** What `navigator.credentials.get()` returned. */
+export const passkeyLoginSchema = z.object({
+  ticket: passkeyTicketSchema,
+  credential: z.object({
+    id: base64Url(1_400),
+    type: z.literal('public-key'),
+    response: z.object({
+      clientDataJSON: base64Url(8_192),
+      authenticatorData: base64Url(4_096),
+      signature: base64Url(2_048),
+      userHandle: base64Url(128).nullable().optional(),
+    }),
+  }),
+});
+export type PasskeyLoginInput = z.infer<typeof passkeyLoginSchema>;
+
+export const renamePasskeySchema = z.object({ name: passkeyNameSchema });
+export type RenamePasskeyInput = z.infer<typeof renamePasskeySchema>;
+
+// ---------------------------------------------------------------------------
 // Teams
 // ---------------------------------------------------------------------------
 
