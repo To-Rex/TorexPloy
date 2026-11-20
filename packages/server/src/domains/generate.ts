@@ -5,8 +5,10 @@
  * server) an app gets `<app>-<project>.apps.example.uz` over HTTPS. Without
  * one, a server with a public IPv4 address still gives every app a working
  * address through sslip.io's wildcard DNS (`<app>-<id>.<ip>.sslip.io`),
- * served over plain HTTP: certificates for a shared public suffix would hit
- * Let's Encrypt rate limits.
+ * served over plain HTTP so the address works the moment the app is up,
+ * with no certificate to wait for. HTTPS can be switched on per domain; the
+ * proxy then asks ZeroSSL first, because all of sslip.io shares one Let's
+ * Encrypt quota.
  *
  * On a developer's own machine (Docker Desktop, OrbStack, Rancher Desktop)
  * the public IP belongs to the router, not to this computer, so apps get

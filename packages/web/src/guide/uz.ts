@@ -36,7 +36,7 @@ export const guide: GuideContent = {
               items: [
                 { title: "Skript hammasini tayyorlaydi", text: "Docker oʻrnatiladi (boʻlmasa), repozitoriya klon qilinib panel image’i yigʻiladi, `ploy-control` konteyneri va Caddy proksi ishga tushadi. Odatda 3–6 daqiqa." },
                 { title: "Panelni oching", text: "`http://<server-ip>:2003` — `TORXPLOY_PORT`da bergan portingiz (bermasangiz `3000`). Birinchi ochilganda administrator hisobini yaratasiz." },
-                { title: "Panel domenini bering", text: "[Sozlamalar → Veb-server](/settings/platform) boʻlimida `deploy.example.uz` kabi domen kiriting (A yozuvi serverga qaragan boʻlsin). Shundan soʻng panel HTTPS orqali ochiladi." },
+                { title: "Panel domenini bering", text: "[Sozlamalar → Veb-server](/settings/platform) boʻlimida `deploy.example.uz` kabi domen kiriting (A yozuvi serverga qaragan boʻlsin). Shundan soʻng panel HTTPS orqali ochiladi. Domeningiz boʻlmasa, shu yerdagi **sslip.io manzilidan foydalanish** havolasini bosing: `<IP>.sslip.io` nomi serverga oʻzi yoʻnaladi, DNS sozlash kerak emas. Saqlagach, maydon ostida DNS va sertifikat holati koʻrinadi. Serverda 80 va 443 portlar ochiq boʻlishi kerak; IP manzil orqali kirish avvalgidek ishlayveradi." },
                 { title: "Ilovalar uchun domen (ixtiyoriy)", text: "Wildcard domen (`*.apps.example.uz`) qoʻshsangiz, har bir yangi ilova avtomatik chiroyli manzil oladi. Boʻlmasa, server IP’si asosida `sslip.io` manzili ishlatiladi." },
               ],
             },

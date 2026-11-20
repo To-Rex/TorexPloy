@@ -359,6 +359,11 @@ export class PasskeyStore {
     return num(this.db.get('SELECT COUNT(*) AS n FROM passkeys WHERE user_id = ?', userId)!.n);
   }
 
+  /** How many passkeys (of every account) are bound to a host: what a change of the panel domain would strand. */
+  countForHost(rpId: string): number {
+    return num(this.db.get('SELECT COUNT(*) AS n FROM passkeys WHERE rp_id = ?', rpId)!.n);
+  }
+
   rename(id: string, name: string): void {
     this.db.run('UPDATE passkeys SET name = ? WHERE id = ?', name, id);
   }

@@ -36,7 +36,7 @@ export const guide: GuideContent = {
               items: [
                 { title: "The script does everything", text: "Installs Docker (if missing), clones the repository and builds the panel image, starts the `ploy-control` container and the Caddy proxy. Usually 3–6 minutes." },
                 { title: "Open the panel", text: "`http://<server-ip>:2003` — the port you gave in `TORXPLOY_PORT` (`3000` without it). The first visit creates the administrator." },
-                { title: "Panel domain", text: "In [Settings → Web server](/settings/platform) enter a domain such as `deploy.example.uz` (its A record must point at the server). The panel then opens over HTTPS." },
+                { title: "Panel domain", text: "In [Settings → Web server](/settings/platform) enter a domain such as `deploy.example.uz` (its A record must point at the server). The panel then opens over HTTPS. Without a domain of your own, click **Use … sslip.io** there: the name `<IP>.sslip.io` points at the server by itself, with no DNS to set up. After saving, the DNS and certificate status shows under the field. Ports 80 and 443 of the server must be open; access by IP address keeps working." },
                 { title: "Apps domain (optional)", text: "Add a wildcard domain (`*.apps.example.uz`) and every new app gets a neat address. Otherwise an `sslip.io` address based on the server IP is used." },
               ],
             },

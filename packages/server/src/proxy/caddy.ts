@@ -7,12 +7,21 @@
  *
  * Layout:
  * - `https` server on :443 — TLS-terminated routes, certificates obtained and
- *   renewed automatically over ACME (HTTP-01 and TLS-ALPN-01).
+ *   renewed automatically over ACME (HTTP-01 and TLS-ALPN-01). Two
+ *   certificate authorities are configured, as Caddy does by default: Let's
+ *   Encrypt, and ZeroSSL when Let's Encrypt cannot issue. For names under a
+ *   wildcard DNS service (sslip.io, nip.io) the order is reversed: all users
+ *   of such a service share one Let's Encrypt quota, which is usually spent.
  * - `http` server on :80 — explicit 308 redirects for HTTPS hosts, plain
  *   routes for hosts that opted out of TLS, and a fallback page.
  * - The admin API listens on the container's own loopback only, so no
  *   application container can reconfigure the proxy.
  */
+
+import { isWildcardDnsHost } from '@ploy/shared';
+
+/** ZeroSSL's ACME directory. Caddy creates the account binding it requires from the email by itself. */
+export const ZEROSSL_ACME = 'https://acme.zerossl.com/v2/DV90';
 
 export interface ProxyRoute {
   host: string;
@@ -185,10 +194,19 @@ export function buildCaddyConfig(input: CaddyConfigInput): Json {
     apps: { http: { servers } },
   };
 
+  // Without an email Caddy keeps its own default (Let's Encrypt alone): ZeroSSL issues only to an account with a contact.
   if (httpsRoutes.length > 0 && input.acmeEmail !== null) {
+    const letsEncrypt = { module: 'acme', email: input.acmeEmail };
+    const zeroSsl = { module: 'acme', ca: ZEROSSL_ACME, email: input.acmeEmail };
+    const shared = httpsHosts.filter(isWildcardDnsHost);
+    const own = httpsHosts.filter((host) => !isWildcardDnsHost(host));
     (config.apps as Json).tls = {
       automation: {
-        policies: [{ subjects: httpsHosts, issuers: [{ module: 'acme', email: input.acmeEmail }] }],
+        policies: [
+          // Issuers are tried in order; the next one takes over when one cannot issue.
+          ...(own.length > 0 ? [{ subjects: own, issuers: [letsEncrypt, zeroSsl] }] : []),
+          ...(shared.length > 0 ? [{ subjects: shared, issuers: [zeroSsl, letsEncrypt] }] : []),
+        ],
       },
     };
   }

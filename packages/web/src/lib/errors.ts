@@ -19,6 +19,7 @@ export function issueText(m: Messages, issue: ValidationIssue): string {
   const v = m.validation;
   if (params.reason === 'duplicate') return v.duplicate;
   if (params.reason === 'domain_required') return v.domainRequired;
+  if (params.reason === 'acme_email_required') return v.acmeEmailRequired;
   if (params.reason === 'ssh_auth') return v.sshPassword;
   if (params.reason === 'ssh_password_disabled') return v.sshPasswordDisabled;
   if (params.reason === 'ssh_key_invalid') return v.sshKey;

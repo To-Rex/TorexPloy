@@ -44,6 +44,7 @@ import type {
   ServiceCatalogEntryDto,
   ServiceCredentialsDto,
   ServiceDto,
+  PanelDomainStatusDto,
   PasskeyListDto,
   SessionDto,
   StorageBucketDto,
@@ -239,6 +240,25 @@ export const useBranches = (installationId: number | null, repository: string | 
   });
 
 export const useSettings = (enabled = true) => useQuery({ queryKey: keys.settings, queryFn: () => api.get<PlatformSettingsDto>('/api/settings'), enabled });
+
+/**
+ * The panel domain, checked live by the server (DNS, then the certificate a
+ * visitor is shown). While a certificate is on its way the answer is asked
+ * for again every ten seconds, for five minutes; the key sits under
+ * `settings`, so saving the settings checks afresh.
+ */
+export const usePanelDomainStatus = (host: string | null) =>
+  useQuery({
+    queryKey: [...keys.settings, 'domain', host] as const,
+    queryFn: () => api.get<PanelDomainStatusDto>('/api/settings/domain'),
+    enabled: host !== null,
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const status = query.state.data;
+      if (status === undefined || query.state.dataUpdateCount > 30) return false;
+      return status.dns?.status === 'ok' && status.tls?.status === 'active' ? false : 10_000;
+    },
+  });
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => api.get<UserDto>('/api/me') });
 export const useTeam = () => useQuery({ queryKey: keys.team, queryFn: () => api.get<TeamDto>('/api/team') });
 export const useMembers = () => useQuery({ queryKey: keys.members, queryFn: () => api.get<MemberDto[]>('/api/team/members') });

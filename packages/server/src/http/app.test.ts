@@ -27,6 +27,7 @@ import {
   type HealthDto,
   type OverviewDto,
   type Page,
+  type PanelDomainStatusDto,
   type PlatformEvent,
   type PlatformSettingsDto,
   type PreviewDto,
@@ -1323,6 +1324,88 @@ test('the instance time zone is a setting: validated, broadcast, in the bootstra
 
     await h.call(h.tokens.instanceAdmin, 'PATCH', '/api/settings', { timezone: 'Europe/Berlin' });
     assert.equal(broadcasts(), 1, 'an unchanged PATCH is not broadcast');
+  } finally {
+    await h.close();
+  }
+});
+
+test('the panel domain can be an sslip.io name: suggested from the public address, needs a certificate email, and is checked live', async () => {
+  const h = await harness();
+  try {
+    const { stores } = h.ctx;
+    const admin = h.tokens.instanceAdmin;
+    const SSLIP = '203-0-113-7.sslip.io';
+
+    // No public address yet: nothing to suggest. A private one would give a name that only looks public.
+    assert.equal((await h.call<PlatformSettingsDto>(admin, 'GET', '/api/settings')).body.suggestedDomain, null);
+    stores.servers.setPublicIp(h.local.id, '192.168.1.20');
+    assert.equal((await h.call<PlatformSettingsDto>(admin, 'GET', '/api/settings')).body.suggestedDomain, null);
+    stores.servers.setPublicIp(h.local.id, '203.0.113.7');
+    const fresh = await h.call<PlatformSettingsDto>(admin, 'GET', '/api/settings');
+    assert.equal(fresh.body.suggestedDomain, SSLIP);
+    assert.equal(fresh.body.domainPasskeys, 0);
+    // On a workstation the public address is the router's: no suggestion.
+    stores.servers.setDockerInfo(h.local.id, { version: '28', apiVersion: '1.47', os: 'Docker Desktop', arch: 'arm64', cpus: 8, memoryBytes: 8 * 1024 ** 3 });
+    assert.equal((await h.call<PlatformSettingsDto>(admin, 'GET', '/api/settings')).body.suggestedDomain, null);
+    stores.servers.setDockerInfo(h.local.id, { version: '28', apiVersion: '1.47', os: 'Ubuntu 24.04', arch: 'x86_64', cpus: 4, memoryBytes: 8 * 1024 ** 3 });
+
+    // Before any domain: the status says so, without touching the network.
+    const calls: { host: string; expected: string | null }[] = [];
+    let answer: Awaited<ReturnType<typeof h.ctx.domains.checkHost>> = { dns: { status: 'ok', records: ['203.0.113.7'] }, tls: { status: 'pending', issuer: null, expiresAt: null, message: 'Waiting for the certificate authority' } };
+    h.ctx.domains.checkHost = async (host, expected) => {
+      calls.push({ host, expected });
+      return answer;
+    };
+    const none = await h.call<PanelDomainStatusDto>(admin, 'GET', '/api/settings/domain');
+    assert.deepEqual([none.body.host, none.body.dns, none.body.tls, none.body.wildcard], [null, null, null, false]);
+    assert.equal(calls.length, 0);
+
+    // A wildcard DNS name needs a certificate email (ZeroSSL issues only to an account with a contact): refused on the email field.
+    const noEmail = await h.call<ApiErrorBody>(admin, 'PATCH', '/api/settings', { platformDomain: SSLIP });
+    assert.equal(noEmail.status, 422);
+    assert.deepEqual(noEmail.body.error.issues?.map((issue) => [issue.path, issue.params?.reason]), [['acmeEmail', 'acme_email_required']]);
+    assert.equal(stores.settings.platform().platformDomain, null, 'nothing was saved');
+    assert.equal((await h.call<ApiErrorBody>(admin, 'PATCH', '/api/settings', { appsDomain: 'apps.203-0-113-7.nip.io' })).status, 422, 'the apps domain follows the same rule');
+    // An ordinary domain still needs no email, as before.
+    assert.equal((await h.call<PlatformSettingsDto>(admin, 'PATCH', '/api/settings', { platformDomain: 'deploy.example.uz' })).status, 200);
+    assert.equal((await h.call<PlatformSettingsDto>(admin, 'PATCH', '/api/settings', { platformDomain: null })).status, 200);
+
+    // Domain and email together: saved, and the proxy serves the panel there over HTTPS with ZeroSSL asked first.
+    const saved = await h.call<PlatformSettingsDto>(admin, 'PATCH', '/api/settings', { platformDomain: SSLIP, acmeEmail: 'ops@acme.uz' });
+    assert.equal(saved.status, 200);
+    assert.deepEqual([saved.body.platformDomain, saved.body.acmeEmail, saved.body.publicUrl], [SSLIP, 'ops@acme.uz', `https://${SSLIP}`]);
+    const proxied = h.ctx.proxy.desiredRoutes(h.local.id).routes.find((route) => route.host === SSLIP);
+    assert.deepEqual([proxied?.https, proxied?.upstreams], [true, [h.ctx.config.controlUpstream]]);
+    // The email cannot be taken away while the name depends on it; unrelated settings still save.
+    const dropped = await h.call<ApiErrorBody>(admin, 'PATCH', '/api/settings', { acmeEmail: null });
+    assert.equal(dropped.status, 422);
+    assert.equal(dropped.body.error.issues?.[0]?.params?.reason, 'acme_email_required');
+    assert.equal((await h.call<PlatformSettingsDto>(admin, 'PATCH', '/api/settings', { imageRetention: 7 })).status, 200);
+
+    // The status is what a visitor would find: asked for this host against this server's address.
+    const waiting = await h.call<PanelDomainStatusDto>(admin, 'GET', '/api/settings/domain');
+    assert.deepEqual(calls, [{ host: SSLIP, expected: '203.0.113.7' }]);
+    assert.deepEqual([waiting.body.host, waiting.body.wildcard, waiting.body.proxyRunning], [SSLIP, true, false]);
+    assert.deepEqual(waiting.body.dns, { status: 'ok', records: ['203.0.113.7'], expected: '203.0.113.7' });
+    assert.equal(waiting.body.tls?.status, 'pending');
+    answer = { dns: { status: 'ok', records: ['203.0.113.7'] }, tls: { status: 'active', issuer: 'ZeroSSL', expiresAt: '2027-02-18T00:00:00.000Z', message: null } };
+    stores.servers.setProxyInfo(h.local.id, { running: true, version: '2.11.1', containerId: 'c1' });
+    const live = await h.call<PanelDomainStatusDto>(admin, 'GET', '/api/settings/domain');
+    assert.deepEqual([live.body.tls?.status, live.body.tls?.issuer, live.body.proxyRunning], ['active', 'ZeroSSL', true]);
+    // A name that does not resolve has no certificate to look at.
+    answer = { dns: { status: 'pending', records: [] }, tls: null };
+    assert.deepEqual([(await h.call<PanelDomainStatusDto>(admin, 'GET', '/api/settings/domain')).body.tls], [null]);
+
+    // Passkeys bound to the panel domain are counted, so a change of domain can say what it strands.
+    const owner = stores.users.getByEmail('owner@acme.uz')!;
+    for (const [credentialId, rpId] of [['one', SSLIP], ['two', SSLIP], ['three', 'other.example.uz']] as const) {
+      stores.passkeys.create({ userId: owner.id, credentialId, publicKey: { algorithm: -7, jwk: {} }, signCount: 0, transports: [], aaguid: null, rpId, backupEligible: false, backedUp: false, name: credentialId });
+    }
+    assert.equal((await h.call<PlatformSettingsDto>(admin, 'GET', '/api/settings')).body.domainPasskeys, 2);
+
+    // Only the instance administrator reads or changes any of this.
+    assert.equal((await h.call(h.tokens.owner, 'GET', '/api/settings/domain')).status, 403);
+    assert.equal((await h.call(h.tokens.owner, 'PATCH', '/api/settings', { platformDomain: null })).status, 403);
   } finally {
     await h.close();
   }

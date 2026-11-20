@@ -31,9 +31,14 @@ export async function checkDns(host: string, expectedIp: string | null): Promise
   return { status: records.includes(expectedIp) ? 'ok' : 'mismatch', records };
 }
 
-export function checkTls(host: string, timeoutMs = 8_000): Promise<{ status: TlsStatus; issuer: string | null; expiresAt: string | null; message: string | null }> {
+/**
+ * A TLS handshake for `host`. `via` connects somewhere else (the proxy
+ * container, by name) while still asking for and verifying `host`: the
+ * certificate judged is the one a visitor of `host` is shown.
+ */
+export function checkTls(host: string, timeoutMs = 8_000, via?: string): Promise<{ status: TlsStatus; issuer: string | null; expiresAt: string | null; message: string | null }> {
   return new Promise((resolve) => {
-    const socket = connect({ host, port: 443, servername: host, rejectUnauthorized: false, timeout: timeoutMs, ALPNProtocols: ['http/1.1'] });
+    const socket = connect({ host: via ?? host, port: 443, servername: host, rejectUnauthorized: false, timeout: timeoutMs, ALPNProtocols: ['http/1.1'] });
     const done = (result: { status: TlsStatus; issuer: string | null; expiresAt: string | null; message: string | null }): void => {
       socket.destroy();
       resolve(result);
@@ -105,6 +110,30 @@ export class DomainChecker {
     }
     emit(this.ctx, domain.teamId, { type: 'domain.updated', id: domain.id, applicationId: domain.applicationId, serviceId: domain.serviceId });
     return stores.domains.get(domain.id);
+  }
+
+  /**
+   * The same two checks for a host that is not a row in `domains` (the panel
+   * domain): where it resolves, and, when it resolves, what certificate a
+   * visitor is shown. A method rather than a bare function so tests can
+   * answer in its place without touching the network.
+   */
+  async checkHost(
+    host: string,
+    expectedIp: string | null,
+    options: { tlsVia?: string; probes?: { dns: typeof checkDns; tls: typeof checkTls } } = {},
+  ): Promise<{ dns: Awaited<ReturnType<typeof checkDns>>; tls: Awaited<ReturnType<typeof checkTls>> | null }> {
+    const probes = options.probes ?? { dns: checkDns, tls: checkTls };
+    const dns = await probes.dns(host, expectedIp);
+    if (dns.status === 'pending' || dns.status === 'error') return { dns, tls: null };
+    let tls = await probes.tls(host, 5_000);
+    // No certificate seen at all: on many hosts a server cannot reach its own public address (no hairpin NAT).
+    // The proxy on the platform network serves the very same certificate, so it is asked directly.
+    if (tls.status === 'pending' && tls.issuer === null && options.tlsVia !== undefined) {
+      const inner = await probes.tls(host, 4_000, options.tlsVia);
+      if (inner.issuer !== null) tls = inner;
+    }
+    return { dns, tls };
   }
 
   /** After a domain is added or a deployment goes live, certificates take a minute; check a few times. */

@@ -160,6 +160,23 @@ faqat yo'naltirish (308, yo'l va so'rov saqlanadi). Bitta host bir nechta yo'lga
 jamoaga tegishli bo'ladi. Caddy'da aniqroq prefiks oldin turadi; sertifikat host uchun bitta. Domen ilovaga yoki
 servisga (fayl omborining S3 endpoint'i, 5.9) tegishli — `application_id` yoki `service_id`, ikkalasidan bittasi.
 
+**Sertifikatlar va domeni yoʻq panel.** Proksi ikki sertifikat markazi bilan sozlanadi (Caddy'ning standart juftligi):
+Let's Encrypt, u bera olmasa ZeroSSL. ZeroSSL faqat emaili bor hisobga beradi, shuning uchun bu juftlik "SSL
+sertifikatlari uchun email" kiritilganda yoziladi; email boʻlmasa, avvalgidek Caddy'ning oʻz standarti qoladi.
+
+`sslip.io` va `nip.io` ostidagi nomlar (`<IP>.sslip.io` shu IP'ga yoʻnaladi) uchun tartib teskari: bu xizmatlar Public
+Suffix List'da yoʻq, yaʼni barcha foydalanuvchilari Let's Encrypt'ning haftalik 50 ta sertifikat chegarasini
+boʻlishadi va u odatda tugagan boʻladi. Shu sababli bunday nom panel yoki ilovalar domeni qilib qoʻyilganda sertifikat
+emaili majburiy (`acme_email_required`).
+
+Panel domeni yoʻq boʻlsa, Sozlamalar → Veb-server serverning tashqi IPv4 manzilidan `<IP>.sslip.io` nomini taklif qiladi
+(`suggestedDomain`; xususiy manzil yoki ish stansiyasidagi Docker uchun taklif yoʻq). `GET /api/settings/domain` panel
+domenini jonli tekshiradi: nom qayerga yoʻnalgani va tashrif buyuruvchi koʻradigan sertifikat. Server oʻzining tashqi
+manziliga ulana olmasa (hairpin NAT yoʻq), xuddi shu sertifikat platforma tarmogʻidagi proksi konteyneridan soʻraladi.
+Sahifa sertifikat kelguncha har 10 soniyada qayta soʻraydi. Panelga IP va port orqali kirish har doim ishlaydi, shuning
+uchun sertifikat olinmasa ham hech narsa yopilib qolmaydi. Avtomatik yaratiladigan ilova manzillari (`<ilova>.<IP>.sslip.io`)
+avvalgidek HTTP'da beriladi; HTTPS har bir domenda alohida yoqiladi.
+
 ### 5.4 Shablonlar
 
 Shablon — image manbali oddiy ilova va unga kerakli bazalar. O'rnatishda servislar yaratiladi, ilovaga prefiks

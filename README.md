@@ -55,6 +55,7 @@ Skript kerak boʻlsa Docker’ni oʻrnatadi, control-plane image’ini yigʻadi 
 
 1. `http://<server-ip>:3000` manzilini oching va administrator hisobini yarating.
 2. **Sozlamalar → Veb-server** boʻlimida panel domenini kiriting (masalan, `deploy.example.uz`; A yozuvi serverga yoʻnaltirilgan boʻlishi kerak). Shundan keyin panel HTTPS orqali ochiladi.
+   Domeningiz boʻlmasa, shu sahifadagi **sslip.io manzilidan foydalanish** havolasini bosing: `<IP>.sslip.io` nomi serverga oʻzi yoʻnaladi va sertifikat avtomatik olinadi (80 va 443 portlar ochiq boʻlishi kerak). IP manzil orqali kirish har doim ishlaydi.
 3. Ixtiyoriy: ilovalar uchun wildcard domen (`*.apps.example.uz`) qoʻshing. Har bir yangi ilova avtomatik manzil oladi.
 4. **Sozlamalar → Git integratsiyasi** boʻlimida “GitHub App yaratish” tugmasini bosing. Ilova sizning nomingizdan yaratiladi, webhook avtomatik sozlanadi.
    App ochiq (public) qilib yaratiladi, shuning uchun uni keyin siz boshqaradigan istalgan hisob yoki tashkilotga oʻrnatish mumkin (“Hisob yoki tashkilotga oʻrnatish”). Tashkilot nomidan yaratish uchun “Tashkilot”ni tanlab login’ini kiriting (unda egasi boʻlishingiz kerak). Tashkilot egasi oʻrnatish soʻrovini keyinroq tasdiqlasa, oʻrnatish “Kutilayotgan oʻrnatishlar”da chiqadi va bir bosishda jamoaga biriktiriladi.

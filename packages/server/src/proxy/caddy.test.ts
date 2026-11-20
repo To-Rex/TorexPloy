@@ -70,9 +70,53 @@ test('generated config is deterministic and routes HTTPS hosts through explicit 
   assert.equal(servers.http!.routes[0]!.handle[0]!.status_code, 308);
   assert.equal(servers.http!.routes[1]!.handle[0]!.status_code, 503, 'an app without upstreams gets the unavailable page');
   assert.ok(servers.https, 'https server exists when a host wants TLS');
+  // Let's Encrypt first, ZeroSSL when it cannot issue: the pair Caddy uses by default.
   assert.deepEqual((first.apps as { tls: unknown }).tls, {
-    automation: { policies: [{ subjects: ['b.example.com'], issuers: [{ module: 'acme', email: 'ops@example.com' }] }] },
+    automation: {
+      policies: [
+        {
+          subjects: ['b.example.com'],
+          issuers: [
+            { module: 'acme', email: 'ops@example.com' },
+            { module: 'acme', ca: 'https://acme.zerossl.com/v2/DV90', email: 'ops@example.com' },
+          ],
+        },
+      ],
+    },
   });
+});
+
+test('names under a wildcard DNS service ask ZeroSSL first; without an email the issuers are left to Caddy', () => {
+  type Tls = { automation: { policies: { subjects: string[]; issuers: { module: string; ca?: string; email: string }[] }[] } };
+  const routes = [
+    { host: 'deploy.example.uz', https: true, upstreams: ['ploy-control:3000'], label: 'TorexPloy' },
+    { host: '203-0-113-7.sslip.io', https: true, upstreams: ['ploy-control:3000'], label: 'TorexPloy' },
+    { host: 'shop-ab12cd.203-0-113-7.SSLIP.io', https: true, upstreams: ['shop:3000'], label: 'Shop' },
+    { host: 'api.203-0-113-7.nip.io', https: true, upstreams: ['api:8080'], label: 'API' },
+    // Plain HTTP: no certificate, so not in any policy.
+    { host: 'blog-ef34gh.203-0-113-7.sslip.io', https: false, upstreams: ['blog:2368'], label: 'Blog' },
+    // The suffix must be a suffix: these are ordinary domains.
+    { host: 'sslip.io.example.uz', https: true, upstreams: ['x:1'], label: 'X' },
+    { host: 'notsslip.io', https: true, upstreams: ['y:1'], label: 'Y' },
+  ];
+  const tls = (buildCaddyConfig({ acmeEmail: 'ops@example.uz', routes }).apps as { tls: Tls }).tls;
+  const letsEncrypt = { module: 'acme', email: 'ops@example.uz' };
+  const zeroSsl = { module: 'acme', ca: 'https://acme.zerossl.com/v2/DV90', email: 'ops@example.uz' };
+  assert.deepEqual(tls.automation.policies, [
+    { subjects: ['deploy.example.uz', 'notsslip.io', 'sslip.io.example.uz'], issuers: [letsEncrypt, zeroSsl] },
+    // All of sslip.io shares one Let's Encrypt quota, so the authority without that limit goes first.
+    { subjects: ['203-0-113-7.sslip.io', 'api.203-0-113-7.nip.io', 'shop-ab12cd.203-0-113-7.SSLIP.io'], issuers: [zeroSsl, letsEncrypt] },
+  ]);
+  // Every HTTPS host is in exactly one policy.
+  const subjects = tls.automation.policies.flatMap((policy) => policy.subjects);
+  assert.equal(new Set(subjects).size, subjects.length);
+  assert.equal(subjects.length, routes.filter((route) => route.https).length);
+
+  // Only wildcard names: one policy. No HTTPS at all, or no email: no TLS app, as before.
+  const only = (buildCaddyConfig({ acmeEmail: 'ops@example.uz', routes: [routes[1]!] }).apps as { tls: Tls }).tls;
+  assert.deepEqual(only.automation.policies, [{ subjects: ['203-0-113-7.sslip.io'], issuers: [zeroSsl, letsEncrypt] }]);
+  assert.equal((buildCaddyConfig({ acmeEmail: null, routes }).apps as { tls?: unknown }).tls, undefined);
+  assert.equal((buildCaddyConfig({ acmeEmail: 'ops@example.uz', routes: [routes[4]!] }).apps as { tls?: unknown }).tls, undefined);
 });
 
 test('real Caddy accepts the generated config and routes, balances and hot-reloads traffic', async (t) => {
@@ -105,7 +149,11 @@ test('real Caddy accepts the generated config and routes, balances and hot-reloa
   // The full HTTPS config must also pass Caddy's own validation (no ACME traffic is made by validate).
   const httpsConfig = buildCaddyConfig({
     acmeEmail: 'ops@example.com',
-    routes: [{ host: 'secure.example.com', https: true, upstreams: ['ploy-x-1:8080'], label: 'X' }],
+    routes: [
+      { host: 'secure.example.com', https: true, upstreams: ['ploy-x-1:8080'], label: 'X' },
+      // Both issuer orders (own domain, wildcard DNS name) go through validation.
+      { host: '203-0-113-7.sslip.io', https: true, upstreams: ['ploy-control:3000'], label: 'TorexPloy' },
+    ],
   });
   writeFileSync(join(dir, 'https.json'), JSON.stringify(httpsConfig));
   const validation = spawnSync(binary, ['validate', '--config', join(dir, 'https.json')], { encoding: 'utf8' });

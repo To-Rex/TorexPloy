@@ -176,6 +176,32 @@ export const MOUNT_PATH_RE = /^\/(?:[A-Za-z0-9._-]+\/?)*$/;
 /** Prefix shown before API tokens so leaked ones are recognizable by secret scanners. */
 export const API_TOKEN_PREFIX = 'ploy_';
 
+/**
+ * Wildcard DNS services: `<anything>.<ip-with-dashes>.sslip.io` resolves to
+ * that IP, so a server has a working hostname without owning a domain. They
+ * are not on the Public Suffix List, which means every user of the service
+ * shares one Let's Encrypt quota (50 certificates a week for all of
+ * sslip.io); certificates for these names come from ZeroSSL first.
+ */
+export const WILDCARD_DNS_SUFFIXES = ['sslip.io', 'nip.io'] as const;
+
+/** Whether `host` is a name under one of the wildcard DNS services. */
+export function isWildcardDnsHost(host: string): boolean {
+  const name = host.toLowerCase();
+  return WILDCARD_DNS_SUFFIXES.some((suffix) => name.endsWith(`.${suffix}`));
+}
+
+/** The hostname a wildcard DNS service gives an IPv4 address: `203.0.113.7` → `203-0-113-7.sslip.io`. Null for anything else. */
+export function wildcardDnsHost(ip: string | null | undefined): string | null {
+  if (ip == null || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return null;
+  const parts = ip.split('.').map(Number);
+  if (parts.some((part) => part > 255)) return null;
+  const [a, b] = parts as [number, number, number, number];
+  // Addresses nobody outside can reach would give a name that only looks public.
+  if (a === 10 || a === 127 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127) || a >= 224) return null;
+  return `${parts.join('-')}.${WILDCARD_DNS_SUFFIXES[0]}`;
+}
+
 export const LIMITS = {
   nameMax: 64,
   descriptionMax: 500,

@@ -950,6 +950,22 @@ export interface PlatformSettingsDto {
   allowGithubSignup: boolean;
   publicUrl: string | null;
   publicIp: string | null;
+  /** A hostname that already points at this server (`<ip>.sslip.io`), for a panel without a domain of its own. Null when the server has no public IPv4 address. */
+  suggestedDomain: string | null;
+  /** Passkeys bound to the current panel domain: they stop working if it changes. */
+  domainPasskeys: number;
+}
+
+/** The panel domain as a visitor would find it right now: where it resolves, and what certificate it serves. */
+export interface PanelDomainStatusDto {
+  host: string | null;
+  /** The name is under a wildcard DNS service (sslip.io, nip.io). */
+  wildcard: boolean;
+  dns: { status: DnsStatus; records: string[]; expected: string | null } | null;
+  tls: { status: TlsStatus; issuer: string | null; expiresAt: string | null; message: string | null } | null;
+  /** The proxy that terminates HTTPS is running on this server. */
+  proxyRunning: boolean;
+  checkedAt: string;
 }
 
 export interface OverviewDto {

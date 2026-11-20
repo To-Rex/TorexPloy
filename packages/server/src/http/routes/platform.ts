@@ -3,8 +3,10 @@
  */
 import type { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { platformSettingsSchema, type HealthDto, type PlatformSettingsDto } from '@ploy/shared';
+import { isWildcardDnsHost, platformSettingsSchema, wildcardDnsHost, type HealthDto, type PanelDomainStatusDto, type PlatformSettingsDto } from '@ploy/shared';
 import { emit, type Context } from '../../context.ts';
+import { PROXY_CONTAINER } from '../../docker/naming.ts';
+import { isDesktopEngine } from '../../domains/generate.ts';
 import { publicBaseUrl } from '../../github/app.ts';
 import { constantTimeEqual } from '../../lib/crypto.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
@@ -14,9 +16,19 @@ export function registerPlatformRoutes(app: Hono<Env>, ctx: Context): void {
   const { stores } = ctx;
   const hookLimiter = new RateLimiter(30, 30);
 
+  const domainLimiter = new RateLimiter(20, 20);
+
   const settingsDto = (): PlatformSettingsDto => {
     const settings = stores.settings.platform();
-    return { ...settings, publicUrl: publicBaseUrl(ctx), publicIp: stores.servers.getLocal()?.publicIp ?? null };
+    const local = stores.servers.getLocal();
+    return {
+      ...settings,
+      publicUrl: publicBaseUrl(ctx),
+      publicIp: local?.publicIp ?? null,
+      // On a workstation the public address is the router's: a name made from it would not reach this machine.
+      suggestedDomain: isDesktopEngine(local) ? null : wildcardDnsHost(local?.publicIp),
+      domainPasskeys: settings.platformDomain === null ? 0 : stores.passkeys.countForHost(settings.platformDomain),
+    };
   };
 
   app.get('/api/settings', (c) => {
@@ -31,6 +43,15 @@ export function registerPlatformRoutes(app: Hono<Env>, ctx: Context): void {
     if (input.platformDomain != null && stores.domains.findByHost(input.platformDomain) !== undefined) {
       throw new AppError('domain_taken', 'This domain is already used by an application', { params: { host: input.platformDomain } });
     }
+    // Names under sslip.io or nip.io get their certificate from ZeroSSL, which issues only to an account with an email.
+    // Checked when such a name is being set (or the email removed), so settings saved before this rule keep saving.
+    const next = { ...before, ...input };
+    const touched = input.platformDomain !== undefined || input.appsDomain !== undefined || input.acmeEmail !== undefined;
+    if (touched && next.acmeEmail === null && [next.platformDomain, next.appsDomain].some((host) => host !== null && isWildcardDnsHost(host))) {
+      throw new AppError('validation_failed', 'A certificate email is required for sslip.io and nip.io names', {
+        issues: [{ path: 'acmeEmail', code: 'custom', message: 'Required for sslip.io and nip.io names', params: { reason: 'acme_email_required' } }],
+      });
+    }
     const after = stores.settings.updatePlatform(input);
     audit(ctx, c, 'settings.updated', { type: 'settings', teamId: null }, { fields: Object.keys(input) });
     if (before.platformDomain !== after.platformDomain || before.acmeEmail !== after.acmeEmail) {
@@ -44,6 +65,33 @@ export function registerPlatformRoutes(app: Hono<Env>, ctx: Context): void {
     }
     if (JSON.stringify(before) !== JSON.stringify(after)) emit(ctx, null, { type: 'settings.updated' });
     return c.json(settingsDto());
+  });
+
+  /**
+   * The panel domain, checked for real: where the name resolves and what
+   * certificate is served there. Nothing is stored; the settings page asks
+   * again while a certificate is on its way.
+   */
+  app.get('/api/settings/domain', async (c) => {
+    requireInstanceAdmin(c);
+    limit(domainLimiter, c, 'panel-domain');
+    const { platformDomain } = stores.settings.platform();
+    const local = stores.servers.getLocal();
+    const status: PanelDomainStatusDto = {
+      host: platformDomain,
+      wildcard: platformDomain !== null && isWildcardDnsHost(platformDomain),
+      dns: null,
+      tls: null,
+      proxyRunning: local?.proxyInfo?.running === true,
+      checkedAt: new Date().toISOString(),
+    };
+    if (platformDomain !== null) {
+      const expected = local?.publicIp ?? null;
+      const checked = await ctx.domains.checkHost(platformDomain, expected, { tlsVia: PROXY_CONTAINER });
+      status.dns = { ...checked.dns, expected };
+      status.tls = checked.tls;
+    }
+    return c.json(status);
   });
 
   app.get('/api/health', (c) => {
