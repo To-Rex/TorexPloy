@@ -30,6 +30,7 @@ import {
   SERVICE_TYPES,
   TEAM_ROLES,
   THEMES,
+  STEP_UP_PURPOSES,
 } from './constants.ts';
 import { parseDotenv } from './dotenv.ts';
 
@@ -92,7 +93,8 @@ export const updateProfileSchema = z.object({
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1).max(LIMITS.passwordMax),
+  /** Left out when the account has no password yet, or when its owner has just been confirmed another way. */
+  currentPassword: z.string().max(LIMITS.passwordMax).optional(),
   newPassword: passwordSchema,
 });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
@@ -100,8 +102,11 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export const twoFactorCodeSchema = z.object({ code: z.string().trim().min(6).max(20) });
 export type TwoFactorCodeInput = z.infer<typeof twoFactorCodeSchema>;
 
+/** Starting a confirmation with GitHub: what the owner set out to do, so the return can put them back in front of it. */
+export const stepUpGithubSchema = z.object({ then: z.enum(STEP_UP_PURPOSES).optional() });
+
 export const twoFactorDisableSchema = z.object({
-  /** Empty for accounts that sign in with GitHub only (they have no password to confirm). */
+  /** Empty for accounts without a password, and when the owner has just been confirmed another way. */
   password: z.string().max(LIMITS.passwordMax),
   code: z.string().trim().min(6).max(20),
 });

@@ -460,6 +460,7 @@ Manbasi `upload` boʻlgan ilova repozitoriyasiz, boshqaruv serveridagi zip arxiv
 | Brute-force | IP + email bo'yicha token bucket, audit log |
 | 2FA | TOTP (RFC 6238) + bir martalik recovery kodlar |
 | Passkey | WebAuthn, tashqi kutubxonasiz (`lib/webauthn.ts`): origin, challenge, RP ID, foydalanuvchi tasdigʻi (UV) va imzo tekshiriladi; hisoblagich orqaga qaytsa (klon) kirish rad etiladi. Batafsil: 6.1 |
+| Egasini qayta tasdiqlash | Kirish yoʻlini oʻzgartiradigan amallar (yangi parol, passkey qoʻshish, 2FA'ni oʻchirish) parol soʻraydi. Parol oʻrniga hisobga bogʻlangan GitHub hisobi yoki passkey bilan tasdiqlash mumkin: faqat shu sessiyaga, 10 daqiqaga, faqat xotirada. Batafsil: 6.2 |
 | Sirlar | AES-256-GCM, HKDF bilan ajratilgan sub-key'lar, master key `data/secret.key` (0600) |
 | Webhook | `X-Hub-Signature-256` HMAC, constant-time |
 | PR preview | Fork'dan kelgan PR'lar joylashtirilmaydi (begona kod sirlarni olmaydi); preview o'zgaruvchilari shifrlangan; branch nomi va commit SHA tekshiriladi |
@@ -505,6 +506,43 @@ uchun bu bitta qadamda ikki omil. Parol zaxira yoʻl sifatida qoladi.
 - **Brauzer tomoni** (`web/src/lib/passkey.ts`): javoblar `toJSON()`siz, qoʻlda base64url qilinadi (parol menejeri
   kengaytmalari `navigator.credentials`ni almashtiradi). Login sahifasida tugma va email maydonining avtomatik
   toʻldirishi (conditional mediation) bor; kutib turgan soʻrov challenge eskirmasidan yangilanadi.
+
+### 6.2 Egasini qayta tasdiqlash (step-up)
+
+Kirish yoʻlini oʻzgartiradigan amallar (`POST /api/me/password`, `POST /api/me/passkeys/options`,
+`POST /api/me/2fa/disable`) parol soʻraydi: oʻgʻirlangan sessiyaning oʻzi hisobni egallashga yetmasligi kerak. Parolini
+unutgan, lekin panelga kirib turgan egasi (masalan, GitHub orqali) uchun parol oʻrnini bosadigan tasdiq bor.
+
+- **Darvoza.** `confirmOwner` (`http/stepup.ts`) uchta holatdan birini qaytaradi: sessiyada amaldagi ruxsat boʻlsa uning
+  usuli (`github` yoki `passkey`), aks holda parol tekshiriladi; hisobda parol boʻlmasa soʻraladigan narsa yoʻq (`none`).
+  Parol ham, ruxsat ham boʻlmasa `invalid_credentials`. 2FA'ni oʻchirishda TOTP kodi baribir soʻraladi.
+- **Ruxsat** (`StepUps`): sessiya id'siga bogʻlanadi, 10 daqiqa yashaydi va faqat xotirada turadi (qayta ishga tushish
+  uni unutadi, bu egasiga yana bitta tasdiq turadi). API token sessiya emas, shuning uchun ruxsat ololmaydi. Parol
+  almashgach va chiqishda ruxsat oʻchiriladi; `DELETE /api/me/step-up` uni muddatidan oldin bekor qiladi.
+  `GET /api/me/step-up` holatni va shu hisobda qaysi usullar borligini aytadi (UI havolani shunga qarab koʻrsatadi).
+- **GitHub bilan** (`POST /api/me/step-up/github`, soʻng `GET /api/auth/github/callback`): faqat brauzer sessiyasidan
+  va hisobga GitHub identity bogʻlangan boʻlsa. Javob GitHub'dagi manzil, brauzer oʻsha yerga oʻtadi. OAuth `state`
+  sessiya id'sini va maqsadni olib yuradi. Callback aynan oʻsha sessiyada qaytishi va GitHub profili aynan bogʻlangan
+  identity boʻlishi shart; boshqa GitHub hisobi `mismatch` bilan rad etiladi. Bu yoʻl hech qachon yangi sessiya ochmaydi
+  va hech narsani bogʻlamaydi, faqat ruxsat beradi. Natija
+  `/settings/security?confirm=<ok|mismatch|failed|expired>&then=<maqsad>` manziliga qaytadi: sahifa natijani aytadi,
+  egasi toʻxtagan joyni (passkey qoʻshish yoki 2FA dialogi) qayta ochadi va manzilni tozalaydi.
+- **Oʻgʻirlangan sessiyani egasining oʻzi tasdiqlab bermasligi uchun** ikki shart bor. Birinchisi, tasdiq havola bilan
+  emas, yozuv soʻrovi (POST) bilan boshlanadi: unga CSRF himoyasi (`X-Ploy-Request`, `Origin`) taalluqli, demak egasiga
+  manzil yuborib, uning brauzerida tasdiqni boshlatib boʻlmaydi. Ikkinchisi, tasdiq uni boshlagan brauzerda tugashi
+  shart: boshlagan brauzerga bir martalik qiymat `ploy_confirm` cookie'sida beriladi (`HttpOnly`, `SameSite=Lax`, faqat
+  `/api/auth/github` yoʻlida, 15 daqiqa), `state` esa uning SHA-256'ini eslab qoladi. Sessiyaning oʻzi buni ayta
+  olmaydi: nusxalangan sessiya cookie'si ikki brauzerda bitta sessiya, uni nusxalagan kishi tasdiqni boshlab, GitHub
+  manzilini egasiga yuborishi mumkin edi.
+- **Passkey bilan** (`POST /api/me/step-up/passkey/options`, `POST /api/me/step-up/passkey`): `allowCredentials`
+  hisobning shu domendagi passkey'lari. Javob kirishdagi tekshiruvdan oʻtadi (`checkAssertion`: origin, challenge, UV,
+  imzo, hisoblagich), lekin faqat shu foydalanuvchining passkey'i qabul qilinadi. Chipta turi `confirm`: kirish yoki
+  roʻyxatdan oʻtkazish chiptasi bilan almashtirib boʻlmaydi.
+- **Audit.** `user.identity_confirmed` va `user.identity_confirmation_failed` (sababi bilan); parol shu yoʻl bilan
+  almashsa `user.password_changed` yozuvida `confirmedBy` turadi.
+- **Xavf modeli.** GitHub hisobi yoki passkey egasi baribir panelga toʻliq kira oladi, shuning uchun bu yangi imtiyoz
+  emas. Oʻgʻirlangan sessiya cookie'sining oʻzi esa avvalgidek yetarli emas: unga qoʻshimcha GitHub hisobi yoki
+  qurilmaning oʻzi kerak. Panelga umuman kira olmaydigan egasi uchun serverda `cli.ts reset-password` qoladi.
 
 ## 7. Realtime va observability
 

@@ -24,6 +24,7 @@ import type {
   ServiceStatus,
   ServiceType,
   SourceType,
+  StepUpMethod,
   StoragePermission,
   TeamRole,
   TemplateCategory,
@@ -150,6 +151,21 @@ export interface SessionDto {
   lastUsedAt: string;
 }
 
+/** Whether this session has freshly confirmed its owner, and the ways it could. */
+export interface StepUpDto {
+  /** A confirmation is in force: sensitive changes do not ask for the password. */
+  active: boolean;
+  method: StepUpMethod | null;
+  expiresAt: string | null;
+  /** How this account can confirm itself here besides the password. */
+  methods: { github: boolean; passkey: boolean };
+}
+
+/** Where to send the browser to confirm its owner with GitHub. */
+export interface StepUpStartDto {
+  url: string;
+}
+
 /** Why passkeys cannot be used at the address the panel was opened at, when they cannot. */
 export type PasskeyUnavailableReason =
   /** The panel has no domain: browsers only allow passkeys on an HTTPS domain. */
@@ -204,6 +220,8 @@ export interface PasskeyRequestOptionsDto {
     challenge: string;
     timeout: number;
     userVerification: 'required';
+    /** Present when the account is already known (confirming its owner): only its own passkeys are offered. */
+    allowCredentials?: { type: 'public-key'; id: string; transports?: string[] }[];
   };
 }
 

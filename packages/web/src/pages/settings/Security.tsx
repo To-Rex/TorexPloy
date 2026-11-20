@@ -1,19 +1,23 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { renderSVG } from 'uqr';
 import { Laptop, ShieldCheck, ShieldOff } from 'lucide-react';
 import { changePasswordSchema, type RecoveryCodesDto, type TwoFactorSetupDto } from '@ploy/shared';
 import { CopyButton } from '../../components/Copy.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
+import { useToast } from '../../components/Toast.tsx';
 import { Badge, Button, Field, Input, Skeleton } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
-import { api } from '../../lib/api.ts';
+import { api, ApiError } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useMe, useSessions } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 import { PasskeysSection } from './Passkeys.tsx';
 import { SettingsSection } from './SettingsLayout.tsx';
+import { ConfirmedHint, ConfirmedNote, ForgotPassword, useConfirmedOwner } from './StepUp.tsx';
 
 function describeAgent(agent: string | null): string {
   if (agent === null) return '—';
@@ -38,6 +42,13 @@ export function SecurityPage() {
   const { m, plural } = useI18n();
   const me = useMe();
   const sessions = useSessions();
+  const client = useQueryClient();
+  const toast = useToast();
+  const [params, setParams] = useSearchParams();
+  // The owner proved it is them without the password (GitHub or a passkey): for a few minutes it is not asked for.
+  const { confirmed } = useConfirmedOwner();
+  /** Back from GitHub with "I was adding a passkey": the dialog opens by itself. */
+  const [resumePasskey, setResumePasskey] = useState(false);
   const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '' });
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
   const [setup, setSetup] = useState<TwoFactorSetupDto | null>(null);
@@ -53,9 +64,28 @@ export function SecurityPage() {
     if (setup !== null) setQr(renderSVG(setup.otpauthUrl, { border: 0 }));
   }, [setup]);
 
-  const changePassword = useAction((input: { currentPassword: string; newPassword: string }) => api.post('/api/me/password', input), {
+  // The return from "confirm with GitHub": say how it went, pick up what the owner was doing, tidy the address.
+  useEffect(() => {
+    const result = params.get('confirm');
+    if (result === null) return;
+    const text = (m.stepUp.results as Record<string, string>)[result];
+    if (result === 'ok') {
+      toast.success(m.stepUp.results.ok);
+      void client.invalidateQueries({ queryKey: keys.stepUp });
+      if (params.get('then') === 'passkey') setResumePasskey(true);
+      if (params.get('then') === '2fa') setDisabling(true);
+    } else if (text !== undefined) {
+      toast.failure(text);
+    }
+    const next = new URLSearchParams(params);
+    next.delete('confirm');
+    next.delete('then');
+    setParams(next, { replace: true });
+  }, [params, setParams, client, toast, m]);
+
+  const changePassword = useAction((input: { currentPassword?: string | undefined; newPassword: string }) => api.post('/api/me/password', input), {
     success: m.security.passwordChanged,
-    invalidate: [keys.sessions],
+    invalidate: [keys.sessions, keys.me, keys.stepUp],
     inlineValidation: true,
     onSuccess: () => setPasswords({ currentPassword: '', newPassword: '' }),
   });
@@ -91,6 +121,8 @@ export function SecurityPage() {
   });
 
   if (me.data === undefined) return <Skeleton height={300} />;
+  // The current password is the confirmation, unless there is none to ask for or the owner has just confirmed another way.
+  const askCurrent = me.data.hasPassword && !confirmed;
   return (
     <>
       <SettingsSection title={m.security.password} hint={m.security.passwordHint}>
@@ -99,33 +131,46 @@ export function SecurityPage() {
           noValidate
           onSubmit={(event) => {
             event.preventDefault();
-            const result = validate(m, changePasswordSchema, passwords);
-            if (result.errors !== null) {
-              setPasswordErrors(result.errors);
+            const result = validate(m, changePasswordSchema, askCurrent ? passwords : { newPassword: passwords.newPassword });
+            const errors = { ...(result.errors ?? {}), ...(askCurrent && passwords.currentPassword.length === 0 ? { currentPassword: m.security.currentPasswordRequired } : {}) };
+            if (result.errors !== null || Object.keys(errors).length > 0) {
+              setPasswordErrors(errors);
               return;
             }
             setPasswordErrors({});
-            changePassword.mutate(result.data, { onError: (error) => setPasswordErrors(fieldErrors(m, error)) });
+            changePassword.mutate(result.data, {
+              onError: (error) => {
+                const fields = fieldErrors(m, error);
+                // A wrong current password belongs to its field, not to a toast alone.
+                setPasswordErrors(error instanceof ApiError && error.code === 'invalid_credentials' ? { ...fields, currentPassword: m.passkeys.wrongPassword } : fields);
+              },
+            });
           }}
         >
           <input type="text" autoComplete="username" value={me.data.email} readOnly hidden />
-          {me.data.hasPassword && (
-            <Field label={m.security.currentPassword} error={passwordErrors.currentPassword}>
-              <Input type="password" autoComplete="current-password" value={passwords.currentPassword} onChange={(event) => setPasswords({ ...passwords, currentPassword: event.target.value })} />
-            </Field>
+          <ConfirmedNote />
+          {askCurrent && (
+            <>
+              <Field label={m.security.currentPassword} error={passwordErrors.currentPassword}>
+                <Input type="password" autoComplete="current-password" value={passwords.currentPassword} onChange={(event) => setPasswords({ ...passwords, currentPassword: event.target.value })} />
+              </Field>
+              <div style={{ marginTop: -8 }}>
+                <ForgotPassword purpose="password" />
+              </div>
+            </>
           )}
           <Field label={m.security.newPassword} hint={m.setup.passwordHint} error={passwordErrors.newPassword}>
             <Input type="password" autoComplete="new-password" value={passwords.newPassword} onChange={(event) => setPasswords({ ...passwords, newPassword: event.target.value })} />
           </Field>
           <div>
-            <Button type="submit" busy={changePassword.isPending}>
-              {m.security.changePassword}
+            <Button type="submit" variant={confirmed ? 'primary' : 'secondary'} busy={changePassword.isPending}>
+              {askCurrent ? m.security.changePassword : m.security.setNewPassword}
             </Button>
           </div>
         </form>
       </SettingsSection>
 
-      <PasskeysSection me={me.data} />
+      <PasskeysSection me={me.data} confirmed={confirmed} resume={resumePasskey} onResumed={() => setResumePasskey(false)} />
 
       <SettingsSection title={m.security.twoFactor} hint={m.security.twoFactorHint}>
         <div className="row">
@@ -249,10 +294,17 @@ export function SecurityPage() {
         }
       >
         <div className="stack">
-          {me.data.hasPassword && (
-            <Field label={m.security.currentPassword}>
-              <Input type="password" autoComplete="current-password" value={disableForm.password} onChange={(event) => setDisableForm({ ...disableForm, password: event.target.value })} />
-            </Field>
+          {askCurrent ? (
+            <>
+              <Field label={m.security.currentPassword}>
+                <Input type="password" autoComplete="current-password" value={disableForm.password} onChange={(event) => setDisableForm({ ...disableForm, password: event.target.value })} />
+              </Field>
+              <div style={{ marginTop: -8 }}>
+                <ForgotPassword purpose="2fa" />
+              </div>
+            </>
+          ) : (
+            confirmed && <ConfirmedHint />
           )}
           <Field label={m.security.enterCode}>
             <Input value={disableForm.code} onChange={(event) => setDisableForm({ ...disableForm, code: event.target.value.replace(/\D/g, '').slice(0, 6) })} inputMode="numeric" autoComplete="one-time-code" />

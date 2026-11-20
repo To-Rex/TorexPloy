@@ -1384,6 +1384,8 @@ export const en: Messages = {
     currentPassword: 'Current password',
     newPassword: 'New password',
     changePassword: 'Change password',
+    setNewPassword: 'Set a new password',
+    currentPasswordRequired: 'Enter the current password',
     passwordChanged: 'Password changed',
     twoFactor: 'Two-factor verification',
     twoFactorHint: 'Signing in asks for a code from an authenticator app in addition to the password.',
@@ -1409,6 +1411,35 @@ export const en: Messages = {
     revoke: 'Sign out',
     revokeOthers: 'Sign out all other sessions',
     revoked: { one: '{count} session signed out', other: '{count} sessions signed out' },
+  },
+
+  stepUp: {
+    forgot: 'Forgot your password?',
+    title: 'Confirm it is you',
+    text: 'Prove it another way instead of the password. For 10 minutes after that the password is not asked for: you can set a new one or add a passkey.',
+    withGithub: 'Confirm with GitHub',
+    withGithubHint: 'Through the GitHub account linked to yours. You go to GitHub and come back here.',
+    withGithubAs: 'Linked account: {login}',
+    withPasskey: 'Confirm with a passkey',
+    withPasskeyHint: 'A fingerprint, your face or the device PIN.',
+    confirmedBy: {
+      github: 'You confirmed it is you with GitHub.',
+      passkey: 'You confirmed it is you with a passkey.',
+    },
+    remaining: {
+      one: 'The password is not asked for during the next {count} minute.',
+      other: 'The password is not asked for during the next {count} minutes.',
+    },
+    lessThanMinute: 'Less than a minute left.',
+    giveUp: 'Give up the confirmation',
+    confirmedShort: 'You are confirmed; the password is not asked for.',
+    results: {
+      ok: 'Confirmed: it is you',
+      mismatch: 'That GitHub account is not linked to yours. Try with the linked one.',
+      failed: 'Confirming with GitHub did not work. Try again.',
+      expired: 'The confirmation link is stale or was opened in another browser. Start again.',
+      unavailable: 'Confirming with GitHub is not available for this account.',
+    },
   },
 
   passkeys: {
@@ -1635,6 +1666,8 @@ export const en: Messages = {
       'user.sessions_revoked': 'signed out other sessions',
       'user.passkey_added': 'added a passkey',
       'user.passkey_removed': 'removed a passkey',
+      'user.identity_confirmed': 'confirmed their identity',
+      'user.identity_confirmation_failed': 'failed to confirm their identity',
       'team.created': 'created a team',
       'team.renamed': 'renamed the team',
       'team.member_invited': 'invited a member',

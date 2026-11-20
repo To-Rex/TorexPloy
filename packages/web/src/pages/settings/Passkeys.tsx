@@ -4,7 +4,7 @@
  * removing. When passkeys cannot exist at the address the panel is open at
  * — no HTTPS domain, or another hostname — the card says why and where to go.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Cloud, ExternalLink, Fingerprint, LoaderCircle, Pencil, Plus, Smartphone, Trash2 } from 'lucide-react';
@@ -14,29 +14,22 @@ import { RelativeTime } from '../../components/Time.tsx';
 import { useToast } from '../../components/Toast.tsx';
 import { Badge, Button, Callout, Field, Input, Skeleton } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
-import type { Messages } from '../../i18n/uz.ts';
 import { api, ApiError } from '../../lib/api.ts';
-import { errorText } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
-import { createPasskey, PasskeyError, passkeysSupported } from '../../lib/passkey.ts';
+import { createPasskey, passkeyErrorText, passkeysSupported } from '../../lib/passkey.ts';
 import { keys, usePasskeys } from '../../lib/queries.ts';
 import { SettingsSection } from './SettingsLayout.tsx';
-
-/** What to tell someone when a passkey step fails: the browser's side, the server's reason, or the general text. */
-export function passkeyErrorText(m: Messages, error: unknown): string {
-  if (error instanceof PasskeyError) return m.passkeys.browser[error.kind];
-  if (error instanceof ApiError) {
-    const reason = error.params.reason;
-    const known = (m.passkeys.errors as Record<string, string>)[typeof reason === 'string' ? reason : ''];
-    if (known !== undefined) return known;
-  }
-  return errorText(m, error);
-}
+import { ConfirmedHint, ForgotPassword } from './StepUp.tsx';
 
 type AddStep = { step: 'password'; error: string | null } | { step: 'waiting' } | { step: 'name'; passkey: PasskeyDto };
 
-/** Add a passkey: confirm the password, let the device make the key, then give it a name. */
-function AddPasskeyDialog({ open, onClose, me }: { open: boolean; onClose: () => void; me: UserDto }) {
+/**
+ * Add a passkey: confirm the password, let the device make the key, then
+ * give it a name. The password is skipped when the account has none, or
+ * when its owner has just confirmed another way (`confirmed`); a forgotten
+ * password can be got around from here.
+ */
+function AddPasskeyDialog({ open, onClose, me, confirmed }: { open: boolean; onClose: () => void; me: UserDto; confirmed: boolean }) {
   const { m } = useI18n();
   const p = m.passkeys;
   const client = useQueryClient();
@@ -54,13 +47,17 @@ function AddPasskeyDialog({ open, onClose, me }: { open: boolean; onClose: () =>
     }
   }
 
+  const askPassword = me.hasPassword && !confirmed;
+
   const create = async () => {
     setState({ step: 'waiting' });
     try {
-      const options = await api.post<PasskeyCreationOptionsDto>('/api/me/passkeys/options', me.hasPassword ? { password } : {});
+      const options = await api.post<PasskeyCreationOptionsDto>('/api/me/passkeys/options', askPassword ? { password } : {});
       const credential = await createPasskey(options.publicKey);
       const passkey = await api.post<PasskeyDto>('/api/me/passkeys', { ticket: options.ticket, credential });
       void client.invalidateQueries({ queryKey: keys.passkeys });
+      // A passkey is itself a way to confirm the owner from now on.
+      void client.invalidateQueries({ queryKey: keys.stepUp });
       setPassword('');
       setName(passkey.name);
       setState({ step: 'name', passkey });
@@ -125,17 +122,26 @@ function AddPasskeyDialog({ open, onClose, me }: { open: boolean; onClose: () =>
           <Button onClick={onClose} disabled={waiting}>
             {m.common.cancel}
           </Button>
-          <Button type="submit" variant="primary" busy={waiting} disabled={me.hasPassword && password.length === 0}>
+          <Button type="submit" variant="primary" busy={waiting} disabled={askPassword && password.length === 0}>
             {p.continue}
           </Button>
         </>
       }
     >
       <div className="stack">
-        {me.hasPassword && (
-          <Field label={p.confirmPassword} hint={p.confirmPasswordHint}>
-            <Input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={waiting} data-autofocus />
-          </Field>
+        {askPassword ? (
+          <>
+            <Field label={p.confirmPassword} hint={p.confirmPasswordHint}>
+              <Input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={waiting} data-autofocus />
+            </Field>
+            {!waiting && (
+              <div style={{ marginTop: -8 }}>
+                <ForgotPassword purpose="passkey" />
+              </div>
+            )}
+          </>
+        ) : (
+          confirmed && <ConfirmedHint />
         )}
         {waiting && (
           <p className="row muted" role="status">
@@ -187,7 +193,7 @@ function RenameDialog({ passkey, onClose }: { passkey: PasskeyDto | null; onClos
   );
 }
 
-export function PasskeysSection({ me }: { me: UserDto }) {
+export function PasskeysSection({ me, confirmed = false, resume = false, onResumed }: { me: UserDto; confirmed?: boolean; /** Open the add dialog as soon as it can be: the owner came back from confirming with GitHub to do exactly that. */ resume?: boolean; onResumed?: () => void }) {
   const { m, t } = useI18n();
   const p = m.passkeys;
   const confirm = useConfirm();
@@ -201,6 +207,12 @@ export function PasskeysSection({ me }: { me: UserDto }) {
   const browser = passkeysSupported();
   const full = data !== undefined && data.items.length >= data.limit;
   const canAdd = data !== undefined && data.available && browser && !full;
+
+  useEffect(() => {
+    if (!resume || data === undefined) return;
+    if (canAdd) setAdding(true);
+    onResumed?.();
+  }, [resume, data, canAdd, onResumed]);
 
   return (
     <SettingsSection
@@ -309,7 +321,7 @@ export function PasskeysSection({ me }: { me: UserDto }) {
           )}
         </>
       )}
-      <AddPasskeyDialog open={adding} onClose={() => setAdding(false)} me={me} />
+      <AddPasskeyDialog open={adding} onClose={() => setAdding(false)} me={me} confirmed={confirmed} />
       <RenameDialog passkey={renaming} onClose={() => setRenaming(null)} />
     </SettingsSection>
   );

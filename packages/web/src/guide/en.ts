@@ -375,6 +375,7 @@ export const guide: GuideContent = {
               items: [
                 "**Passkeys** — Settings → Security → **Add a passkey**: sign in with a fingerprint, your face or the device PIN, with no password and no code. The sign-in page gains a **Sign in with a passkey** button, and passkeys also appear in the email field's suggestions. A passkey works only on the panel's HTTPS domain (not on an IP address) and is bound to that domain: if the domain changes, passkeys have to be added again. The password stays as the fallback.",
                 "**2FA** — Settings → Security: an authenticator app (TOTP) and backup codes.",
+                "**Forgotten password** — while you are signed in (through GitHub or a passkey, say), open Settings → Security, click **Forgot your password?** under the password field and confirm it is you with the linked GitHub account or a passkey. For the next 10 minutes the current password is not asked for: set a new one, add a passkey or turn 2FA off. If you cannot get into the panel at all, the server has a `reset-password` command (see the README).",
                 "**API tokens** — [Settings → API tokens](/settings/tokens): for CI and scripts; each token belongs to a team and can expire.",
                 "**Deploy hook** — at the bottom of Application → Deployments: a secret URL; a `POST` to it starts a deployment (from GitLab CI, say). The link can be rotated at any time.",
                 "**Audit log** — [who did what, and when](/settings/audit): sign-ins, changes, password views.",

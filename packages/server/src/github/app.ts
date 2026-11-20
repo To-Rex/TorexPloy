@@ -12,7 +12,7 @@
  * - "Sign in with GitHub" via the app's OAuth credentials.
  */
 import { createPrivateKey, randomBytes, sign } from 'node:crypto';
-import type { GithubRepositoryDto } from '@ploy/shared';
+import type { GithubRepositoryDto, StepUpPurpose } from '@ploy/shared';
 import type { Context } from '../context.ts';
 import { constantTimeEqual, hmac } from '../lib/crypto.ts';
 import { AppError, errorMessage } from '../lib/errors.ts';
@@ -40,12 +40,18 @@ export interface GithubCredentials {
 }
 
 interface PendingState {
-  kind: 'manifest' | 'install' | 'login' | 'link';
+  kind: 'manifest' | 'install' | 'login' | 'link' | 'confirm';
   teamId: string | null;
   userId: string | null;
   expiresAt: number;
   /** Origin the flow started from (manifest flow). */
   baseUrl?: string;
+  /** Confirming an owner: the session that asked, which is the only one the answer may lift. */
+  sessionId?: string;
+  /** Confirming an owner: what they set out to do, to return them to it. */
+  purpose?: StepUpPurpose;
+  /** Confirming an owner: SHA-256 of the one-time value held, in a cookie, by the browser that began. */
+  browser?: string;
 }
 
 const STATE_TTL_MS = 15 * 60_000;
@@ -388,8 +394,10 @@ export class GithubApp {
 
   // ------------------------------------------------------------------ OAuth
 
-  oauthUrl(state: string, redirectUri: string): string {
+  /** `login` suggests which GitHub account to use: the one linked to the panel account, when confirming its owner. */
+  oauthUrl(state: string, redirectUri: string, login?: string | null): string {
     const params = new URLSearchParams({ client_id: this.requireCredentials().clientId, redirect_uri: redirectUri, state, allow_signup: 'false' });
+    if (login != null && login.length > 0) params.set('login', login);
     return `https://github.com/login/oauth/authorize?${params.toString()}`;
   }
 

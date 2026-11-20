@@ -12,7 +12,7 @@ Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy 
 - **Servislar:** PostgreSQL, MySQL, MariaDB, MongoDB, Redis, RabbitMQ, MinIO, ClickHouse. Ilovaga ulash, zaxira nusxa va tiklash.
 - **Fayl ombori:** S3-mos obyekt ombori (SeaweedFS) bir bosishda: bucket’lar va fayl brauzeri, vaqtinchalik (presigned) havolalar, cheklangan kirish kalitlari, ochiq bucket’lar, domen orqali HTTPS bilan tashqi kirish; boshqa servislarning zaxira nusxalari shu omborga yoziladi.
 - **Kuzatuv:** real vaqtdagi build va runtime loglar (qidiruv, daraja boʻyicha filtr, replika va vaqt oraligʻi tanlovi, pauza, nusxalash, yuklab olish, toʻliq ekran), CPU/RAM/disk/tarmoq metrikalari, audit jurnali.
-- **Jamoa:** rollar (egasi/admin/dasturchi/kuzatuvchi), taklifnomalar, passkey (barmoq izi, yuz yoki PIN bilan parolsiz kirish), 2FA (TOTP), API tokenlar, GitHub orqali kirish.
+- **Jamoa:** rollar (egasi/admin/dasturchi/kuzatuvchi), taklifnomalar, passkey (barmoq izi, yuz yoki PIN bilan parolsiz kirish), 2FA (TOTP), unutilgan parolni GitHub yoki passkey orqali tasdiqlab almashtirish, API tokenlar, GitHub orqali kirish.
 - **Bir nechta server:** SSH orqali qoʻshiladi. Masofaviy serverga faqat Docker kerak, agent oʻrnatilmaydi.
 - **PR preview:** har bir pull request alohida manzilda vaqtinchalik nusxa sifatida ochiladi (`pr-7-web-…`): yangi push’da qayta joylashtiriladi, PR yopilganda oʻchiriladi, manzil PR’ga izoh sifatida yoziladi. Ota ilovaning sozlamalari, oʻzgaruvchilari va bazalari ishlatiladi, ustidan alohida preview oʻzgaruvchilari qoʻyiladi. Fork’dan kelgan PR’lar sirlar xavfsizligi uchun joylashtirilmaydi.
 - **Docker Compose:** bir nechta servisdan iborat steklar, fayl panelda yoki repozitoriyada; har bir servisga domen, log va terminal.
@@ -92,6 +92,8 @@ docker exec ploy-control node packages/server/src/cli.ts backup /var/lib/torexpl
 `secret.key` faylisiz saqlangan sirlar (env oʻzgaruvchilar, SSH kalitlar, parollar) ochilmaydi. Uni baza bilan birga saqlang.
 
 ### Tiklash buyruqlari
+
+Parol esdan chiqqan, lekin panelga GitHub yoki passkey bilan kira olsangiz, buyruq kerak emas: Sozlamalar → Xavfsizlik sahifasida **Parolni unutdingizmi?** havolasini bosib, oʻzingizni bogʻlangan GitHub hisobi yoki passkey bilan tasdiqlang va yangi parol oʻrnating. Panelga umuman kira olmasangiz:
 
 ```sh
 docker exec ploy-control node packages/server/src/cli.ts reset-password admin@example.uz

@@ -1489,6 +1489,11 @@
   }
   .choice:hover {
     border-color: var(--line-strong);
+    text-decoration: none;
+  }
+  .choice:disabled {
+    opacity: 0.6;
+    cursor: progress;
   }
   .choice[aria-pressed='true'],
   .choice[aria-checked='true'] {

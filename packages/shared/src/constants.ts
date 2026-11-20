@@ -176,6 +176,14 @@ export const MOUNT_PATH_RE = /^\/(?:[A-Za-z0-9._-]+\/?)*$/;
 /** Prefix shown before API tokens so leaked ones are recognizable by secret scanners. */
 export const API_TOKEN_PREFIX = 'ploy_';
 
+/** Ways a signed-in session can prove its owner again without the password ("step-up"). */
+export const STEP_UP_METHODS = ['github', 'passkey'] as const;
+export type StepUpMethod = (typeof STEP_UP_METHODS)[number];
+
+/** Where the dashboard returns to after confirming with GitHub: the thing the owner set out to do. */
+export const STEP_UP_PURPOSES = ['password', 'passkey', '2fa'] as const;
+export type StepUpPurpose = (typeof STEP_UP_PURPOSES)[number];
+
 /**
  * Wildcard DNS services: `<anything>.<ip-with-dashes>.sslip.io` resolves to
  * that IP, so a server has a working hostname without owning a domain. They

@@ -1398,6 +1398,8 @@ export const uz = {
     currentPassword: 'Joriy parol',
     newPassword: 'Yangi parol',
     changePassword: 'Parolni oʻzgartirish',
+    setNewPassword: 'Yangi parol oʻrnatish',
+    currentPasswordRequired: 'Joriy parolni kiriting',
     passwordChanged: 'Parol oʻzgartirildi',
     twoFactor: 'Ikki bosqichli tekshiruv',
     twoFactorHint: 'Kirishda paroldan tashqari autentifikator ilovasidagi kod soʻraladi.',
@@ -1423,6 +1425,35 @@ export const uz = {
     revoke: 'Chiqarish',
     revokeOthers: 'Boshqa barcha sessiyalardan chiqish',
     revoked: { one: '{count} sessiya yopildi', other: '{count} sessiya yopildi' },
+  },
+
+  stepUp: {
+    forgot: 'Parolni unutdingizmi?',
+    title: 'Shaxsingizni tasdiqlang',
+    text: 'Parol oʻrniga boshqa yoʻl bilan oʻzingiz ekaningizni tasdiqlang. Shundan soʻng 10 daqiqa davomida parol soʻralmaydi: yangi parol oʻrnatishingiz yoki passkey qoʻshishingiz mumkin.',
+    withGithub: 'GitHub orqali tasdiqlash',
+    withGithubHint: 'Hisobingizga bogʻlangan GitHub hisobi orqali. GitHub sahifasiga oʻtib, shu yerga qaytasiz.',
+    withGithubAs: 'Bogʻlangan hisob: {login}',
+    withPasskey: 'Passkey bilan tasdiqlash',
+    withPasskeyHint: 'Barmoq izi, yuz yoki qurilma PIN-kodi bilan.',
+    confirmedBy: {
+      github: 'Shaxsingiz GitHub orqali tasdiqlandi.',
+      passkey: 'Shaxsingiz passkey bilan tasdiqlandi.',
+    },
+    remaining: {
+      one: 'Yana {count} daqiqa davomida parol soʻralmaydi.',
+      other: 'Yana {count} daqiqa davomida parol soʻralmaydi.',
+    },
+    lessThanMinute: 'Bir daqiqadan kam vaqt qoldi.',
+    giveUp: 'Tasdiqni bekor qilish',
+    confirmedShort: 'Shaxsingiz tasdiqlangan, parol soʻralmaydi.',
+    results: {
+      ok: 'Shaxsingiz tasdiqlandi',
+      mismatch: 'Bu GitHub hisobi sizning hisobingizga bogʻlanmagan. Bogʻlangan hisob bilan urinib koʻring.',
+      failed: 'GitHub orqali tasdiqlash amalga oshmadi. Qaytadan urinib koʻring.',
+      expired: 'Tasdiqlash havolasi eskirgan yoki boshqa brauzerda ochilgan. Qaytadan boshlang.',
+      unavailable: 'GitHub orqali tasdiqlash bu hisob uchun mavjud emas.',
+    },
   },
 
   passkeys: {
@@ -1649,6 +1680,8 @@ export const uz = {
       'user.sessions_revoked': 'Boshqa sessiyalarni yopdi',
       'user.passkey_added': 'Passkey qoʻshdi',
       'user.passkey_removed': 'Passkey’ni oʻchirdi',
+      'user.identity_confirmed': 'Shaxsini qayta tasdiqladi',
+      'user.identity_confirmation_failed': 'Shaxsni tasdiqlashga muvaffaqiyatsiz urinish',
       'team.created': 'Jamoa yaratdi',
       'team.renamed': 'Jamoa nomini oʻzgartirdi',
       'team.member_invited': 'Aʼzoni taklif qildi',

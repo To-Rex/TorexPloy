@@ -47,6 +47,7 @@ import type {
   PanelDomainStatusDto,
   PasskeyListDto,
   SessionDto,
+  StepUpDto,
   StorageBucketDto,
   StorageKeyDto,
   StorageListingDto,
@@ -90,6 +91,7 @@ export const keys = {
   tokens: ['tokens'] as const,
   sessions: ['sessions'] as const,
   passkeys: ['passkeys'] as const,
+  stepUp: ['step-up'] as const,
   audit: ['audit'] as const,
   notifications: ['notifications'] as const,
   s3: ['s3-destinations'] as const,
@@ -266,6 +268,8 @@ export const useInvitations = (enabled: boolean) => useQuery({ queryKey: keys.in
 export const useTokens = () => useQuery({ queryKey: keys.tokens, queryFn: () => api.get<ApiTokenDto[]>('/api/tokens') });
 export const useSessions = () => useQuery({ queryKey: keys.sessions, queryFn: () => api.get<SessionDto[]>('/api/me/sessions') });
 export const usePasskeys = () => useQuery({ queryKey: keys.passkeys, queryFn: () => api.get<PasskeyListDto>('/api/me/passkeys') });
+/** Whether this session has freshly confirmed its owner (so the password is not asked for), and how it could. */
+export const useStepUp = () => useQuery({ queryKey: keys.stepUp, queryFn: () => api.get<StepUpDto>('/api/me/step-up'), staleTime: 0 });
 export const useNotificationChannels = (enabled = true) => useQuery({ queryKey: keys.notifications, queryFn: () => api.get<NotificationChannelDto[]>('/api/notifications'), enabled });
 export const useS3Destinations = (enabled = true) => useQuery({ queryKey: keys.s3, queryFn: () => api.get<S3DestinationDto[]>('/api/s3-destinations'), enabled });
 /** The running version against the tracked branch; polls fast while an update runs. */

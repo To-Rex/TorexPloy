@@ -3,12 +3,13 @@
  * Signing in with a passkey lives in `passkeys.ts`.
  */
 import type { Hono } from 'hono';
-import { acceptInvitationSchema, loginSchema, setupSchema, twoFactorLoginSchema, type BootstrapDto, type InvitationPreviewDto } from '@ploy/shared';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import { acceptInvitationSchema, loginSchema, setupSchema, stepUpGithubSchema, twoFactorLoginSchema, type BootstrapDto, type InvitationPreviewDto, type StepUpPurpose, type StepUpStartDto } from '@ploy/shared';
 import { availableBuilders } from '../../build/tools.ts';
 import type { Context } from '../../context.ts';
-import { dummyPasswordDigest, generateToken, hashPassword, passwordNeedsRehash, sha256, verifyPassword, verifyTotp } from '../../lib/crypto.ts';
+import { constantTimeEqual, dummyPasswordDigest, generateToken, hashPassword, passwordNeedsRehash, sha256, verifyPassword, verifyTotp } from '../../lib/crypto.ts';
 import { AppError } from '../../lib/errors.ts';
-import { audit, body, clearSessionCookie, limit, RateLimiter, requireAuth, setSessionCookie, type Ctx, type Env } from '../core.ts';
+import { audit, body, clearSessionCookie, isHttps, limit, RateLimiter, requireAuth, setSessionCookie, type Ctx, type Env } from '../core.ts';
 import { teamDto, userDto } from '../dto.ts';
 import { passkeyScope } from './passkeys.ts';
 import { canSeeUpdates } from './updates.ts';
@@ -150,6 +151,7 @@ export function registerAuthRoutes(app: Hono<Env>, ctx: Context): void {
 
   app.post('/api/auth/logout', (c) => {
     const auth = c.get('auth');
+    ctx.stepUps.clear(auth?.sessionId ?? null);
     if (auth?.sessionId) stores.sessions.delete(auth.sessionId);
     clearSessionCookie(c);
     return c.json({ ok: true });
@@ -168,6 +170,50 @@ export function registerAuthRoutes(app: Hono<Env>, ctx: Context): void {
     return c.redirect(ctx.github.oauthUrl(state, oauthRedirect(c)));
   });
 
+  // ----------------------------------- confirming the owner through GitHub
+
+  /** Back to the Security page after a confirmation with GitHub, saying how it went and what the owner was about to do. */
+  const confirmResult = (c: Ctx, result: 'ok' | 'mismatch' | 'failed' | 'expired', purpose: StepUpPurpose | undefined) =>
+    c.redirect(`/settings/security?confirm=${result}${purpose === undefined ? '' : `&then=${purpose}`}`);
+
+  const CONFIRM_COOKIE = 'ploy_confirm';
+  const CONFIRM_COOKIE_PATH = '/api/auth/github';
+  const confirmLimiter = new RateLimiter(10, 10);
+
+  /**
+   * A signed-in owner asks to be confirmed through the GitHub account linked to theirs (see `stepup.ts`). The answer
+   * is the address at GitHub to send the browser to; GitHub brings it back to the callback below.
+   *
+   * Two things keep a stolen session from being confirmed by its real owner:
+   *
+   * - It starts with a write, never a link. A write needs the panel's own page behind it (the CSRF defence), so an
+   *   owner cannot be made to begin a confirmation by following an address someone sent them.
+   * - It must end in the browser that began it. That browser is handed a one-time value in a cookie and the state
+   *   remembers its hash. The session alone would not say so: a copied session cookie is the same session in two
+   *   browsers, and whoever copied it could begin a confirmation and pass GitHub's address to the owner to finish.
+   */
+  app.post('/api/me/step-up/github', async (c) => {
+    limit(confirmLimiter, c, 'step-up');
+    const auth = requireAuth(c);
+    if (auth.sessionId === null) throw new AppError('forbidden', 'Confirming your identity takes a signed-in browser, not an API token', { params: { reason: 'session' } });
+    const input = await body(c, stepUpGithubSchema);
+    if (ctx.github.credentials() === null || !stores.users.hasIdentity(auth.user.id, 'github')) {
+      throw new AppError('conflict', 'No GitHub account is linked to this account', { params: { reason: 'unavailable' } });
+    }
+    const browser = generateToken();
+    setCookie(c, CONFIRM_COOKIE, browser, { httpOnly: true, secure: isHttps(c), sameSite: 'Lax', path: CONFIRM_COOKIE_PATH, maxAge: 15 * 60 });
+    const state = ctx.github.createState({
+      kind: 'confirm',
+      teamId: null,
+      userId: auth.user.id,
+      sessionId: auth.sessionId,
+      browser: sha256(browser),
+      ...(input.then === undefined ? {} : { purpose: input.then }),
+    });
+    const started: StepUpStartDto = { url: ctx.github.oauthUrl(state, oauthRedirect(c), stores.users.getIdentityLogin(auth.user.id, 'github')) };
+    return c.json(started);
+  });
+
   app.get('/api/auth/github/callback', async (c) => {
     const code = c.req.query('code');
     const stateToken = c.req.query('state');
@@ -175,7 +221,32 @@ export function registerAuthRoutes(app: Hono<Env>, ctx: Context): void {
     let mode: 'login' | 'link';
     let linkUserId: string | null;
     try {
-      const state = ctx.github.consumeState(stateToken, ['login', 'link']);
+      const state = ctx.github.consumeState(stateToken, ['login', 'link', 'confirm']);
+      if (state.kind === 'confirm') {
+        const auth = c.get('auth');
+        const { purpose } = state;
+        // What comes back must be the session that asked, in the browser that asked (see the start above).
+        const browser = getCookie(c, CONFIRM_COOKIE);
+        deleteCookie(c, CONFIRM_COOKIE, { path: CONFIRM_COOKIE_PATH, secure: isHttps(c) });
+        const sameBrowser = browser !== undefined && state.browser !== undefined && constantTimeEqual(sha256(browser), state.browser);
+        if (auth === null || auth.sessionId === null || auth.sessionId !== state.sessionId || auth.user.id !== state.userId || !sameBrowser) {
+          return confirmResult(c, 'expired', purpose);
+        }
+        let confirmed: Awaited<ReturnType<typeof ctx.github.oauthUser>>;
+        try {
+          confirmed = await ctx.github.oauthUser(code, oauthRedirect(c));
+        } catch {
+          return confirmResult(c, 'failed', purpose);
+        }
+        // It has to be the GitHub account linked to this panel account, not merely a GitHub account.
+        if (stores.users.findByIdentity('github', confirmed.id)?.id !== auth.user.id) {
+          audit(ctx, c, 'user.identity_confirmation_failed', { type: 'user', id: auth.user.id }, { method: 'github', githubLogin: confirmed.login });
+          return confirmResult(c, 'mismatch', purpose);
+        }
+        ctx.stepUps.grant(auth.sessionId, 'github');
+        audit(ctx, c, 'user.identity_confirmed', { type: 'user', id: auth.user.id }, { method: 'github' });
+        return confirmResult(c, 'ok', purpose);
+      }
       mode = state.kind === 'link' ? 'link' : 'login';
       linkUserId = state.userId;
     } catch {

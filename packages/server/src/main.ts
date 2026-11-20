@@ -11,6 +11,7 @@ import { Reconciler } from './deploy/reconciler.ts';
 import { DomainChecker } from './domains/checker.ts';
 import { GithubApp } from './github/app.ts';
 import { createHttpApp } from './http/app.ts';
+import { StepUps } from './http/stepup.ts';
 import { CronRunner } from './jobs/cron.ts';
 import { Maintenance } from './jobs/maintenance.ts';
 import { Scheduler } from './jobs/scheduler.ts';
@@ -50,7 +51,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   logger.debug('Builders available', { builders: await detectBuilders() });
 
   // Collaborators reference each other through the context, so it is assembled in two steps.
-  const ctx = { config, logger, stores, secrets, bus, connections, proxy, startedAt: Date.now() } as Context;
+  const ctx = { config, logger, stores, secrets, bus, connections, proxy, stepUps: new StepUps(), startedAt: Date.now() } as Context;
   ctx.servers = new ServerManager(ctx);
   ctx.deployer = new Deployer(ctx);
   ctx.compose = new ComposeEngine(ctx);

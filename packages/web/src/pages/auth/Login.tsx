@@ -7,10 +7,9 @@ import { Button, ButtonLink, Callout, Field, GithubMark, Input } from '../../com
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { errorText, fieldErrors } from '../../lib/errors.ts';
-import { getPasskey, passkeyAutofillSupported, PasskeyError, passkeysSupported, type PasskeyAssertion } from '../../lib/passkey.ts';
+import { getPasskey, passkeyAutofillSupported, PasskeyError, passkeyErrorText, passkeysSupported, type PasskeyAssertion } from '../../lib/passkey.ts';
 import { keys, useBootstrap } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
-import { passkeyErrorText } from '../settings/Passkeys.tsx';
 import { AuthLayout } from './AuthLayout.tsx';
 
 /** A challenge lives five minutes on the server; a request waiting behind the autofill is renewed before that. */

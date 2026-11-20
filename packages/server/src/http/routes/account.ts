@@ -17,13 +17,16 @@ import {
   updateProfileSchema,
   updateTeamSchema,
   type SessionDto,
+  type StepUpDto,
 } from '@ploy/shared';
 import type { Context } from '../../context.ts';
-import { generateTotpSecret, hashPassword, sha256, totpUri, verifyPassword, verifyTotp } from '../../lib/crypto.ts';
+import { generateTotpSecret, hashPassword, sha256, totpUri, verifyTotp } from '../../lib/crypto.ts';
 import { AppError, forbidden, notFound } from '../../lib/errors.ts';
 import { randomId } from '../../lib/ids.ts';
 import { audit, body, limit, query, RateLimiter, requestOrigin, requireAuth, requireTeam, type Env } from '../core.ts';
 import { auditDto, invitationDto, memberDto, teamDto, tokenDto, userDto } from '../dto.ts';
+import { confirmOwner } from '../stepup.ts';
+import { passkeyScope } from './passkeys.ts';
 import { publicBaseUrl } from '../../github/app.ts';
 
 function recoveryCodes(): { plain: string[]; hashes: string[] } {
@@ -57,13 +60,40 @@ export function registerAccountRoutes(app: Hono<Env>, ctx: Context): void {
     limit(sensitive, c, 'password');
     const auth = requireAuth(c);
     const input = await body(c, changePasswordSchema);
-    if (auth.user.passwordHash !== null && !(await verifyPassword(input.currentPassword, auth.user.passwordHash))) {
-      throw new AppError('invalid_credentials', 'Current password is incorrect');
-    }
+    // The current password, or a confirmation of the owner made on this session a moment ago (a forgotten password).
+    const confirmedBy = await confirmOwner(ctx, auth, input.currentPassword);
     stores.users.setPasswordHash(auth.user.id, await hashPassword(input.newPassword));
     // Every other session is signed out: a password change is often a response to compromise.
     if (auth.sessionId !== null) stores.sessions.deleteForUser(auth.user.id, auth.sessionId);
-    audit(ctx, c, 'user.password_changed', { type: 'user', id: auth.user.id });
+    // The confirmation has done its job; the next sensitive change can be confirmed with the new password.
+    ctx.stepUps.clear(auth.sessionId);
+    audit(ctx, c, 'user.password_changed', { type: 'user', id: auth.user.id }, confirmedBy === 'password' || confirmedBy === 'none' ? {} : { confirmedBy });
+    return c.json({ ok: true });
+  });
+
+  // ------------------------------------------------- confirming the owner
+
+  /** Whether this session has freshly confirmed its owner, and how it could (see `stepup.ts`). */
+  app.get('/api/me/step-up', (c) => {
+    const auth = requireAuth(c);
+    const grant = ctx.stepUps.active(auth.sessionId);
+    const scope = passkeyScope(ctx, c);
+    const session = auth.sessionId !== null;
+    const status: StepUpDto = {
+      active: grant !== null,
+      method: grant?.method ?? null,
+      expiresAt: grant === null ? null : new Date(grant.until).toISOString(),
+      methods: {
+        github: session && ctx.github.credentials() !== null && stores.users.hasIdentity(auth.user.id, 'github'),
+        passkey: session && scope.available && stores.passkeys.listForUser(auth.user.id).some((passkey) => passkey.rpId === scope.rpId),
+      },
+    };
+    return c.json(status);
+  });
+
+  app.delete('/api/me/step-up', (c) => {
+    const auth = requireAuth(c);
+    ctx.stepUps.clear(auth.sessionId);
     return c.json({ ok: true });
   });
 
@@ -97,9 +127,7 @@ export function registerAccountRoutes(app: Hono<Env>, ctx: Context): void {
     const input = await body(c, twoFactorDisableSchema);
     const user = stores.users.getById(auth.user.id)!;
     if (!user.totpEnabled || user.totpSecret === null) throw new AppError('bad_request', 'Two-factor authentication is not enabled');
-    if (user.passwordHash !== null && !(await verifyPassword(input.password, user.passwordHash))) {
-      throw new AppError('invalid_credentials', 'Password is incorrect');
-    }
+    await confirmOwner(ctx, auth, input.password);
     if (verifyTotp(ctx.secrets.open(user.totpSecret, 'totp'), input.code.replace(/\s/g, ''), user.totpLastCounter) === null) {
       throw new AppError('invalid_two_factor_code', 'The code is incorrect');
     }

@@ -11,6 +11,7 @@ import type { Deployer } from './deploy/deployer.ts';
 import type { Reconciler } from './deploy/reconciler.ts';
 import type { DomainChecker } from './domains/checker.ts';
 import type { GithubApp } from './github/app.ts';
+import type { StepUps } from './http/stepup.ts';
 import type { CronRunner } from './jobs/cron.ts';
 import type { Maintenance } from './jobs/maintenance.ts';
 import type { AppConfig } from './lib/config.ts';
@@ -50,6 +51,8 @@ export interface Context {
   notifier: Notifier;
   previews: PreviewManager;
   updates: UpdateChecker;
+  /** Fresh confirmations of a session's owner (GitHub or a passkey), which stand in for the password for a few minutes. */
+  stepUps: StepUps;
   startedAt: number;
 }
 

@@ -162,6 +162,11 @@ export class UserStore {
     return row === undefined ? undefined : mapUser(row);
   }
 
+  /** Whether an account is linked to an external identity (its login may be unknown, the link is what matters). */
+  hasIdentity(userId: string, provider: 'github'): boolean {
+    return this.db.get('SELECT 1 AS found FROM user_identities WHERE user_id = ? AND provider = ?', userId, provider) !== undefined;
+  }
+
   getIdentityLogin(userId: string, provider: 'github'): string | null {
     return strOrNull(this.db.scalar('SELECT login FROM user_identities WHERE user_id = ? AND provider = ?', userId, provider));
   }

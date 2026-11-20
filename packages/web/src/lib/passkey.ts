@@ -7,6 +7,9 @@
  * objects, and not all of them implement the newer method.
  */
 import type { PasskeyCreationOptionsDto, PasskeyRequestOptionsDto } from '@ploy/shared';
+import type { Messages } from '../i18n/uz.ts';
+import { ApiError } from './api.ts';
+import { errorText } from './errors.ts';
 
 /** What went wrong on the browser's side of a ceremony, in terms the UI can say something about. */
 export type PasskeyFailure = 'cancelled' | 'exists' | 'unsupported' | 'failed';
@@ -20,6 +23,17 @@ export class PasskeyError extends Error {
     this.kind = kind;
     if (cause !== undefined) (this as { cause?: unknown }).cause = cause;
   }
+}
+
+/** What to tell someone when a passkey step fails: the browser's side, the server's reason, or the general text. */
+export function passkeyErrorText(m: Messages, error: unknown): string {
+  if (error instanceof PasskeyError) return m.passkeys.browser[error.kind];
+  if (error instanceof ApiError) {
+    const reason = error.params.reason;
+    const known = (m.passkeys.errors as Record<string, string>)[typeof reason === 'string' ? reason : ''];
+    if (known !== undefined) return known;
+  }
+  return errorText(m, error);
 }
 
 /** WebAuthn exists only in secure contexts (HTTPS, or localhost). */
@@ -113,7 +127,12 @@ export async function getPasskey(options: PasskeyRequestOptionsDto['publicKey'],
   let credential: Credential | null;
   try {
     credential = await navigator.credentials.get({
-      publicKey: { ...options, challenge: decode(options.challenge), allowCredentials: [] },
+      publicKey: {
+        ...options,
+        challenge: decode(options.challenge),
+        // Empty for a sign-in (the passkey says whose it is); the account's own passkeys when confirming a known owner.
+        allowCredentials: (options.allowCredentials ?? []).map((item) => ({ type: item.type, id: decode(item.id), ...(item.transports === undefined ? {} : { transports: item.transports as AuthenticatorTransport[] }) })),
+      },
       ...(extra.autofill === true ? { mediation: 'conditional' as CredentialMediationRequirement } : {}),
       ...(extra.signal === undefined ? {} : { signal: extra.signal }),
     });
