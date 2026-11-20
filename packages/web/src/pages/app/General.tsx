@@ -14,7 +14,7 @@ import { useConfirm } from '../../components/Dialog.tsx';
 import { Card, SaveFooter } from '../../components/Frame.tsx';
 import { Menu, MenuItem } from '../../components/Menu.tsx';
 import { useReasonText } from '../../components/Reason.tsx';
-import { RepoPicker, type RepoChoice } from '../../components/RepoPicker.tsx';
+import { RepoField, type RepoChoice } from '../../components/RepoPicker.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
 import { useToast } from '../../components/Toast.tsx';
 import { UploadDrop, uploadErrorText } from '../../components/UploadDrop.tsx';
@@ -445,9 +445,9 @@ function ProviderCard({ app }: { app: ApplicationDto }) {
       </div>
       {draft.type === 'github' &&
         (github.data === undefined ? (
-          <Skeleton height={120} />
+          <Skeleton height={66} />
         ) : (
-          <RepoPicker installations={github.data.installations} value={draft.repo} onChange={(repo) => setDraft((current) => ({ ...current, repo }))} onConnect={() => undefined} errors={errors} />
+          <RepoField installations={github.data.installations} value={draft.repo} onChange={(repo) => setDraft((current) => ({ ...current, repo }))} onConnect={() => undefined} errors={errors} />
         ))}
       {draft.type === 'git' && (
         <>

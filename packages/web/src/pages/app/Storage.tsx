@@ -32,6 +32,8 @@ export function VolumesCard({ app }: { app: ApplicationDto }) {
 
   return (
     <Card
+      id="adv-volumes"
+      icon={<HardDrive />}
       title={m.storage.title}
       description={m.storage.hint}
       actions={

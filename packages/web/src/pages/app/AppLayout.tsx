@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router';
-import { Container, Ellipsis, ExternalLink, FileCode2, FolderUp, GitBranch, Globe, Pencil, Rocket, Server, SquareTerminal, Trash2 } from 'lucide-react';
+import { Activity, CalendarClock, Container, Ellipsis, ExternalLink, FileCode2, FolderUp, GitBranch, GitPullRequest, Globe, LayoutDashboard, Pencil, Rocket, ScrollText, Server, SlidersHorizontal, SquareTerminal, Trash2, Variable } from 'lucide-react';
 import { updateApplicationSchema, type ApplicationDto } from '@ploy/shared';
 import { Dialog, useConfirm } from '../../components/Dialog.tsx';
 import { AppMark } from '../../components/KindMark.tsx';
@@ -270,17 +270,17 @@ export function AppLayout() {
             <RouteTabs
               label={data?.name ?? ''}
               items={[
-                { to: `${base}/general`, label: m.app.tabs.general },
+                { to: `${base}/general`, label: m.app.tabs.general, icon: <LayoutDashboard aria-hidden="true" /> },
                 // A preview takes its settings from the parent on every deploy: nothing to edit here.
-                ...(preview ? [] : [{ to: `${base}/environment`, label: m.app.tabs.environment }]),
-                ...(data?.kind === 'worker' ? [] : [{ to: `${base}/domains`, label: m.app.tabs.domains }]),
-                ...(data !== undefined && supportsPreviews(data) ? [{ to: `${base}/previews`, label: m.app.tabs.previews }] : []),
-                { to: `${base}/deployments`, label: m.app.tabs.deployments },
-                { to: `${base}/logs`, label: m.app.tabs.logs },
-                { to: `${base}/monitoring`, label: m.app.tabs.monitoring },
+                ...(preview ? [] : [{ to: `${base}/environment`, label: m.app.tabs.environment, icon: <Variable aria-hidden="true" /> }]),
+                ...(data?.kind === 'worker' ? [] : [{ to: `${base}/domains`, label: m.app.tabs.domains, icon: <Globe aria-hidden="true" /> }]),
+                ...(data !== undefined && supportsPreviews(data) ? [{ to: `${base}/previews`, label: m.app.tabs.previews, icon: <GitPullRequest aria-hidden="true" /> }] : []),
+                { to: `${base}/deployments`, label: m.app.tabs.deployments, icon: <Rocket aria-hidden="true" /> },
+                { to: `${base}/logs`, label: m.app.tabs.logs, icon: <ScrollText aria-hidden="true" /> },
+                { to: `${base}/monitoring`, label: m.app.tabs.monitoring, icon: <Activity aria-hidden="true" /> },
                 // Compose stacks declare their own jobs in the file.
-                ...(compose || preview ? [] : [{ to: `${base}/schedules`, label: m.app.tabs.schedules }]),
-                ...(preview ? [] : [{ to: `${base}/advanced`, label: m.app.tabs.advanced }]),
+                ...(compose || preview ? [] : [{ to: `${base}/schedules`, label: m.app.tabs.schedules, icon: <CalendarClock aria-hidden="true" /> }]),
+                ...(preview ? [] : [{ to: `${base}/advanced`, label: m.app.tabs.advanced, icon: <SlidersHorizontal aria-hidden="true" /> }]),
               ]}
             />
           </div>

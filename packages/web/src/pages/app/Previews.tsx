@@ -3,16 +3,17 @@
  * request of the repository gets its own copy of the app on its own
  * address, rebuilt on each push and removed when the pull request closes.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Ellipsis, ExternalLink, GitPullRequest, RotateCcw, ScrollText, Trash2 } from 'lucide-react';
-import { updateApplicationSchema, type ApplicationDto, type PreviewSettingsDto } from '@ploy/shared';
+import { analyzeDotenv, updateApplicationSchema, type ApplicationDto, type PreviewSettingsDto } from '@ploy/shared';
+import { CodeEditor, dotenvMarks, renderDotenvLine } from '../../components/CodeEditor.tsx';
 import { useConfirm } from '../../components/Dialog.tsx';
 import { Card, SaveFooter } from '../../components/Frame.tsx';
 import { Menu, MenuItem, MenuSeparator } from '../../components/Menu.tsx';
 import { Status } from '../../components/Status.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
-import { Button, Callout, Field, Input, Skeleton, SkeletonRows, Switch, Textarea } from '../../components/ui.tsx';
+import { Button, Callout, Field, Input, Skeleton, SkeletonRows, Switch } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
@@ -43,6 +44,8 @@ function SettingsCard({ app, settings }: { app: ApplicationDto; settings: Previe
   useEffect(() => setDraft(draftFrom(settings)), [signature]); // eslint-disable-line react-hooks/exhaustive-deps
   const initial = draftFrom(settings);
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+  const envLines = useMemo(() => analyzeDotenv(draft.env).lines, [draft.env]);
+  const envError = errors.previewEnv ?? errors.previewsEnabled;
   const save = useAction((input: { previewsEnabled: boolean; previewLimit: number; previewEnv: string }) => api.patch(`/api/applications/${app.id}`, input), {
     success: p.saved,
     invalidate: [keys.app(app.id), keys.appPart(app.id, 'preview-settings')],
@@ -65,9 +68,30 @@ function SettingsCard({ app, settings }: { app: ApplicationDto; settings: Previe
           <Input value={draft.limit} onChange={(event) => setDraft({ ...draft, limit: event.target.value.replace(/\D/g, '') })} inputMode="numeric" style={{ maxWidth: 160 }} />
         </Field>
       </div>
-      <Field label={p.env} optional={m.common.optional} hint={p.envHint} error={errors.previewEnv ?? errors.previewsEnabled}>
-        <Textarea mono rows={5} value={draft.env} onChange={(event) => setDraft({ ...draft, env: event.target.value })} placeholder={'APP_ENV=preview\nPAYMENTS_SANDBOX=true'} spellCheck={false} />
-      </Field>
+      <div className="field">
+        <span className="field__label">
+          {p.env}
+          <span className="faint" style={{ fontWeight: 400 }}> ({m.common.optional})</span>
+        </span>
+        <CodeEditor
+          label={p.env}
+          value={draft.env}
+          onChange={(env) => setDraft({ ...draft, env })}
+          minRows={4}
+          maxRows={14}
+          comment="#"
+          placeholder={'APP_ENV=preview\nPAYMENTS_SANDBOX=true'}
+          marks={dotenvMarks(envLines)}
+          renderLine={(line, index) => renderDotenvLine(line, envLines[index], false)}
+        />
+        {envError !== undefined ? (
+          <p className="field__error" role="alert">
+            {envError}
+          </p>
+        ) : (
+          <p className="field__hint">{p.envHint}</p>
+        )}
+      </div>
     </Card>
   );
 }

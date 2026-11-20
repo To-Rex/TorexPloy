@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { Outlet, useNavigate, useOutletContext, useParams } from 'react-router';
-import { Ellipsis, Pencil, Server, SquareTerminal, Trash2 } from 'lucide-react';
+import { Activity, BookOpen, DatabaseBackup, Ellipsis, FolderOpen, Globe, KeyRound, LayoutDashboard, Pencil, ScrollText, Server, SlidersHorizontal, SquareTerminal, Trash2 } from 'lucide-react';
 import { updateServiceSchema, type ServiceDto } from '@ploy/shared';
 import { Dialog, useConfirm } from '../../components/Dialog.tsx';
 import { ServiceMark } from '../../components/KindMark.tsx';
@@ -165,21 +165,21 @@ export function ServiceLayout() {
               items={
                 data?.type === 'files'
                   ? [
-                      { to: `${base}/general`, label: m.fileStore.tabs.general },
-                      { to: `${base}/files`, label: m.fileStore.tabs.files },
-                      { to: `${base}/keys`, label: m.fileStore.tabs.keys },
-                      { to: `${base}/domains`, label: m.fileStore.tabs.domains },
-                      { to: `${base}/docs`, label: m.fileStore.tabs.docs },
-                      { to: `${base}/logs`, label: m.services.tabs.logs },
-                      { to: `${base}/monitoring`, label: m.services.tabs.monitoring },
-                      { to: `${base}/advanced`, label: m.services.tabs.advanced },
+                      { to: `${base}/general`, label: m.fileStore.tabs.general, icon: <LayoutDashboard aria-hidden="true" /> },
+                      { to: `${base}/files`, label: m.fileStore.tabs.files, icon: <FolderOpen aria-hidden="true" /> },
+                      { to: `${base}/keys`, label: m.fileStore.tabs.keys, icon: <KeyRound aria-hidden="true" /> },
+                      { to: `${base}/domains`, label: m.fileStore.tabs.domains, icon: <Globe aria-hidden="true" /> },
+                      { to: `${base}/docs`, label: m.fileStore.tabs.docs, icon: <BookOpen aria-hidden="true" /> },
+                      { to: `${base}/logs`, label: m.services.tabs.logs, icon: <ScrollText aria-hidden="true" /> },
+                      { to: `${base}/monitoring`, label: m.services.tabs.monitoring, icon: <Activity aria-hidden="true" /> },
+                      { to: `${base}/advanced`, label: m.services.tabs.advanced, icon: <SlidersHorizontal aria-hidden="true" /> },
                     ]
                   : [
-                      { to: `${base}/general`, label: m.services.tabs.general },
-                      { to: `${base}/logs`, label: m.services.tabs.logs },
-                      { to: `${base}/monitoring`, label: m.services.tabs.monitoring },
-                      { to: `${base}/backups`, label: m.services.tabs.backups },
-                      { to: `${base}/advanced`, label: m.services.tabs.advanced },
+                      { to: `${base}/general`, label: m.services.tabs.general, icon: <LayoutDashboard aria-hidden="true" /> },
+                      { to: `${base}/logs`, label: m.services.tabs.logs, icon: <ScrollText aria-hidden="true" /> },
+                      { to: `${base}/monitoring`, label: m.services.tabs.monitoring, icon: <Activity aria-hidden="true" /> },
+                      { to: `${base}/backups`, label: m.services.tabs.backups, icon: <DatabaseBackup aria-hidden="true" /> },
+                      { to: `${base}/advanced`, label: m.services.tabs.advanced, icon: <SlidersHorizontal aria-hidden="true" /> },
                     ]
               }
             />

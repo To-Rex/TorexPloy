@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import type { QueryKey } from '@tanstack/react-query';
-import { ArrowRight, CornerDownRight, ExternalLink, Globe, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { ArrowRight, ChevronDown, CornerDownRight, ExternalLink, Globe, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { createDomainSchema, type DomainDto } from '@ploy/shared';
 import { useConfirm, Dialog } from '../../components/Dialog.tsx';
 import { Card } from '../../components/Frame.tsx';
-import { Status } from '../../components/Status.tsx';
+import { dnsTone, Status, tlsTone } from '../../components/Status.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
-import { Badge, Button, ButtonLink, Checkbox, EmptyState, Field, Input, Segmented, Select, SkeletonRows, Switch } from '../../components/ui.tsx';
+import { useToast } from '../../components/Toast.tsx';
+import { Badge, Button, Checkbox, EmptyState, Field, Input, Segmented, Select, SkeletonRows, Switch, type Tone } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
@@ -15,101 +16,147 @@ import { keys, useCompose, useDomains } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 import { useAppContext } from './AppLayout.tsx';
 
-/** One domain with its DNS and certificate state; `invalidate` names what to refresh after a change. */
+const WORST: Record<Tone, number> = { bad: 3, work: 2, idle: 1, info: 1, ok: 0 };
+
+/**
+ * One domain as one line: where it points, whether DNS and the certificate
+ * are in order, the HTTPS switch and what can be done with it. The details
+ * (records, issuer, expiry, how to set DNS up) are behind the arrow, and
+ * open by themselves when something needs doing. `invalidate` names what to
+ * refresh after a change.
+ */
 export function DomainRow({ domain, invalidate }: { domain: DomainDto; invalidate: QueryKey[] }) {
   const { m, t, formatDate } = useI18n();
+  const d = m.domains;
   const confirm = useConfirm();
   const verify = useAction(() => api.post(`/api/domains/${domain.id}/verify`), { invalidate });
   const toggleHttps = useAction((https: boolean) => api.patch(`/api/domains/${domain.id}`, { https }), { invalidate });
-  const remove = useAction(() => api.delete(`/api/domains/${domain.id}`), { success: m.domains.removed, invalidate });
+  const remove = useAction(() => api.delete(`/api/domains/${domain.id}`), { success: d.removed, invalidate });
   const url = `${domain.https ? 'https' : 'http'}://${domain.host}`;
   const needsDns = !domain.isGenerated && domain.dns.status !== 'ok';
   const labels = domain.host.split('.');
   const name = labels.length > 2 ? labels.slice(0, -2).join('.') : '@';
+  const tones: Tone[] = [dnsTone[domain.dns.status], ...(domain.https ? [tlsTone[domain.tls.status]] : [])];
+  const tone = tones.reduce<Tone>((worst, next) => (WORST[next] > WORST[worst] ? next : worst), 'ok');
+  const attention = needsDns || (domain.https && domain.tls.status === 'error');
+  const [open, setOpen] = useState(attention);
+  // Something went wrong since the page opened (a re-check, a change of DNS): show it without being asked.
+  useEffect(() => {
+    if (attention) setOpen(true);
+  }, [attention]);
+  const detailsId = `domain-${domain.id}`;
 
   return (
-    <div className="panel">
-      <div className="panel__head" style={{ flexWrap: 'wrap' }}>
-        <Globe width={17} height={17} className="faint" aria-hidden="true" />
-        <a href={`${url}${domain.path === '/' ? '' : domain.path}`} target="_blank" rel="noreferrer noopener" className="truncate" style={{ fontWeight: 600, color: 'var(--ink)' }}>
-          {domain.host}
-          {domain.path !== '/' && <span className="faint">{domain.path}</span>}
-        </a>
-        {domain.isGenerated && <Badge icon={<Sparkles />}>{m.domains.generated}</Badge>}
-        {domain.redirectTo !== null && (
-          <span className="row faint" style={{ gap: 4, fontSize: 'var(--text-sm)' }}>
-            <ArrowRight width={13} height={13} aria-hidden="true" />
-            {domain.redirectTo.replace(/^https?:\/\//, '')}
-          </span>
-        )}
-        {domain.serviceName !== null && (
-          <Badge>
-            {domain.serviceName}
-            {domain.port === null ? '' : `:${domain.port}`}
-          </Badge>
-        )}
-        {domain.stripPath && <Badge>{m.domains.stripped}</Badge>}
-        <span className="grow" />
-        <ButtonLink href={url} external size="sm" variant="ghost" icon={<ExternalLink />}>
-          {m.domains.open}
-        </ButtonLink>
-        <Button size="sm" variant="ghost" icon={<RefreshCw />} busy={verify.isPending} onClick={() => verify.mutate()}>
-          {m.domains.verify}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          iconOnly
-          icon={<Trash2 />}
-          onClick={async () => {
-            const result = await confirm({ title: m.domains.removeTitle, text: t(m.domains.removeText, { host: domain.host }), confirmLabel: m.common.remove, danger: true });
-            if (result.confirmed) remove.mutate();
-          }}
-        >
-          {m.common.remove}
-        </Button>
-      </div>
-      <div className="panel__body" style={{ display: 'grid', gap: 14 }}>
-        <dl className="kv">
-          <dt>DNS</dt>
-          <dd className="row wrap" style={{ gap: 10 }}>
+    <div className="domain" data-state={tone} data-open={open || undefined}>
+      <div className="domain__row">
+        <span className="domain__mark" aria-hidden="true">
+          {domain.redirectTo !== null ? <CornerDownRight /> : <Globe />}
+        </span>
+        <div className="domain__main">
+          <a className="domain__host" href={`${url}${domain.path === '/' ? '' : domain.path}`} target="_blank" rel="noreferrer noopener" title={d.open}>
+            <span className="truncate">
+              {domain.host}
+              {domain.path !== '/' && <span className="faint">{domain.path}</span>}
+            </span>
+            <ExternalLink aria-hidden="true" />
+          </a>
+          {(domain.isGenerated || domain.redirectTo !== null || domain.serviceName !== null || domain.stripPath) && (
+            <span className="domain__tags">
+              {domain.isGenerated && <Badge icon={<Sparkles />}>{d.generated}</Badge>}
+              {domain.redirectTo !== null && (
+                <span className="domain__redirect">
+                  <ArrowRight aria-hidden="true" />
+                  {domain.redirectTo.replace(/^https?:\/\//, '')}
+                </span>
+              )}
+              {domain.serviceName !== null && (
+                <Badge>
+                  {domain.serviceName}
+                  {domain.port === null ? '' : `:${domain.port}`}
+                </Badge>
+              )}
+              {domain.stripPath && <Badge>{d.stripped}</Badge>}
+            </span>
+          )}
+        </div>
+        <div className="domain__checks">
+          <span className="domain__check">
+            <span className="domain__check-label">DNS</span>
             <Status kind="dns" status={domain.dns.status} />
-            {domain.dns.records.length > 0 && <span className="faint">{t(m.domains.pointsTo, { records: domain.dns.records.join(', ') })}</span>}
-            {domain.dns.status === 'mismatch' && domain.dns.expected !== null && <span className="faint">{t(m.domains.expected, { ip: domain.dns.expected })}</span>}
-          </dd>
-          <dt>{m.domains.certificate}</dt>
-          <dd className="row wrap" style={{ gap: 10 }}>
-            <Status kind="tls" status={domain.tls.status} />
-            {domain.tls.issuer !== null && domain.tls.status === 'active' && <span className="faint">{t(m.domains.issuedBy, { issuer: domain.tls.issuer })}</span>}
-            {domain.tls.expiresAt !== null && domain.tls.status === 'active' && <span className="faint">{t(m.domains.expires, { date: formatDate(domain.tls.expiresAt, { dateStyle: 'medium' }) })}</span>}
-            {domain.tls.message !== null && domain.tls.status !== 'active' && <span className="faint">{domain.tls.message}</span>}
-          </dd>
-          <dt>{m.domains.https}</dt>
-          <dd>
-            <Switch checked={domain.https} onChange={(value) => toggleHttps.mutate(value)} label={domain.https ? m.common.enabled : m.common.disabled} disabled={toggleHttps.isPending} />
-          </dd>
-        </dl>
-        {needsDns && (
-          <div className="stack" style={{ gap: 8 }}>
-            <p className="field__label">{m.domains.dnsTitle}</p>
-            <p className="field__hint">{m.domains.dnsInstruction}</p>
-            <div className="dns-table">
-              <span>{m.domains.type}</span>
-              <span>{m.domains.name}</span>
-              <span>{m.domains.value}</span>
-              <code>A</code>
-              <code>{name}</code>
-              <code>{domain.dns.expected ?? '—'}</code>
-            </div>
-            {domain.dns.status === 'mismatch' && <p className="field__hint">{m.domains.cdnHint}</p>}
+          </span>
+          <span className="domain__check">
+            <span className="domain__check-label">SSL</span>
+            <Status kind="tls" status={domain.https ? domain.tls.status : 'disabled'} />
+          </span>
+        </div>
+        <span className="domain__https">
+          <Switch checked={domain.https} onChange={(value) => toggleHttps.mutate(value)} label={d.https} disabled={toggleHttps.isPending} />
+        </span>
+        <div className="domain__actions">
+          <Button size="sm" variant="ghost" iconOnly icon={<RefreshCw />} busy={verify.isPending} title={d.verify} onClick={() => verify.mutate()}>
+            {d.verify}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            iconOnly
+            icon={<Trash2 />}
+            title={m.common.remove}
+            onClick={async () => {
+              const result = await confirm({ title: d.removeTitle, text: t(d.removeText, { host: domain.host }), confirmLabel: m.common.remove, danger: true });
+              if (result.confirmed) remove.mutate();
+            }}
+          >
+            {m.common.remove}
+          </Button>
+          <Button size="sm" variant="ghost" iconOnly className="domain__toggle" icon={<ChevronDown />} aria-expanded={open} aria-controls={detailsId} title={open ? d.hideDetails : d.showDetails} onClick={() => setOpen((current) => !current)}>
+            {open ? d.hideDetails : d.showDetails}
+          </Button>
+        </div>
+      </div>
+      <div className="domain__wrap" id={detailsId} inert={!open}>
+        <div className="domain__clip">
+          <div className="domain__detail">
+            <dl className="kv">
+              <dt>DNS</dt>
+              <dd className="row wrap" style={{ gap: 10 }}>
+                <Status kind="dns" status={domain.dns.status} />
+                {domain.dns.records.length > 0 && <span className="faint">{t(d.pointsTo, { records: domain.dns.records.join(', ') })}</span>}
+                {domain.dns.status === 'mismatch' && domain.dns.expected !== null && <span className="faint">{t(d.expected, { ip: domain.dns.expected })}</span>}
+              </dd>
+              <dt>{d.certificate}</dt>
+              <dd className="row wrap" style={{ gap: 10 }}>
+                <Status kind="tls" status={domain.tls.status} />
+                {domain.tls.issuer !== null && domain.tls.status === 'active' && <span className="faint">{t(d.issuedBy, { issuer: domain.tls.issuer })}</span>}
+                {domain.tls.expiresAt !== null && domain.tls.status === 'active' && <span className="faint">{t(d.expires, { date: formatDate(domain.tls.expiresAt, { dateStyle: 'medium' }) })}</span>}
+                {domain.tls.message !== null && domain.tls.status !== 'active' && <span className="faint">{domain.tls.message}</span>}
+              </dd>
+              {domain.dns.checkedAt !== null && (
+                <>
+                  <dt>{d.checked}</dt>
+                  <dd className="faint">
+                    <RelativeTime value={domain.dns.checkedAt} />
+                  </dd>
+                </>
+              )}
+            </dl>
+            {needsDns && (
+              <div className="stack" style={{ gap: 8 }}>
+                <p className="field__label">{d.dnsTitle}</p>
+                <p className="field__hint">{d.dnsInstruction}</p>
+                <div className="dns-table">
+                  <span>{d.type}</span>
+                  <span>{d.name}</span>
+                  <span>{d.value}</span>
+                  <code>A</code>
+                  <code>{name}</code>
+                  <code>{domain.dns.expected ?? '—'}</code>
+                </div>
+                {domain.dns.status === 'mismatch' && <p className="field__hint">{d.cdnHint}</p>}
+              </div>
+            )}
           </div>
-        )}
-        {domain.dns.checkedAt !== null && (
-          <p className="field__hint">
-            {t(m.domains.checkedAt, { time: '' })}
-            <RelativeTime value={domain.dns.checkedAt} />
-          </p>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -254,33 +301,65 @@ function AddDomainDialog({ open, onClose, appId, compose, primaryOrigin, canGene
 
 export function DomainsTab() {
   const app = useAppContext();
-  const { m } = useI18n();
+  const { m, plural } = useI18n();
+  const client = useQueryClient();
+  const toast = useToast();
   const domains = useDomains(app.id);
   const [adding, setAdding] = useState(false);
+  const [checking, setChecking] = useState(false);
   const compose = app.kind === 'compose';
-  const primary = (domains.data ?? []).find((domain) => domain.redirectTo === null && domain.path === '/');
+  const list = domains.data ?? [];
+  const primary = list.find((domain) => domain.redirectTo === null && domain.path === '/');
   const primaryOrigin = primary === undefined ? null : `${primary.https ? 'https' : 'http'}://${primary.host}`;
+  const invalidate = [keys.appPart(app.id, 'domains'), keys.app(app.id)];
+  const checkAll = async () => {
+    setChecking(true);
+    try {
+      await Promise.all(list.map((domain) => api.post(`/api/domains/${domain.id}/verify`)));
+    } catch (error) {
+      toast.error(error);
+    } finally {
+      for (const key of invalidate) void client.invalidateQueries({ queryKey: key });
+      setChecking(false);
+    }
+  };
 
   return (
     <Card
-      title={m.domains.title}
+      title={
+        <>
+          {m.domains.title}
+          {list.length > 0 && <span className="card__count tabular">{list.length}</span>}
+        </>
+      }
       description={compose ? m.domains.composeHint : m.domains.httpsHint}
       actions={
-        <Button variant="primary" icon={<Plus />} onClick={() => setAdding(true)}>
-          {m.domains.add}
-        </Button>
+        <>
+          {list.length > 1 && (
+            <Button icon={<RefreshCw />} busy={checking} onClick={() => void checkAll()} title={plural(m.domains.checkAllHint, list.length)}>
+              {m.domains.checkAll}
+            </Button>
+          )}
+          <Button variant="primary" icon={<Plus />} onClick={() => setAdding(true)}>
+            {m.domains.add}
+          </Button>
+        </>
       }
     >
       {domains.isPending ? (
         <SkeletonRows rows={2} />
-      ) : domains.data!.length === 0 ? (
+      ) : list.length === 0 ? (
         <EmptyState icon={<Globe />} action={<Button icon={<Plus />} onClick={() => setAdding(true)}>{m.domains.add}</Button>}>
           {m.domains.empty}
         </EmptyState>
       ) : (
-        domains.data!.map((domain) => <DomainRow key={domain.id} domain={domain} invalidate={[keys.appPart(app.id, 'domains'), keys.app(app.id)]} />)
+        <div className="domain-list">
+          {list.map((domain) => (
+            <DomainRow key={domain.id} domain={domain} invalidate={invalidate} />
+          ))}
+        </div>
       )}
-      <AddDomainDialog open={adding} onClose={() => setAdding(false)} appId={app.id} compose={compose} primaryOrigin={primaryOrigin} canGenerate={!(domains.data ?? []).some((domain) => domain.isGenerated)} />
+      <AddDomainDialog open={adding} onClose={() => setAdding(false)} appId={app.id} compose={compose} primaryOrigin={primaryOrigin} canGenerate={!list.some((domain) => domain.isGenerated)} />
     </Card>
   );
 }

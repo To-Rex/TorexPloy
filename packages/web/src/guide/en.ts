@@ -174,7 +174,7 @@ export const guide: GuideContent = {
             {
               type: "steps",
               items: [
-                { title: "Application → Variables", text: "Write `KEY=value` lines in the editor or paste a `.env` file. Secrets are stored hidden." },
+                { title: "Application → Variables", text: "Fill in the table or switch to the **.env view**: it works like a code editor (line numbers, colours, a broken line is flagged at once). Comments starting with `#` and variables switched off for now (`# DEBUG=1`) are not passed to the app, but they are kept with the variables. `Ctrl+/` (`⌘/` on a Mac) comments the selected lines in or out. Values stay hidden; only the line with the cursor shows." },
                 { title: "Link a database", text: "On the same tab, **Add link**: a database and a prefix (`DB_`). The app receives `${DB_DATABASE_URL}`, `${DB_PGHOST}`, `${DB_PGPASSWORD}` and so on — if the password changes, the link follows." },
                 { title: "Shared variables", text: "**Shared variables** on the project page go to every app; an app’s own value wins." },
               ],
@@ -192,7 +192,7 @@ export const guide: GuideContent = {
               type: "steps",
               items: [
                 { title: "DNS", text: "At your domain provider, point the `A` record at the server IP (and `www` if you want it)." },
-                { title: "Application → Domains → Add domain", text: "The domain, optionally a path (`/api`) and a port. HTTPS is on by default." },
+                { title: "Application → Domains → Add domain", text: "The domain, optionally a path (`/api`) and a port. HTTPS is on by default. In the list each domain is one line: the state of DNS and the certificate, the HTTPS switch, re-check and remove. The arrow opens the details; when something is wrong they open by themselves." },
                 { title: "Wait", text: "Once DNS has propagated the panel shows it (DNS status) and Caddy obtains a Let’s Encrypt certificate — usually within a minute." },
               ],
             },
@@ -223,7 +223,7 @@ export const guide: GuideContent = {
           summary: "CPU, memory and network charts for every app and database; an overview per server.",
           to: "/monitoring",
           blocks: [
-            { type: "list", items: ["**Application → Monitoring** — resources over the last hour/day, restart count, replica state.", "The [Monitoring](/monitoring) page — servers and all services in one place; heavy apps stand out.", "Memory and CPU limits are set in the Advanced tab; a container that exceeds them restarts, and that arrives as a [notification](/settings/notifications)."] },
+            { type: "list", items: ["**Application → Monitoring** — live gauges on top (processor, memory, network, containers), refreshed every 15 seconds; below them charts for the last hour/day/week, each with its average and peak.", "The [Monitoring](/monitoring) page — servers and all services in one place; heavy apps stand out.", "Memory and CPU limits are set in the Advanced tab; a container that exceeds them restarts, and that arrives as a [notification](/settings/notifications)."] },
           ],
         },
         {

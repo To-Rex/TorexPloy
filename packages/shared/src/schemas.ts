@@ -283,6 +283,11 @@ export const putVariablesSchema = z.object({
         seen.add(item.key);
       });
     }),
+  /**
+   * The same variables as `.env` text, to keep its comments and switched-off lines. Kept only when it says exactly
+   * `variables`; null forgets it; left out, the text kept before is brought up to date instead.
+   */
+  text: z.string().max(LIMITS.envTextMax).nullable().optional(),
 });
 export type PutVariablesInput = z.infer<typeof putVariablesSchema>;
 

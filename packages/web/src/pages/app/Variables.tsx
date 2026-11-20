@@ -24,7 +24,7 @@ export function EnvironmentTab() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const invalidate = [keys.appPart(app.id, 'variables'), keys.appPart(app.id, 'links'), keys.app(app.id), keys.project(app.projectId)];
 
-  const save = useAction((list: { key: string; value: string }[]) => api.put(`/api/applications/${app.id}/variables`, { variables: list }), { success: m.variables.saved, invalidate });
+  const save = useAction((input: { variables: { key: string; value: string }[]; text: string | null }) => api.put(`/api/applications/${app.id}/variables`, input), { success: m.variables.saved, invalidate });
   const link = useAction((input: { serviceId: string; prefix: string }) => api.post(`/api/applications/${app.id}/links`, input), {
     success: m.variables.linked,
     invalidate,
@@ -44,7 +44,7 @@ export function EnvironmentTab() {
         {variables.data === undefined ? (
           <Skeleton height={160} />
         ) : (
-          <EnvEditor variables={variables.data.variables} inherited={variables.data.inherited} onSave={(list) => save.mutateAsync(list)} saving={save.isPending} />
+          <EnvEditor variables={variables.data.variables} text={variables.data.text} inherited={variables.data.inherited} onSave={(list, text) => save.mutateAsync({ variables: list, text })} saving={save.isPending} />
         )}
       </Card>
       <Card

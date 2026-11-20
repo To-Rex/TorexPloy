@@ -215,6 +215,8 @@ export const LIMITS = {
   descriptionMax: 500,
   envVarsMax: 500,
   envValueMax: 32_768,
+  /** A set of variables kept as `.env` text (with its comments); a longer text is not kept, only its variables. */
+  envTextMax: 400_000,
   domainsPerApp: 50,
   replicasMax: 20,
   cpuMax: 64,

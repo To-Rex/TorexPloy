@@ -1516,33 +1516,6 @@
     color: var(--ink-3);
   }
 
-  .repo-list {
-    max-height: 260px;
-    overflow-y: auto;
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-  }
-  .repo-option {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 9px 12px;
-    border: 0;
-    border-top: 1px solid var(--line);
-    background: transparent;
-    text-align: left;
-  }
-  .repo-option:first-child {
-    border-top: 0;
-  }
-  .repo-option:hover {
-    background: var(--surface-hover);
-  }
-  .repo-option[aria-selected='true'] {
-    background: var(--lapis-soft);
-  }
-
   .dns-table {
     display: grid;
     grid-template-columns: auto auto minmax(0, 1fr);

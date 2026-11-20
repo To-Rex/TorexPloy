@@ -418,6 +418,8 @@ export interface VariablesDto {
   variables: EnvVarDto[];
   /** Variables injected from linked services; read-only in the editor. */
   inherited: { key: string; source: string }[];
+  /** The variables as the `.env` text they were last saved as, comments included; null when never saved as text. */
+  text: string | null;
   updatedAt: string | null;
 }
 

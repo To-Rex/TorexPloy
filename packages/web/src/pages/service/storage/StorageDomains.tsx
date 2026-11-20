@@ -50,7 +50,11 @@ export function StorageDomainsTab({ service }: { service: ServiceDto }) {
       ) : items.length === 0 ? (
         <p className="muted" style={{ fontSize: 'var(--text-sm)' }}>{f.endpointNone}</p>
       ) : (
-        items.map((domain) => <DomainRow key={domain.id} domain={domain} invalidate={invalidate} />)
+        <div className="domain-list">
+          {items.map((domain) => (
+            <DomainRow key={domain.id} domain={domain} invalidate={invalidate} />
+          ))}
+        </div>
       )}
       <Dialog
         open={adding}

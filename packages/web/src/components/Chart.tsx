@@ -1,6 +1,11 @@
 /**
  * Area chart for metric series. Hand-written SVG: tiny, theme-aware through
  * CSS variables, with a hover crosshair and an accessible text summary.
+ *
+ * The line is a smooth curve that never overshoots its points, drawn in
+ * when the chart appears; while the newest sample is fresh, its end pulses,
+ * so a glance tells a live chart from a stale one. Under each chart: the
+ * average and the peak of what is shown (or each series' latest value).
  */
 import { useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useI18n } from '../i18n/index.tsx';
@@ -20,11 +25,56 @@ export interface AreaChartProps {
   height?: number;
   headline?: string;
   sub?: string;
+  /** The line under the chart with the average and the peak; on by default. */
+  stats?: boolean;
+}
+
+/** How recent the newest sample must be for the chart to count as live. */
+const FRESH_MS = 120_000;
+
+/**
+ * A smooth path through the points that stays monotone between them
+ * (Fritsch–Carlson tangents): no bumps above a peak or below zero that the
+ * data does not have.
+ */
+export function smoothPath(points: readonly (readonly [number, number])[]): string {
+  const n = points.length;
+  if (n === 0) return '';
+  const at = (index: number) => points[index]!;
+  const f = (value: number) => value.toFixed(1);
+  if (n < 3) return `M${points.map(([px, py]) => `${f(px)},${f(py)}`).join('L')}`;
+  const dx: number[] = [];
+  const slope: number[] = [];
+  for (let index = 0; index < n - 1; index += 1) {
+    dx.push(at(index + 1)[0] - at(index)[0]);
+    slope.push(dx[index] === 0 ? 0 : (at(index + 1)[1] - at(index)[1]) / dx[index]!);
+  }
+  const tangent: number[] = [slope[0]!];
+  for (let index = 1; index < n - 1; index += 1) {
+    const before = slope[index - 1]!;
+    const after = slope[index]!;
+    if (before * after <= 0) {
+      tangent.push(0);
+    } else {
+      const w1 = 2 * dx[index]! + dx[index - 1]!;
+      const w2 = dx[index]! + 2 * dx[index - 1]!;
+      tangent.push((w1 + w2) / (w1 / before + w2 / after));
+    }
+  }
+  tangent.push(slope[n - 2]!);
+  let d = `M${f(at(0)[0])},${f(at(0)[1])}`;
+  for (let index = 0; index < n - 1; index += 1) {
+    const [x0, y0] = at(index);
+    const [x1, y1] = at(index + 1);
+    const third = dx[index]! / 3;
+    d += `C${f(x0 + third)},${f(y0 + tangent[index]! * third)} ${f(x1 - third)},${f(y1 - tangent[index + 1]! * third)} ${f(x1)},${f(y1)}`;
+  }
+  return d;
 }
 
 const PAD = { top: 10, right: 8, bottom: 22, left: 8 };
 
-export function AreaChart({ title, series, format, max, height = 168, headline, sub }: AreaChartProps) {
+export function AreaChart({ title, series, format, max, height = 168, headline, sub, stats = true }: AreaChartProps) {
   const { m, formatDate } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
@@ -54,9 +104,8 @@ export function AreaChart({ title, series, format, max, height = 168, headline, 
   const y = (v: number) => PAD.top + innerH - (Math.min(v, top) / top) * innerH;
 
   const paths = series.map((s) => {
-    const points = s.values.map((point) => `${x(point.t).toFixed(1)},${y(point.v).toFixed(1)}`);
-    if (points.length === 0) return { line: '', area: '' };
-    const line = `M${points.join('L')}`;
+    if (s.values.length === 0) return { line: '', area: '' };
+    const line = smoothPath(s.values.map((point) => [x(point.t), y(point.v)] as const));
     const area = `${line}L${x(s.values[s.values.length - 1]!.t).toFixed(1)},${PAD.top + innerH}L${x(s.values[0]!.t).toFixed(1)},${PAD.top + innerH}Z`;
     return { line, area };
   });
@@ -65,6 +114,8 @@ export function AreaChart({ title, series, format, max, height = 168, headline, 
   const hoverT = hover === null ? null : times[hover];
   const latest = series.map((s) => s.values[s.values.length - 1]?.v ?? 0);
   const peak = series.map((s) => Math.max(0, ...s.values.map((point) => point.v)));
+  const average = series.map((s) => (s.values.length === 0 ? 0 : s.values.reduce((sum, point) => sum + point.v, 0) / s.values.length));
+  const fresh = !empty && t1 > Date.now() - FRESH_MS;
 
   const onMove = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (empty) return;
@@ -112,8 +163,8 @@ export function AreaChart({ title, series, format, max, height = 168, headline, 
             </text>
             {paths.map((path, index) => (
               <g key={series[index]!.label}>
-                <path d={path.area} fill={`url(#${gradientId}-${index})`} />
-                <path d={path.line} fill="none" stroke={series[index]!.color} strokeWidth="1.6" strokeLinejoin="round" />
+                <path className="chart__area" d={path.area} fill={`url(#${gradientId}-${index})`} />
+                <path className="chart__line" d={path.line} pathLength={1} fill="none" stroke={series[index]!.color} strokeWidth="1.7" strokeLinejoin="round" strokeLinecap="round" />
               </g>
             ))}
             <text x={PAD.left} y={height - 6} className="chart__axis">
@@ -122,6 +173,18 @@ export function AreaChart({ title, series, format, max, height = 168, headline, 
             <text x={width - PAD.right} y={height - 6} textAnchor="end" className="chart__axis">
               {formatDate(t1, { hour: '2-digit', minute: '2-digit' })}
             </text>
+            {/* The newest sample of each series: it pulses while the data is fresh. */}
+            {fresh &&
+              hover === null &&
+              series.map((s) => {
+                const point = s.values[s.values.length - 1];
+                return point === undefined ? null : (
+                  <g key={s.label} className="chart__now" style={{ color: s.color }}>
+                    <circle className="chart__now-ring" cx={x(point.t)} cy={y(point.v)} r="4" />
+                    <circle cx={x(point.t)} cy={y(point.v)} r="3" fill="currentColor" stroke="var(--surface)" strokeWidth="1.5" />
+                  </g>
+                );
+              })}
             {hoverT !== null && hoverT !== undefined && (
               <g>
                 <line x1={x(hoverT)} x2={x(hoverT)} y1={PAD.top} y2={PAD.top + innerH} className="chart__cursor" />
@@ -149,6 +212,27 @@ export function AreaChart({ title, series, format, max, height = 168, headline, 
           </div>
         )}
       </div>
+      {stats && !empty && (
+        <div className="chart__stats">
+          {series.length === 1 ? (
+            <>
+              <span>
+                {m.metrics.average} <strong className="tabular">{format(average[0]!)}</strong>
+              </span>
+              <span>
+                {m.metrics.peak} <strong className="tabular">{format(peak[0]!)}</strong>
+              </span>
+            </>
+          ) : (
+            series.map((s, index) => (
+              <span key={s.label}>
+                <i className="chart__swatch" style={{ background: s.color }} />
+                {s.label} <strong className="tabular">{format(latest[index]!)}</strong>
+              </span>
+            ))
+          )}
+        </div>
+      )}
     </figure>
   );
 }

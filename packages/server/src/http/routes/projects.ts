@@ -112,6 +112,7 @@ export function registerProjectRoutes(app: Hono<Env>, ctx: Context): void {
     const variables: VariablesDto = {
       variables: stores.env.list({ projectId: project.id }),
       inherited: [],
+      text: stores.env.text({ projectId: project.id }),
       updatedAt: stores.env.updatedAt({ projectId: project.id }),
     };
     return c.json(variables);
@@ -127,6 +128,13 @@ export function registerProjectRoutes(app: Hono<Env>, ctx: Context): void {
         emit(ctx, project.teamId, { type: 'application.updated', id: application.id, projectId: project.id, status: application.status });
       }
     }
-    return c.json({ variables: stores.env.list({ projectId: project.id }), inherited: [], updatedAt: stores.env.updatedAt({ projectId: project.id }) });
+    if (input.text !== undefined) stores.env.setText({ projectId: project.id }, input.text);
+    const saved: VariablesDto = {
+      variables: stores.env.list({ projectId: project.id }),
+      inherited: [],
+      text: stores.env.text({ projectId: project.id }),
+      updatedAt: stores.env.updatedAt({ projectId: project.id }),
+    };
+    return c.json(saved);
   });
 }

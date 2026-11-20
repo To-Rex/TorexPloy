@@ -206,7 +206,7 @@ export function ProjectPage() {
     void client.invalidateQueries({ queryKey: keys.project(projectId) });
   };
 
-  const saveVariables = useAction((list: { key: string; value: string }[]) => api.put(`/api/projects/${projectId}/variables`, { variables: list }), {
+  const saveVariables = useAction((input: { variables: { key: string; value: string }[]; text: string | null }) => api.put(`/api/projects/${projectId}/variables`, input), {
     success: m.variables.saved,
     invalidate: [[...keys.project(projectId), 'variables'], keys.project(projectId)],
   });
@@ -379,7 +379,7 @@ export function ProjectPage() {
       <NewComposeDialog projectId={projectId} open={newCompose} onClose={() => setNewCompose(false)} />
       <NewStorageDialog projectId={projectId} open={newStorage} onClose={() => setNewStorage(false)} />
       <Dialog open={variablesOpen} onClose={() => setVariablesOpen(false)} wide title={m.project.variables} description={m.project.variablesHint}>
-        {variables.data === undefined ? <Skeleton height={120} /> : <EnvEditor variables={variables.data.variables} onSave={(list) => saveVariables.mutateAsync(list)} saving={saveVariables.isPending} />}
+        {variables.data === undefined ? <Skeleton height={120} /> : <EnvEditor variables={variables.data.variables} text={variables.data.text} onSave={(list, text) => saveVariables.mutateAsync({ variables: list, text })} saving={saveVariables.isPending} />}
       </Dialog>
       <Dialog
         open={editing}

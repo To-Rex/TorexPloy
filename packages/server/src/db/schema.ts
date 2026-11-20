@@ -942,6 +942,25 @@ CREATE TABLE passkeys (
 CREATE INDEX idx_passkeys_user ON passkeys(user_id, created_at);
 `,
   },
+  {
+    version: 14,
+    name: 'env-texts',
+    sql: `
+-- A set of variables as the .env text it was last saved as (encrypted like the values): the comments,
+-- the blank lines and the variables switched off with a '#'. The variables themselves stay in env_vars;
+-- this is only how they were written.
+CREATE TABLE env_texts (
+  id             TEXT PRIMARY KEY,
+  project_id     TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  application_id TEXT REFERENCES applications(id) ON DELETE CASCADE,
+  text           TEXT NOT NULL,
+  updated_at     TEXT NOT NULL,
+  CHECK ((project_id IS NULL) <> (application_id IS NULL))
+);
+CREATE UNIQUE INDEX idx_env_text_app ON env_texts(application_id) WHERE application_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_env_text_project ON env_texts(project_id) WHERE project_id IS NOT NULL;
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

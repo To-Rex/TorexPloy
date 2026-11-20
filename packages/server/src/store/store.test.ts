@@ -314,6 +314,42 @@ test('environment variables are encrypted at rest and replaced atomically', () =
   assert.equal(stores.env.replace(owner, stores.env.list(owner)), false, 'an identical set is a no-op');
 });
 
+test('a set of variables keeps the .env text it was written as, and the text follows the variables', () => {
+  const { stores, db, app } = setup();
+  const owner = { applicationId: app.id };
+  assert.equal(stores.env.text(owner), null, 'never saved as text');
+  const variables = [{ key: 'DATABASE_URL', value: 'postgres://u:secret@db/x' }, { key: 'PORT', value: '3000' }];
+  stores.env.replace(owner, variables);
+  const text = ['# Database', 'DATABASE_URL="postgres://u:secret@db/x"  # primary', '', '# DEBUG=1', 'PORT=3000'].join('\n');
+  assert.equal(stores.env.setText(owner, text), text);
+  assert.equal(stores.env.text(owner), text, 'comments, switched-off lines and formatting come back');
+  // Exactly as written, even a line that a later one overrides.
+  const doubled = `PORT=1\n${text}`;
+  assert.equal(stores.env.setText(owner, doubled), doubled);
+  assert.equal(stores.env.text(owner), doubled);
+  stores.env.setText(owner, text);
+  assert.ok(!String(db.scalar('SELECT text FROM env_texts')).includes('secret'), 'encrypted like the values');
+
+  // The variables change without the text (the API, a template): it is brought up to date, not thrown away.
+  stores.env.replace(owner, [{ key: 'DATABASE_URL', value: 'postgres://u:secret@db/x' }, { key: 'PORT', value: '8080' }, { key: 'NEW', value: 'a b' }]);
+  assert.equal(stores.env.text(owner), ['# Database', 'DATABASE_URL="postgres://u:secret@db/x"  # primary', '', '# DEBUG=1', 'PORT=8080', "NEW='a b'"].join('\n'));
+
+  // A text that says something else than the variables is not kept, and neither is one that does not parse.
+  assert.equal(stores.env.setText(owner, 'PORT=1'), null);
+  assert.equal(stores.env.text(owner), null);
+  assert.equal(stores.env.setText(owner, 'DATABASE_URL=postgres://u:secret@db/x\nPORT=8080\nNEW="a b"\nnot a line'), null);
+  assert.equal(Number(db.scalar('SELECT COUNT(*) FROM env_texts')), 0);
+
+  // One text per owner, replaced in place; it goes with its application.
+  const current = stores.env.list(owner);
+  stores.env.setText(owner, `# one\n${current.map((variable) => `${variable.key}='${variable.value}'`).join('\n')}`);
+  stores.env.setText(owner, `# two\n${current.map((variable) => `${variable.key}='${variable.value}'`).join('\n')}`);
+  assert.equal(Number(db.scalar('SELECT COUNT(*) FROM env_texts')), 1);
+  assert.match(stores.env.text(owner)!, /^# two\n/);
+  stores.env.setText(owner, null);
+  assert.equal(stores.env.text(owner), null);
+});
+
 test('deployments paginate by keyset cursor and deleting an app cascades', () => {
   const { stores, app, user, db } = setup();
   for (let i = 0; i < 5; i += 1) stores.deployments.create({ application: app, trigger: 'manual', createdBy: user.id });

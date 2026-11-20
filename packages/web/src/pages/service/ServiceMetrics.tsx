@@ -13,7 +13,7 @@ export function ServiceMetricsTab() {
   const metrics = useServiceMetrics(service.id, range);
   return (
     <Card title={m.monitoring.resourcesTitle} description={m.monitoring.resourcesHint} actions={<RangePicker value={range} onChange={setRange} />}>
-      <ResourceCharts points={metrics.data?.points} limits={{ cpu: service.cpuLimit, memoryMb: service.memoryLimitMb }} />
+      <ResourceCharts points={metrics.data?.points} limits={{ cpu: service.cpuLimit, memoryMb: service.memoryLimitMb }} range={range} />
     </Card>
   );
 }

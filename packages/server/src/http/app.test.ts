@@ -28,6 +28,7 @@ import {
   type OverviewDto,
   type Page,
   type PanelDomainStatusDto,
+  type VariablesDto,
   type PlatformEvent,
   type PlatformSettingsDto,
   type PreviewDto,
@@ -362,6 +363,51 @@ test('the deploy hook URL uses the panel domain when there is one, else the addr
     const named = await h.call<ApplicationDto>(h.tokens.developer, 'GET', `/api/applications/${web.id}`);
     assert.equal(named.body.deployHookUrl, `https://deploy.example.uz/api/hooks/deploy/${web.id}/${token}`);
     for (let i = 0; i < 300 && stores.deployments.listOpen().length > 0; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+  } finally {
+    await h.close();
+  }
+});
+
+test('variables keep the .env text they were saved as: comments and switched-off lines survive, and the text follows later changes', async () => {
+  const h = await harness();
+  try {
+    const { stores } = h.ctx;
+    const shop = stores.projects.create(h.teamA.id, 'Shop', null);
+    const web = h.application(h.teamA.id, shop.id, 'Web', 'web', 'nginx:alpine');
+    const url = `/api/applications/${web.id}/variables`;
+    const empty = await h.call<VariablesDto>(h.tokens.developer, 'GET', url);
+    assert.deepEqual([empty.body.variables, empty.body.text], [[], null]);
+
+    const text = ['# Database', 'DATABASE_URL="postgres://db/app"  # primary', '', '# DEBUG=1', 'PORT=3000'].join('\n');
+    const variables = [{ key: 'DATABASE_URL', value: 'postgres://db/app' }, { key: 'PORT', value: '3000' }];
+    const saved = await h.call<VariablesDto>(h.tokens.developer, 'PUT', url, { variables, text });
+    assert.equal(saved.status, 200);
+    assert.deepEqual([saved.body.variables, saved.body.text], [variables, text]);
+    assert.equal((await h.call<VariablesDto>(h.tokens.developer, 'GET', url)).body.text, text);
+    assert.equal(stores.applications.get(web.id)!.configUpdatedAt !== web.configUpdatedAt, true, 'the variables changed: a deploy is due');
+
+    // Only a comment changed: nothing that runs did, so no deploy is asked for, but the text is kept.
+    const before = stores.applications.get(web.id)!.configUpdatedAt;
+    const noted = await h.call<VariablesDto>(h.tokens.developer, 'PUT', url, { variables, text: `${text}\n# TODO: rotate` });
+    assert.equal(noted.body.text, `${text}\n# TODO: rotate`);
+    assert.equal(stores.applications.get(web.id)!.configUpdatedAt, before);
+
+    // A client that sends no text (the API, a script) changes the variables; the text is brought up to date.
+    const scripted = await h.call<VariablesDto>(h.tokens.developer, 'PUT', url, { variables: [{ key: 'DATABASE_URL', value: 'postgres://db/app' }, { key: 'PORT', value: '8080' }, { key: 'EXTRA', value: 'x y' }] });
+    assert.equal(scripted.body.text, ['# Database', 'DATABASE_URL="postgres://db/app"  # primary', '', '# DEBUG=1', 'PORT=8080', '# TODO: rotate', "EXTRA='x y'"].join('\n'));
+
+    // A text that says something else than the variables is dropped rather than trusted; null forgets it too.
+    const lying = await h.call<VariablesDto>(h.tokens.developer, 'PUT', url, { variables, text: 'PORT=1' });
+    assert.deepEqual([lying.status, lying.body.variables, lying.body.text], [200, variables, null]);
+    await h.call(h.tokens.developer, 'PUT', url, { variables, text });
+    assert.equal((await h.call<VariablesDto>(h.tokens.developer, 'PUT', url, { variables, text: null })).body.text, null);
+    assert.equal((await h.call<ApiErrorBody>(h.tokens.developer, 'PUT', url, { variables, text: 'x'.repeat(400_001) })).status, 422);
+    assert.equal((await h.call(h.tokens.viewer, 'PUT', url, { variables, text })).status, 403);
+
+    // Project variables keep theirs the same way.
+    const shared = await h.call<VariablesDto>(h.tokens.developer, 'PUT', `/api/projects/${shop.id}/variables`, { variables: [{ key: 'REGION', value: 'tas' }], text: '# everywhere\nREGION=tas' });
+    assert.equal(shared.body.text, '# everywhere\nREGION=tas');
+    assert.equal((await h.call<VariablesDto>(h.tokens.developer, 'GET', `/api/projects/${shop.id}/variables`)).body.text, '# everywhere\nREGION=tas');
   } finally {
     await h.close();
   }

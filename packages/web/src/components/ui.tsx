@@ -16,7 +16,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
-import { CircleAlert, CircleCheck, Info, TriangleAlert } from 'lucide-react';
+import { CircleAlert, CircleCheck, Info, Minus, Plus, TriangleAlert } from 'lucide-react';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -106,6 +106,65 @@ export function Field({ label, hint, error, optional, children, className }: Fie
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { mono?: boolean }>(function Input({ className, mono, ...rest }, ref) {
   return <input ref={ref} className={['input', mono && 'input--mono', className].filter(Boolean).join(' ')} {...rest} />;
 });
+
+/** An input with a word before or after it inside the same box: a prompt, a unit. */
+export const AffixInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { mono?: boolean; before?: ReactNode; after?: ReactNode }>(function AffixInput(
+  { className, mono, before, after, ...rest },
+  ref,
+) {
+  return (
+    <span className={['affix', className].filter(Boolean).join(' ')} data-invalid={rest['aria-invalid'] === true || undefined}>
+      {before !== undefined && (
+        <span className="affix__side" aria-hidden="true">
+          {before}
+        </span>
+      )}
+      <input ref={ref} className={mono ? 'input--mono' : undefined} {...rest} />
+      {after !== undefined && (
+        <span className="affix__side" aria-hidden="true">
+          {after}
+        </span>
+      )}
+    </span>
+  );
+});
+
+/** A whole number with a button either side of it. The value stays a string, as the form holds it. */
+export function Stepper({
+  value,
+  onChange,
+  min = 0,
+  max,
+  labels,
+  ...input
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  min?: number;
+  max?: number;
+  labels: { decrease: string; increase: string };
+  id?: string;
+  'aria-invalid'?: boolean;
+  'aria-describedby'?: string;
+}) {
+  const number = Number(value);
+  const known = value.trim().length > 0 && Number.isFinite(number);
+  const step = (delta: number) => {
+    const next = Math.min(max ?? Number.MAX_SAFE_INTEGER, Math.max(min, (known ? number : min) + delta));
+    onChange(String(next));
+  };
+  return (
+    <span className="stepper" data-invalid={input['aria-invalid'] === true || undefined}>
+      <button type="button" onClick={() => step(-1)} disabled={known && number <= min} aria-label={labels.decrease} title={labels.decrease}>
+        <Minus aria-hidden="true" />
+      </button>
+      <input {...input} value={value} inputMode="numeric" onChange={(event) => onChange(event.target.value.replace(/\D/g, ''))} />
+      <button type="button" onClick={() => step(1)} disabled={max !== undefined && known && number >= max} aria-label={labels.increase} title={labels.increase}>
+        <Plus aria-hidden="true" />
+      </button>
+    </span>
+  );
+}
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & { mono?: boolean }>(function Textarea({ className, mono, ...rest }, ref) {
   return <textarea ref={ref} className={['textarea', mono && 'input--mono', className].filter(Boolean).join(' ')} {...rest} />;

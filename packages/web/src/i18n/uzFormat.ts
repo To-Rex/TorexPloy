@@ -43,9 +43,15 @@ export function formatUzDate(date: Date, options: Intl.DateTimeFormatOptions): s
     const month = full || options.month === 'long' ? MONTHS[d.month]! : MONTHS_SHORT[d.month]!;
     const dayMonth = `${d.day}-${month}`;
     const withYear = options.dateStyle !== undefined || options.year !== undefined;
-    if (options.dateStyle === 'full' || options.weekday !== undefined) parts.push(WEEKDAYS[d.weekday]!);
-    parts.push(dayMonth);
-    if (withYear) parts.push(String(d.year));
+    // A month by itself ("noyabr 2026"), for headings that group by month.
+    const monthOnly = options.dateStyle === undefined && options.day === undefined && options.weekday === undefined && options.month !== undefined;
+    if (monthOnly) {
+      parts.push(withYear ? `${month} ${d.year}` : month);
+    } else {
+      if (options.dateStyle === 'full' || options.weekday !== undefined) parts.push(WEEKDAYS[d.weekday]!);
+      parts.push(dayMonth);
+      if (withYear) parts.push(String(d.year));
+    }
   }
   if (hasTime) {
     const seconds = options.timeStyle === 'medium' || options.timeStyle === 'long' || options.second !== undefined;

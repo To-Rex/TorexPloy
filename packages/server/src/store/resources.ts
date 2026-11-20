@@ -3,7 +3,7 @@
  * volumes, database services and their links, cron jobs, backups, GitHub
  * installations and metric samples.
  */
-import type { BackupStatus, CronRunStatus, DnsStatus, ServiceStatus, ServiceType, TlsStatus } from '@ploy/shared';
+import { mergeDotenv, parseDotenv, sameVariables, type BackupStatus, type CronRunStatus, type DnsStatus, type ServiceStatus, type ServiceType, type TlsStatus } from '@ploy/shared';
 import type { Database } from '../db/database.ts';
 import { newId, nowIso } from '../lib/ids.ts';
 import type { Secrets } from '../lib/secrets.ts';
@@ -68,6 +68,48 @@ export class EnvStore {
       });
     });
     return true;
+  }
+
+  /**
+   * The set as `.env` text: the text it was last saved as, brought up to date with the variables as they are now.
+   * (They also change without it: the API, a template, a linked preview.) Null when it was never saved as text.
+   */
+  text(owner: EnvOwner): string | null {
+    const [clause, id] = this.where(owner);
+    const stored = strOrNull(this.db.scalar(`SELECT text FROM env_texts WHERE ${clause}`, id));
+    if (stored === null) return null;
+    const text = this.secrets.open(stored, 'env');
+    const variables = this.list(owner);
+    // Still what it says: it comes back exactly as it was written.
+    return sameVariables(parseDotenv(text).variables, variables) ? text : mergeDotenv(text, variables);
+  }
+
+  /**
+   * Keep the text the variables were written as, or forget it with null. A text that does not say exactly the
+   * stored variables is not kept: the variables are what runs, and the text must never disagree with them.
+   * Returns the text now kept.
+   */
+  setText(owner: EnvOwner, text: string | null): string | null {
+    const [clause, id] = this.where(owner);
+    let keep = text;
+    if (keep !== null) {
+      const parsed = parseDotenv(keep);
+      if (parsed.badLine !== null || !sameVariables(parsed.variables, this.list(owner))) keep = null;
+    }
+    this.db.transaction(() => {
+      this.db.run(`DELETE FROM env_texts WHERE ${clause}`, id);
+      if (keep !== null) {
+        this.db.run(
+          'INSERT INTO env_texts (id, project_id, application_id, text, updated_at) VALUES (?, ?, ?, ?, ?)',
+          newId('env'),
+          'projectId' in owner ? owner.projectId : null,
+          'applicationId' in owner ? owner.applicationId : null,
+          this.secrets.seal(keep, 'env'),
+          nowIso(),
+        );
+      }
+    });
+    return keep;
   }
 }
 

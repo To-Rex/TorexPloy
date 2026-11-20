@@ -4,11 +4,11 @@
  * deploy would do — stack, commands, the Dockerfile — without building.
  */
 import { useState } from 'react';
-import { ChevronRight, ClipboardList, FileCode2 } from 'lucide-react';
+import { ClipboardList, FileCode2, SlidersHorizontal } from 'lucide-react';
 import type { ApplicationDto, BuildPlanDto, BuildType } from '@ploy/shared';
 import { BuilderPicker } from '../../components/Builders.tsx';
 import { CopyButton } from '../../components/Copy.tsx';
-import { Card, SaveFooter } from '../../components/Frame.tsx';
+import { Card, Fold, SaveFooter } from '../../components/Frame.tsx';
 import { useToast } from '../../components/Toast.tsx';
 import { Badge, Button, Callout, Field, Input } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
@@ -57,7 +57,7 @@ function BuildPlan({ plan }: { plan: BuildPlanDto }) {
 }
 
 export function BuildCard({ app }: { app: ApplicationDto }) {
-  const { m } = useI18n();
+  const { m, plural } = useI18n();
   const b = m.build;
   const toast = useToast();
   const { form, set, text, dirty, submit, reset, saving, errors } = useAppForm(app);
@@ -65,6 +65,16 @@ export function BuildCard({ app }: { app: ApplicationDto }) {
   const [planning, setPlanning] = useState(false);
   const type = form.buildType;
   const commands = type === 'torex' || type === 'nixpacks' || type === 'railpack';
+  // The settings behind the fold that apply to this builder, and how many of them are set to something.
+  const advancedSet = [
+    form.rootDirectory.trim().length > 0,
+    type === 'torex' && form.dockerfilePath.trim() !== 'Dockerfile' && form.dockerfilePath.trim().length > 0,
+    (commands || type === 'static') && form.installCommand.trim().length > 0,
+    (commands || type === 'static') && form.buildCommand.trim().length > 0,
+    type === 'torex' && form.outputDirectory.trim().length > 0,
+    type === 'torex' && form.systemPackages.trim().length > 0,
+  ].filter(Boolean).length;
+  const advancedHint = type === 'torex' ? b.advancedHints.torex : commands ? b.advancedHints.commands : type === 'static' ? b.advancedHints.static : b.advancedHints.root;
   // The advanced fields start open when the application already uses one of them.
   const customised =
     app.rootDirectory.length > 0 ||
@@ -124,55 +134,56 @@ export function BuildCard({ app }: { app: ApplicationDto }) {
         </div>
       )}
 
-      {/* Everything most projects never touch: open only when something in it is set (or was just refused). */}
-      <details className="disclosure" open={advancedOpen || undefined} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
-        <summary>
-          <ChevronRight aria-hidden="true" />
-          {m.newApp.advanced}
-        </summary>
-        <div className="disclosure__body">
-          <div className="form-grid">
-            <Field label={m.appSettings.rootDirectory} hint={m.newApp.rootDirectoryHint} error={errors.rootDirectory}>
-              <Input mono {...text('rootDirectory')} placeholder="./" spellCheck={false} />
-            </Field>
-            {type === 'torex' && (
-              <Field label={m.appSettings.dockerfilePath} hint={b.dockerfileAutoHint} error={errors.dockerfilePath}>
-                <Input mono {...text('dockerfilePath')} spellCheck={false} />
-              </Field>
-            )}
-          </div>
-          {commands && (
-            <div className="form-grid">
-              <Field label={m.appSettings.installCommand} error={errors.installCommand}>
-                <Input mono {...text('installCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
-              </Field>
-              <Field label={m.appSettings.buildCommand} error={errors.buildCommand}>
-                <Input mono {...text('buildCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
-              </Field>
-              {type === 'torex' && (
-                <Field label={m.appSettings.outputDirectory} hint={m.appSettings.outputDirectoryHint} optional={m.common.optional} error={errors.outputDirectory}>
-                  <Input mono {...text('outputDirectory')} placeholder="dist" spellCheck={false} />
-                </Field>
-              )}
-            </div>
-          )}
-          {type === 'static' && (
-            <div className="form-grid">
-              <Field label={m.appSettings.installCommand} optional={m.common.optional} error={errors.installCommand}>
-                <Input mono {...text('installCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
-              </Field>
-              <Field label={m.appSettings.buildCommand} optional={m.common.optional} hint={b.staticBuildHint} error={errors.buildCommand}>
-                <Input mono {...text('buildCommand')} placeholder="npm run build" spellCheck={false} />
-              </Field>
-            </div>
-          )}
+      {/* Everything most projects never touch: folded away, but plain to see, and it says when something in it is set. */}
+      <Fold
+        icon={<SlidersHorizontal />}
+        title={m.newApp.advanced}
+        hint={advancedHint}
+        open={advancedOpen}
+        onToggle={setAdvancedOpen}
+        badge={advancedSet > 0 ? <Badge tone="info">{plural(b.advancedSet, advancedSet)}</Badge> : <span className="fold__state">{b.advancedDefault}</span>}
+      >
+        <div className="form-grid">
+          <Field label={m.appSettings.rootDirectory} hint={m.newApp.rootDirectoryHint} error={errors.rootDirectory}>
+            <Input mono {...text('rootDirectory')} placeholder="./" spellCheck={false} />
+          </Field>
           {type === 'torex' && (
-            <Field label={b.systemPackages} optional={m.common.optional} hint={b.systemPackagesHint} error={errors.systemPackages}>
-              <Input mono {...text('systemPackages')} placeholder="imagemagick ffmpeg" spellCheck={false} />
+            <Field label={m.appSettings.dockerfilePath} hint={b.dockerfileAutoHint} error={errors.dockerfilePath}>
+              <Input mono {...text('dockerfilePath')} spellCheck={false} />
             </Field>
           )}
         </div>
-      </details>
+        {commands && (
+          <div className="form-grid">
+            <Field label={m.appSettings.installCommand} error={errors.installCommand}>
+              <Input mono {...text('installCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
+            </Field>
+            <Field label={m.appSettings.buildCommand} error={errors.buildCommand}>
+              <Input mono {...text('buildCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
+            </Field>
+            {type === 'torex' && (
+              <Field label={m.appSettings.outputDirectory} hint={m.appSettings.outputDirectoryHint} optional={m.common.optional} error={errors.outputDirectory}>
+                <Input mono {...text('outputDirectory')} placeholder="dist" spellCheck={false} />
+              </Field>
+            )}
+          </div>
+        )}
+        {type === 'static' && (
+          <div className="form-grid">
+            <Field label={m.appSettings.installCommand} optional={m.common.optional} error={errors.installCommand}>
+              <Input mono {...text('installCommand')} placeholder={m.appSettings.auto} spellCheck={false} />
+            </Field>
+            <Field label={m.appSettings.buildCommand} optional={m.common.optional} hint={b.staticBuildHint} error={errors.buildCommand}>
+              <Input mono {...text('buildCommand')} placeholder="npm run build" spellCheck={false} />
+            </Field>
+          </div>
+        )}
+        {type === 'torex' && (
+          <Field label={b.systemPackages} optional={m.common.optional} hint={b.systemPackagesHint} error={errors.systemPackages}>
+            <Input mono {...text('systemPackages')} placeholder="imagemagick ffmpeg" spellCheck={false} />
+          </Field>
+        )}
+      </Fold>
       {type === 'nixpacks' && <Callout tone="info">{b.nixpacksNote}</Callout>}
       {type === 'railpack' && <Callout tone="info">{b.railpackNote}</Callout>}
       {(type === 'heroku' || type === 'paketo') && <Callout tone="info">{b.buildpacksNote}</Callout>}

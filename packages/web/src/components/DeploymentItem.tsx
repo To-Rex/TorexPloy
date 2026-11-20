@@ -137,11 +137,16 @@ export function DeploymentItem({
   const who = deployment.createdBy?.name ?? (deployment.trigger === 'push' ? deployment.commitAuthor : null);
 
   const title = deploymentTitle(m, deployment);
+  const canGoBack = deployment.canRollback && !deployment.isActive;
+  const rollback = async () => {
+    const result = await confirm({ title: m.deployments.rollbackConfirmTitle, text: m.deployments.rollbackConfirmText, confirmLabel: m.deployments.rollback });
+    if (result.confirmed) redeploy.mutate();
+  };
   // A pushed commit says where it came from by itself; any other trigger is worth a word.
   const showTrigger = deployment.trigger !== 'push' && (deployment.commitMessage !== null || deployment.upload !== null);
 
   return (
-    <article className="deploy-item" data-tone={tone} aria-label={`${t(m.deployments.number, { n: deployment.number })} ${title}`}>
+    <article className="deploy-item" data-tone={tone} data-active={deployment.isActive || undefined} aria-label={`${t(m.deployments.number, { n: deployment.number })} ${title}`}>
       <span className="deploy-item__dot" aria-hidden="true">
         <Icon className={tone === 'work' ? 'spin' : undefined} />
       </span>
@@ -187,25 +192,24 @@ export function DeploymentItem({
         )}
       </div>
       <div className="deploy-item__side">
-        <span className="deploy-item__when">
-          <RelativeTime value={deployment.createdAt} />
-        </span>
+        {canGoBack && (
+          <Button className="deploy-item__log" variant="ghost" size="sm" icon={<History />} busy={redeploy.isPending} onClick={() => void rollback()}>
+            {m.deployments.rollbackShort}
+          </Button>
+        )}
         <Link className="btn btn--sm btn--ghost deploy-item__log" to={detail}>
           <ScrollText width={14} height={14} aria-hidden="true" />
           {m.deployments.viewLog}
         </Link>
+        <span className="deploy-item__when">
+          <RelativeTime value={deployment.createdAt} />
+        </span>
         <Menu trigger={(props) => <Button {...props} variant="ghost" size="sm" iconOnly icon={<Ellipsis />}>{m.common.actions}</Button>}>
           <MenuItem icon={<ScrollText />} href={detail}>
             {m.deployments.viewLog}
           </MenuItem>
-          {deployment.canRollback && !deployment.isActive && (
-            <MenuItem
-              icon={<History />}
-              onSelect={async () => {
-                const result = await confirm({ title: m.deployments.rollbackConfirmTitle, text: m.deployments.rollbackConfirmText, confirmLabel: m.deployments.rollback });
-                if (result.confirmed) redeploy.mutate();
-              }}
-            >
+          {canGoBack && (
+            <MenuItem icon={<History />} onSelect={() => void rollback()}>
               {m.deployments.rollback}
             </MenuItem>
           )}

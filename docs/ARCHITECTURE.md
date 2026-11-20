@@ -90,7 +90,7 @@ teams ─ team_members(owner|admin|developer|viewer) · invitations
       ├ registries ─ xususiy registr loginlari (parol shifrlangan; jamoada bitta host — bitta login)
       └ projects ─┬ applications(web|worker|compose; source github|git|image|raw|upload) ─┬ deployments (per-deploy log fayl)
                   │               ├ applications (PR preview: parent_application_id, preview_pr_*)
-                  │               ├ env_vars (AES-256-GCM) · domains · volumes
+                  │               ├ env_vars (AES-256-GCM) · env_texts (shu oʻzgaruvchilarning .env matni: izohlar va # bilan oʻchirilgan qatorlar) · domains · volumes
                   │               ├ service_links (DB → env inject)
                   │               └ cron_jobs ─ cron_runs
                   ├ services(DB yoki fayl ombori; backup_destination_id) ─┬ backups(remote_key)
@@ -624,6 +624,24 @@ diagnostika esa yoʻqolmaydi.
 - Brauzerlarda (Chromium) o'zbekcha CLDR ma'lumotlari yo'q, shuning uchun o'zbekcha sana, nisbiy vaqt va son
   formatlash CLDR qoliplari asosida qo'lda yozilgan (`i18n/uzFormat.ts`): "4-okt, 2026, 14:05", "6 daqiqa oldin".
   Rus va ingliz tillari `Intl` orqali formatlanadi.
+- **Ilova sahifasi** (`pages/app/`, stillari `styles/app.css`). Har bir tab bitta savolga javob beradi:
+  - *Umumiy*: manba va yigʻish. GitHub repozitoriyasi bir qatorda koʻrinadi (`RepoField`), almashtirish dialogda
+    (`RepoDialog`): hisoblar, qidiruv, klaviatura (↑ ↓ Enter), til va oxirgi push. Yigʻishning kam ishlatiladigan
+    sozlamalari `Fold` ichida: yopiq holda ham ichida nima borligi va nechtasi belgilangani koʻrinadi.
+  - *Oʻzgaruvchilar*: jadval yoki `.env` matni (`CodeEditor`). Muharrir oddiy `<textarea>`: matni shaffof, ostidagi
+    `<pre>` oʻsha matnni rangli chizadi, shuning uchun tanlash, undo, IME va ekran oʻquvchilari brauzerniki boʻlib
+    qoladi. Matn oʻzgaruvchilar bilan birga saqlanadi (`env_texts`, qiymatlar kabi shifrlangan): izohlar va `#`
+    bilan oʻchirilgan qatorlar yoʻqolmaydi. Oʻqish, yozish va birlashtirish `shared/dotenv.ts`da
+    (`parseDotenv`, `toDotenv`, `mergeDotenv`, `analyzeDotenv`): jadvaldagi tahrir matnga singdiriladi, matnsiz
+    kelgan oʻzgarish (API, shablon) esa matnni yangilaydi. Matn oʻzgaruvchilarga toʻgʻri kelmasa, server uni
+    saqlamaydi: ishlaydigan narsa oʻzgaruvchilar, matn ular bilan hech qachon ziddiyatga kirmasligi kerak.
+  - *Domenlar*: har bir domen bitta qator (`DomainRow`); tafsilotlar strelka ortida va muammo boʻlsa oʻzi ochiladi.
+  - *Joylashtirishlar*: jonli versiya, muvaffaqiyat ulushi va oʻrtacha vaqt, oxirgi joylashtirishlar ustunlar
+    koʻrinishida; tarix davrlar boʻyicha (bugun, kecha, oxirgi 7 kun, oylar) va holat boʻyicha filtrlanadi.
+  - *Monitoring*: jonli koʻrsatkichlar (halqa, raqam va chiziqlar yangi qiymatga silliq oʻtadi) va grafiklar
+    (monoton egri chiziq, chizilib chiqadi, eng yangi nuqta yangi boʻlsa pulslanadi). Hammasi
+    `prefers-reduced-motion`ga boʻysunadi.
+  - *Kengaytirilgan*: boʻlimlar roʻyxati yonda turadi (`SectionNav`), har bir karta oʻzi saqlanadi.
 
 ## 8.1 Test strategiyasi
 

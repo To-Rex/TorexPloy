@@ -315,6 +315,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     const variables: VariablesDto = {
       variables: stores.env.list({ applicationId: application.id }),
       inherited: resolved.inherited,
+      text: stores.env.text({ applicationId: application.id }),
       updatedAt: stores.env.updatedAt({ applicationId: application.id }),
     };
     return c.json(variables);
@@ -328,8 +329,16 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
       audit(ctx, c, 'application.variables_updated', { type: 'application', id: application.id, name: application.name }, { keys: input.variables.map((variable) => variable.key) });
       changed(application);
     }
+    // How they were written (comments, switched-off lines) is kept beside them; it changes nothing that runs.
+    if (input.text !== undefined) stores.env.setText({ applicationId: application.id }, input.text);
     const resolved = resolveAppEnv(stores, stores.applications.get(application.id)!);
-    return c.json({ variables: stores.env.list({ applicationId: application.id }), inherited: resolved.inherited, updatedAt: stores.env.updatedAt({ applicationId: application.id }) });
+    const saved: VariablesDto = {
+      variables: stores.env.list({ applicationId: application.id }),
+      inherited: resolved.inherited,
+      text: stores.env.text({ applicationId: application.id }),
+      updatedAt: stores.env.updatedAt({ applicationId: application.id }),
+    };
+    return c.json(saved);
   });
 
   // ----------------------------------------------------------- deployments

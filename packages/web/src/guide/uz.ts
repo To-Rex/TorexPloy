@@ -174,7 +174,7 @@ export const guide: GuideContent = {
             {
               type: "steps",
               items: [
-                { title: "Ilova → Oʻzgaruvchilar", text: "Muharrirda `KEY=value` qatorlarini yozing yoki `.env` faylni qoʻying. Maxfiy qiymatlar yashirin saqlanadi." },
+                { title: "Ilova → Oʻzgaruvchilar", text: "Jadvalda toʻldiring yoki **.env koʻrinishi**ga oʻting: u kod muharriri kabi ishlaydi (qator raqamlari, ranglar, xato qator darhol belgilanadi). `#` bilan boshlangan izohlar va vaqtincha oʻchirilgan oʻzgaruvchilar (`# DEBUG=1`) ilovaga berilmaydi, lekin oʻzgaruvchilar bilan birga saqlanadi. `Ctrl+/` (Mac’da `⌘/`) tanlangan qatorlarni izohga oladi yoki ochadi. Qiymatlar yashirin turadi, faqat kursor turgan qator koʻrinadi." },
                 { title: "Bazani ulang", text: "Oʻsha tabda **Ulanish qoʻshish**: baza va prefiks (`DB_`) tanlanadi. Ilova `${DB_DATABASE_URL}`, `${DB_PGHOST}`, `${DB_PGPASSWORD}` kabi oʻzgaruvchilarni oladi — parol oʻzgarsa, ulanish ham yangilanadi." },
                 { title: "Umumiy oʻzgaruvchilar", text: "Loyiha sahifasidagi **Umumiy oʻzgaruvchilar** barcha ilovalarga beriladi; ilovaning oʻz qiymati ustun." },
               ],
@@ -192,7 +192,7 @@ export const guide: GuideContent = {
               type: "steps",
               items: [
                 { title: "DNS", text: "Domen provayderida `A` yozuvni server IP’siga qarating (`www` kerak boʻlsa, uni ham)." },
-                { title: "Ilova → Domenlar → Domen qoʻshish", text: "Domen, kerak boʻlsa yoʻl (`/api`) va port kiritiladi. HTTPS standart yoqiq." },
+                { title: "Ilova → Domenlar → Domen qoʻshish", text: "Domen, kerak boʻlsa yoʻl (`/api`) va port kiritiladi. HTTPS standart yoqiq. Roʻyxatda har bir domen bitta qator: DNS va sertifikat holati, HTTPS kaliti, qayta tekshirish va oʻchirish. Strelka tafsilotlarni ochadi; biror narsa notoʻgʻri boʻlsa, ular oʻzi ochiladi." },
                 { title: "Kuting", text: "DNS tarqalgach panel buni koʻrsatadi (DNS holati), Caddy Let’s Encrypt sertifikatini oladi — odatda bir daqiqa ichida." },
               ],
             },
@@ -223,7 +223,7 @@ export const guide: GuideContent = {
           summary: "Har bir ilova va baza uchun CPU, xotira va tarmoq grafiklari; serverlar uchun umumiy koʻrinish.",
           to: "/monitoring",
           blocks: [
-            { type: "list", items: ["**Ilova → Monitoring** — oxirgi soat/kun boʻyicha resurslar, qayta ishga tushishlar soni, replikalar holati.", "[Monitoring](/monitoring) sahifasi — serverlar va barcha xizmatlar bir joyda; ogʻir ilovalar darhol koʻrinadi.", "Xotira va CPU chegaralari Kengaytirilgan tabida belgilanadi; chegaradan oshgan konteyner qayta ishga tushadi va bu [bildirishnoma](/settings/notifications) sifatida keladi."] },
+            { type: "list", items: ["**Ilova → Monitoring** — yuqorida jonli koʻrsatkichlar (protsessor, xotira, tarmoq, konteynerlar) har 15 soniyada yangilanadi; pastda oxirgi soat/kun/hafta boʻyicha grafiklar, har birining ostida oʻrtacha va eng yuqori qiymat.", "[Monitoring](/monitoring) sahifasi — serverlar va barcha xizmatlar bir joyda; ogʻir ilovalar darhol koʻrinadi.", "Xotira va CPU chegaralari Kengaytirilgan tabida belgilanadi; chegaradan oshgan konteyner qayta ishga tushadi va bu [bildirishnoma](/settings/notifications) sifatida keladi."] },
           ],
         },
         {
