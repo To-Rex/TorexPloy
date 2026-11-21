@@ -447,7 +447,34 @@ narsa toʻplanmaydi; oqim gzip'lanib `backups/volumes/<volume>/<vaqt>.tar.gz`ga 
 - **Rollar.** Koʻrish — viewer; nusxa olish va sozlash — developer; yuklab olish, tiklash, oʻchirish — admin.
   Disk ma'lumotlari bilan oʻchirilsa, serverdagi nusxalari ham oʻchadi; S3'dagilari qoladi.
 
-### 5.11 Yuklangan manbalar (Netlify Drop uslubi)
+### 5.11 GitLab va Bitbucket
+
+GitHub App orqali ulanadi; GitLab va Bitbucket esa access token bilan (`git/providers.ts`, `git/service.ts`).
+
+- **Ulanish** (`git_providers`, migratsiya 16): jamoaga tegishli, token (Bitbucket'da ixtiyoriy Atlassian email bilan)
+  va webhook secret `git` maqsadi bilan shifrlanadi; brauzerga hech qachon qaytarilmaydi (secret faqat adminga, qoʻlda
+  sozlash uchun, auditga yozilib). Ulashda token tekshiriladi: GitLab `GET /user` (`PRIVATE-TOKEN`), Bitbucket
+  `GET /user` (Bearer yoki email bilan Basic); workspace access token foydalanuvchi emas, shuning uchun workspace
+  roʻyxati orqali tekshiriladi. Ilovalar ishlatayotgan ulanishni uzib boʻlmaydi; uzilganda panel qoʻshgan webhook'lar
+  ham olib tashlanadi.
+- **Manba.** `applications.source_type` `gitlab`/`bitbucket`, `git_provider_id`, `repository` (GitLab: `guruh/kichik/loyiha`,
+  Bitbucket: `workspace/slug`). Klonlash `GitProviders.access()` orqali, GitHub bilan bir xil yoʻl: token
+  `http.<origin>/.extraheader` qilib faqat oʻsha hostga yuboriladi (GitLab `oauth2:<token>`, Bitbucket `x-token-auth:<token>`,
+  GitHub `x-access-token:<token>`), loglarda yashiriladi.
+- **Webhook** (`git_hooks`: ulanish va repozitoriya boʻyicha bitta): ilova yaratilganda yoki repozitoriyasi oʻzgarganda
+  panel uni oʻzi qoʻshadi yoki yangilaydi (push va merge/pull request hodisalari, secret bilan). Panelning ochiq manzili
+  boʻlmasa yoki tokenda huquq yetmasa, sabab (`no_public_url`, `permission`, `auth`…) saqlanadi va ilova sahifasida
+  qoʻlda qoʻshish yoʻriqnomasi bilan koʻrsatiladi. Qabul qilish: `POST /api/webhooks/gitlab/:id` (`X-Gitlab-Token`),
+  `POST /api/webhooks/bitbucket/:id` (`X-Hub-Signature` HMAC-SHA256; secret qabul qilinmagan holat uchun manzildagi
+  `?token=`). Notoʻgʻri imzo va nomaʼlum ulanish bir xil javob oladi.
+- **Hodisalar** bir shaklga keltiriladi (`GitEvent`): push mos ilovalarni joylashtiradi (`[skip ci]` hurmat qilinadi),
+  merge/pull request esa GitHub PR'lari bilan bitta `PreviewManager.handleChange` yoʻlidan oʻtadi: ochilganda va yangi
+  commit kelganda preview yaratiladi yoki yangilanadi, yopilganda yoki birlashtirilganda oʻchiriladi, fork'dan kelgani
+  eʼtiborga olinmaydi. Bitbucket commit'ni 12 belgida beradi: bunday holda aniq commit emas, branch boshi yigʻiladi.
+- **Natija** commit'ga qaytariladi (GitLab commit status, Bitbucket build status) va preview manzili MR/PR'ga izoh
+  sifatida yoziladi; ikkalasi ham "best effort", joylashtirishga taʼsir qilmaydi.
+
+### 5.12 Yuklangan manbalar (Netlify Drop uslubi)
 
 Manbasi `upload` boʻlgan ilova repozitoriyasiz, boshqaruv serveridagi zip arxivdan yigʻiladi.
 

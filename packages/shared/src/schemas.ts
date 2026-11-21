@@ -27,6 +27,8 @@ import {
   NOTIFICATION_EVENTS,
   REGISTRY_HOST_RE,
   REPO_FULL_NAME_RE,
+  GITLAB_PATH_RE,
+  BITBUCKET_REPO_RE,
   SERVICE_TYPES,
   TEAM_ROLES,
   THEMES,
@@ -303,7 +305,23 @@ const gitUrlSchema = z
     message: 'Use an https:// or git@host:path URL',
   });
 
+/** A repository on a connected GitLab or Bitbucket account (`providerId` is the connection). */
+const gitlabSourceSchema = z.object({
+  type: z.literal('gitlab'),
+  providerId: z.string().min(1).max(64),
+  repository: z.string().trim().max(255).regex(GITLAB_PATH_RE),
+  branch: branchSchema,
+});
+const bitbucketSourceSchema = z.object({
+  type: z.literal('bitbucket'),
+  providerId: z.string().min(1).max(64),
+  repository: z.string().trim().max(165).regex(BITBUCKET_REPO_RE),
+  branch: branchSchema,
+});
+
 export const sourceSchema = z.discriminatedUnion('type', [
+  gitlabSourceSchema,
+  bitbucketSourceSchema,
   z.object({
     type: z.literal('github'),
     installationId: z.int().positive(),
@@ -338,7 +356,50 @@ export const composeFileSchema = z
   .max(LIMITS.composeFileMax)
   .refine((value) => value.trim().length > 0, { message: 'The compose file is empty' });
 
+/** A GitLab instance: gitlab.com or one of your own (a path prefix is fine, for one served under a sub-path). */
+const gitlabBaseUrlSchema = z
+  .string()
+  .trim()
+  .max(200)
+  .regex(/^https?:\/\/[A-Za-z0-9.-]+(?::\d{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/)
+  .transform((value) => value.replace(/\/+$/, ''));
+const providerTokenSchema = z.string().trim().min(8).max(1_000).regex(/^\S+$/);
+const bitbucketWorkspaceSchema = z.string().trim().regex(/^[A-Za-z0-9_.-]{1,62}$/);
+
+/** Connect a GitLab or Bitbucket account with an access token. */
+export const createGitProviderSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('gitlab'),
+    name: nameSchema.optional(),
+    baseUrl: gitlabBaseUrlSchema.default('https://gitlab.com'),
+    token: providerTokenSchema,
+  }),
+  z.object({
+    kind: z.literal('bitbucket'),
+    name: nameSchema.optional(),
+    token: providerTokenSchema,
+    /** Atlassian account email: with it the token is sent as Basic auth, without it as a Bearer token. */
+    email: emailSchema.optional(),
+    /** Limit the connection to one workspace (required for a workspace access token). */
+    workspace: bitbucketWorkspaceSchema.optional(),
+  }),
+]);
+export type CreateGitProviderInput = z.input<typeof createGitProviderSchema>;
+
+export const updateGitProviderSchema = z
+  .object({
+    name: nameSchema,
+    /** A new token (checked before it replaces the old one). */
+    token: providerTokenSchema,
+    email: emailSchema.nullable(),
+    workspace: bitbucketWorkspaceSchema.nullable(),
+  })
+  .partial();
+export type UpdateGitProviderInput = z.infer<typeof updateGitProviderSchema>;
+
 export const composeSourceSchema = z.discriminatedUnion('type', [
+  gitlabSourceSchema,
+  bitbucketSourceSchema,
   z.object({
     type: z.literal('github'),
     installationId: z.int().positive(),

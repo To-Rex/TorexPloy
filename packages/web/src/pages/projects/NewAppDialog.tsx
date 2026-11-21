@@ -5,28 +5,30 @@ import { createApplicationSchema, DEFAULT_BUILD_TYPE, type ApplicationDto, type 
 import { BuilderPicker } from '../../components/Builders.tsx';
 import { CopyButton } from '../../components/Copy.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
-import { RepoPicker } from '../../components/RepoPicker.tsx';
+import { githubAccounts, providerAccounts, RepoPicker } from '../../components/RepoPicker.tsx';
 import { UploadDrop } from '../../components/UploadDrop.tsx';
-import { Button, Field, GithubMark, Input, Select } from '../../components/ui.tsx';
+import { BitbucketMark, Button, Field, GithubMark, GitlabMark, Input, Select } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
-import { keys, useGithub, useServers } from '../../lib/queries.ts';
+import { keys, useGithub, useGitProviders, useServers } from '../../lib/queries.ts';
 import { useArchiveUpload, type Picked } from '../../lib/upload.ts';
 import { validate } from '../../lib/validate.ts';
 
-type SourceKind = 'github' | 'git' | 'image' | 'upload';
+type SourceKind = 'github' | 'gitlab' | 'bitbucket' | 'git' | 'image' | 'upload';
 
 export function NewAppDialog({ projectId, open, onClose }: { projectId: string; open: boolean; onClose: () => void }) {
   const { m } = useI18n();
   const navigate = useNavigate();
   const github = useGithub();
+  const providers = useGitProviders();
   const servers = useServers();
   const installations = github.data?.installations ?? [];
 
   const [source, setSource] = useState<SourceKind>('github');
-  const [installationId, setInstallationId] = useState<number | null>(null);
+  /** The GitHub installation or GitLab/Bitbucket connection the repository is chosen from. */
+  const [accountId, setAccountId] = useState<string | null>(null);
   const [repository, setRepository] = useState<string | null>(null);
   const [branch, setBranch] = useState('');
   const [gitUrl, setGitUrl] = useState('');
@@ -54,9 +56,11 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
     }
   }, [servers.data, serverId]);
   useEffect(() => {
-    if (!open) return;
-    if (installations.length === 0 && github.isSuccess) setSource('git');
-  }, [open, installations.length, github.isSuccess]);
+    if (!open || !github.isSuccess || !providers.isSuccess || installations.length > 0) return;
+    // No GitHub: start from whichever host is connected, else from a Git URL.
+    const connected = providers.data.find((provider) => provider.kind === 'gitlab') ?? providers.data[0];
+    setSource(connected?.kind ?? 'git');
+  }, [open, installations.length, github.isSuccess, providers.isSuccess, providers.data]);
 
   const suggestName = (value: string) => {
     if (!nameTouched) setName(value.split('/').pop()?.replace(/\.git$/, '').replace(/[:@].*$/, '') ?? '');
@@ -140,7 +144,9 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
     }
     const sourceInput =
       source === 'github'
-        ? { type: 'github' as const, installationId: installationId ?? 0, repository: repository ?? '', branch }
+        ? { type: 'github' as const, installationId: Number(accountId ?? 0), repository: repository ?? '', branch }
+        : source === 'gitlab' || source === 'bitbucket'
+          ? { type: source, providerId: accountId ?? '', repository: repository ?? '', branch }
         : source === 'git'
           ? { type: 'git' as const, url: gitUrl.trim(), branch: branch.trim() || 'main' }
           : source === 'upload'
@@ -213,6 +219,8 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
             {(
               [
                 { value: 'github', icon: <GithubMark />, label: m.newApp.sourceGithub },
+                { value: 'gitlab', icon: <GitlabMark />, label: m.newApp.sourceGitlab },
+                { value: 'bitbucket', icon: <BitbucketMark />, label: m.newApp.sourceBitbucket },
                 { value: 'git', icon: <GitBranch />, label: m.newApp.sourceGit },
                 { value: 'image', icon: <Container />, label: m.newApp.sourceImage },
                 { value: 'upload', icon: <FolderUp />, label: m.newApp.sourceUpload },
@@ -226,6 +234,12 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
                 aria-checked={source === option.value}
                 disabled={pendingUpload !== null}
                 onClick={() => {
+                  if (option.value !== source) {
+                    // Another host: its accounts and repositories are not this one's.
+                    setAccountId(null);
+                    setRepository(null);
+                    setBranch('');
+                  }
                   setSource(option.value);
                   setErrors({});
                 }}
@@ -239,12 +253,14 @@ export function NewAppDialog({ projectId, open, onClose }: { projectId: string; 
           </div>
         </div>
 
-        {source === 'github' && (
+        {(source === 'github' || source === 'gitlab' || source === 'bitbucket') && (
           <RepoPicker
-            installations={installations}
-            value={{ installationId, repository, branch }}
+            key={source}
+            host={source}
+            accounts={source === 'github' ? githubAccounts(installations) : providerAccounts(providers.data ?? [], source)}
+            value={{ accountId, repository, branch }}
             onChange={(next) => {
-              setInstallationId(next.installationId);
+              setAccountId(next.accountId);
               if (next.repository !== null && next.repository !== repository) suggestName(next.repository);
               setRepository(next.repository);
               setBranch(next.branch);

@@ -59,6 +59,10 @@ export function registerComposeRoutes(app: Hono<Env>, ctx: Context): void {
     if (source.type === 'github' && stores.installations.get(source.installationId)?.teamId !== auth.teamId) {
       throw new AppError('validation_failed', 'Unknown GitHub installation', { issues: [{ path: 'source.installationId', code: 'custom', message: 'Connect this GitHub account first' }] });
     }
+    const provider = source.type === 'gitlab' || source.type === 'bitbucket' ? stores.gitProviders.getForTeam(auth.teamId, source.providerId) : undefined;
+    if ((source.type === 'gitlab' || source.type === 'bitbucket') && (provider === undefined || provider.kind !== source.type)) {
+      throw new AppError('validation_failed', 'Unknown connection', { issues: [{ path: 'source.providerId', code: 'custom', message: 'Connect this account first' }] });
+    }
 
     const application = stores.applications.create({
       projectId: project.id,
@@ -69,7 +73,8 @@ export function registerComposeRoutes(app: Hono<Env>, ctx: Context): void {
       kind: 'compose',
       sourceType: source.type,
       githubInstallationId: source.type === 'github' ? source.installationId : null,
-      repository: source.type === 'github' ? source.repository : null,
+      gitProviderId: provider?.id ?? null,
+      repository: source.type === 'github' || source.type === 'gitlab' || source.type === 'bitbucket' ? source.repository : null,
       gitUrl: source.type === 'git' ? source.url : null,
       branch: source.type === 'raw' ? null : source.branch,
       image: null,
@@ -83,6 +88,10 @@ export function registerComposeRoutes(app: Hono<Env>, ctx: Context): void {
     if (source.type === 'git' && source.url.startsWith('git@')) {
       const keys = await generateKeyPair(`torexploy-${application.slug}`);
       stores.applications.setDeployKey(application.id, ctx.secrets.seal(keys.privateKey, 'ssh'), keys.publicKey);
+    }
+    if (provider !== undefined) {
+      const created = stores.applications.get(application.id)!;
+      void ctx.gitProviders.ensureWebhook(created).then(() => emit(ctx, project.teamId, { type: 'application.updated', id: created.id, projectId: project.id, status: created.status }));
     }
     stores.projects.touch(project.id);
     audit(ctx, c, 'compose.created', { type: 'application', id: application.id, name: application.name }, { source: source.type });

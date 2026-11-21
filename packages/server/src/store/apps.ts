@@ -170,6 +170,8 @@ export interface ApplicationRecord {
   kind: AppKind;
   sourceType: SourceType;
   githubInstallationId: number | null;
+  /** The GitLab or Bitbucket connection of a `gitlab`/`bitbucket` source. */
+  gitProviderId: string | null;
   repository: string | null;
   gitUrl: string | null;
   branch: string | null;
@@ -242,6 +244,7 @@ function mapApplication(row: Row): ApplicationRecord {
     kind: str(row.kind) as AppKind,
     sourceType: str(row.source_type) as SourceType,
     githubInstallationId: numOrNull(row.github_installation_id),
+    gitProviderId: strOrNull(row.git_provider_id),
     repository: strOrNull(row.repository),
     gitUrl: strOrNull(row.git_url),
     branch: strOrNull(row.branch),
@@ -297,6 +300,7 @@ const APP_COLUMNS = {
   kind: { column: 'kind', config: true },
   sourceType: { column: 'source_type', config: true },
   githubInstallationId: { column: 'github_installation_id', config: true },
+  gitProviderId: { column: 'git_provider_id', config: true },
   repository: { column: 'repository', config: true },
   gitUrl: { column: 'git_url', config: true },
   branch: { column: 'branch', config: true },
@@ -348,6 +352,8 @@ export type NewApplication = Pick<
   > & {
     slug: string;
     sealedHookToken: string;
+    /** GitLab and Bitbucket sources: the connection the repository is reached through. */
+    gitProviderId?: string | null;
     /** Creates a pull request preview of `parentApplicationId`. */
     preview?: PullRequestInfo & { parentApplicationId: string };
   };
@@ -364,12 +370,12 @@ export class ApplicationStore {
     const now = nowIso();
     this.db.run(
       `INSERT INTO applications (
-         id, project_id, team_id, server_id, name, slug, kind, source_type, github_installation_id, repository, git_url, branch, image,
+         id, project_id, team_id, server_id, name, slug, kind, source_type, github_installation_id, git_provider_id, repository, git_url, branch, image,
          build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory,
          build_stage, buildpack_builder, system_packages, port,
          deploy_hook_token, template_id, compose_file, compose_path, parent_application_id, preview_pr_number, preview_pr_title,
          preview_pr_url, preview_pr_author, preview_head_sha, config_updated_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.projectId,
       input.teamId,
@@ -379,6 +385,7 @@ export class ApplicationStore {
       input.kind,
       input.sourceType,
       input.githubInstallationId,
+      input.gitProviderId ?? null,
       input.repository,
       input.gitUrl,
       input.branch,
@@ -442,6 +449,56 @@ export class ApplicationStore {
   }
 
   /** Every preview of pull request `number` of `repository`, whichever parent made it. */
+  /** Applications that deploy on a push to `repository@branch` of a GitLab or Bitbucket connection. */
+  findForProviderPush(providerId: string, repository: string, branch: string): ApplicationRecord[] {
+    return this.db
+      .all(
+        `SELECT * FROM applications
+          WHERE source_type IN ('gitlab','bitbucket') AND git_provider_id = ? AND lower(repository) = lower(?) AND branch = ? AND auto_deploy = 1
+            AND parent_application_id IS NULL`,
+        providerId,
+        repository,
+        branch,
+      )
+      .map(mapApplication);
+  }
+
+  /** Web applications of a GitLab or Bitbucket connection that preview merge/pull requests into `repository@baseBranch`. */
+  findForProviderPullRequest(providerId: string, repository: string, baseBranch: string): ApplicationRecord[] {
+    return this.db
+      .all(
+        `SELECT * FROM applications
+          WHERE source_type IN ('gitlab','bitbucket') AND git_provider_id = ? AND lower(repository) = lower(?) AND branch = ? AND kind = 'web'
+            AND previews_enabled = 1 AND parent_application_id IS NULL`,
+        providerId,
+        repository,
+        baseBranch,
+      )
+      .map(mapApplication);
+  }
+
+  providerPreviewsForPullRequest(providerId: string, repository: string, number: number): ApplicationRecord[] {
+    return this.db
+      .all(
+        `SELECT * FROM applications
+          WHERE parent_application_id IS NOT NULL AND git_provider_id = ? AND lower(repository) = lower(?) AND preview_pr_number = ?`,
+        providerId,
+        repository,
+        number,
+      )
+      .map(mapApplication);
+  }
+
+  /** Applications and stacks using a connection (it cannot be removed while any does). */
+  countForProvider(providerId: string): number {
+    return num(this.db.scalar('SELECT COUNT(*) FROM applications WHERE git_provider_id = ? AND parent_application_id IS NULL', providerId));
+  }
+
+  /** The repositories of a connection that applications use, for setting up and removing webhooks. */
+  repositoriesForProvider(providerId: string): string[] {
+    return this.db.all('SELECT DISTINCT repository FROM applications WHERE git_provider_id = ? AND repository IS NOT NULL', providerId).map((row) => str(row.repository));
+  }
+
   previewsForPullRequest(installationId: number, repository: string, number: number): ApplicationRecord[] {
     return this.db
       .all(

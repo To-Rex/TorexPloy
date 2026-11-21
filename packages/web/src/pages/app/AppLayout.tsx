@@ -14,7 +14,7 @@ import { Menu, MenuItem, MenuSeparator } from '../../components/Menu.tsx';
 import { usePageMeta } from '../../components/PageMeta.tsx';
 import { Status } from '../../components/Status.tsx';
 import { RouteTabs } from '../../components/Tabs.tsx';
-import { Button, ButtonLink, Callout, Field, GithubMark, Input, Skeleton, Textarea } from '../../components/ui.tsx';
+import { Button, ButtonLink, Callout, Field, GithubMark, HostMark, Input, Skeleton, Textarea } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
@@ -47,6 +47,18 @@ export function SourceLabel({ app }: { app: ApplicationDto }) {
     return (
       <a className="row" style={{ gap: 5 }} href={`https://github.com/${source.repository}/tree/${source.branch}`} target="_blank" rel="noreferrer noopener">
         <GithubMark size={14} />
+        {source.repository}
+        <span className="faint">
+          <GitBranch width={13} height={13} style={{ display: 'inline', verticalAlign: '-2px' }} aria-hidden="true" /> {source.branch}
+        </span>
+      </a>
+    );
+  }
+  if (source.type === 'gitlab' || source.type === 'bitbucket') {
+    const web = source.type === 'gitlab' ? `${source.webUrl}/${source.repository}/-/tree/${source.branch}` : `${source.webUrl}/${source.repository}/src/${source.branch}`;
+    return (
+      <a className="row" style={{ gap: 5 }} href={web} target="_blank" rel="noreferrer noopener">
+        <HostMark host={source.type} size={14} />
         {source.repository}
         <span className="faint">
           <GitBranch width={13} height={13} style={{ display: 'inline', verticalAlign: '-2px' }} aria-hidden="true" /> {source.branch}

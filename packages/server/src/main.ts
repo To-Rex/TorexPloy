@@ -32,6 +32,7 @@ import { createStores } from './store/index.ts';
 import { TerminalGateway } from './terminal/gateway.ts';
 import { UpdateChecker } from './updates/checker.ts';
 import { VolumeBackups } from './volumes/backups.ts';
+import { GitProviders } from './git/service.ts';
 import type { Context } from './context.ts';
 
 /** Upper bound for a graceful stop (deployments in flight get this long to wind down). */
@@ -60,6 +61,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   ctx.services = new ServiceManager(ctx);
   ctx.storage = new StorageManager(ctx);
   ctx.github = new GithubApp(ctx);
+  ctx.gitProviders = new GitProviders(ctx);
   ctx.metrics = new MetricsCollector(ctx);
   ctx.domains = new DomainChecker(ctx);
   ctx.cron = new CronRunner(ctx);

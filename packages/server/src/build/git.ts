@@ -3,8 +3,9 @@
  *
  * Shallow, single-branch clones keep fetches fast regardless of repository
  * history. Credentials never appear on a command line:
- * - GitHub App tokens travel as an `http.extraHeader` injected through
- *   `GIT_CONFIG_*` environment variables;
+ * - access tokens (GitHub App, GitLab, Bitbucket) travel as an
+ *   `http.<origin>/.extraHeader` injected through `GIT_CONFIG_*` environment
+ *   variables, so git sends them to that host only;
  * - deploy keys are written to a private file referenced by `GIT_SSH_COMMAND`.
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -18,8 +19,8 @@ export interface CheckoutRequest {
   /** Exact commit to build (from a push webhook); falls back to the branch head. */
   commitSha?: string | null;
   workDir: string;
-  /** GitHub installation access token for https://github.com URLs. */
-  githubToken?: string | null;
+  /** An `Authorization` header for one origin (a GitHub, GitLab or Bitbucket token). */
+  httpAuth?: { origin: string; authorization: string } | null;
   /** OpenSSH private key for git@ URLs. */
   deployKey?: string | null;
   timeoutMs: number;
@@ -48,10 +49,7 @@ function gitEnv(request: CheckoutRequest, keyPath: string | null): Record<string
   };
   config('advice.detachedHead', 'false');
   config('init.defaultBranch', 'main');
-  if (request.githubToken) {
-    const basic = Buffer.from(`x-access-token:${request.githubToken}`).toString('base64');
-    config('http.https://github.com/.extraheader', `AUTHORIZATION: basic ${basic}`);
-  }
+  if (request.httpAuth) config(`http.${request.httpAuth.origin.replace(/\/+$/, '')}/.extraheader`, `Authorization: ${request.httpAuth.authorization}`);
   env.GIT_CONFIG_COUNT = String(index);
   if (keyPath !== null) {
     env.GIT_SSH_COMMAND = `ssh -i ${keyPath} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${keyPath}.known_hosts -F /dev/null`;
@@ -61,7 +59,10 @@ function gitEnv(request: CheckoutRequest, keyPath: string | null): Record<string
 
 /** Remove credentials and noise from git's progress output before it reaches a log. */
 function scrub(text: string): string {
-  return text.replace(/(https?:\/\/)[^@\s/]+@/g, '$1***@').replace(/x-access-token:[^@\s]+/g, 'x-access-token:***');
+  return text
+    .replace(/(https?:\/\/)[^@\s/]+@/g, '$1***@')
+    .replace(/x-access-token:[^@\s]+/g, 'x-access-token:***')
+    .replace(/(Authorization:\s*(?:Basic|Bearer)\s+)\S+/gi, '$1***');
 }
 
 async function git(args: string[], cwd: string | undefined, request: CheckoutRequest, env: Record<string, string>): Promise<string> {
@@ -144,9 +145,13 @@ export async function checkout(request: CheckoutRequest): Promise<CommitInfo> {
   }
 }
 
-/** The remote URL to clone for an application source. */
+/**
+ * The remote URL to clone for an application source, when it can be told without asking anything (GitHub and
+ * plain Git). GitLab and Bitbucket addresses depend on the connection: see `GitProviders.access`.
+ */
 export function cloneUrl(source: { sourceType: string; repository: string | null; gitUrl: string | null }): string {
   if (source.sourceType === 'github' && source.repository !== null) return `https://github.com/${source.repository}.git`;
+  if ((source.sourceType === 'gitlab' || source.sourceType === 'bitbucket') && source.repository !== null) return source.repository;
   if (source.gitUrl !== null) return source.gitUrl;
   throw new AppError('bad_request', 'Application has no repository configured');
 }

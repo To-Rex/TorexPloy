@@ -7,7 +7,7 @@ export function errorText(m: Messages, error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === 'network') return m.errors.network;
     // Prefer the specific server message for codes whose generic text would hide useful detail.
-    const detailed = ['git_error', 'docker_unavailable', 'server_unreachable', 'proxy_error', 'github_error', 'bad_request', 'conflict', 'forbidden'] as const;
+    const detailed = ['git_error', 'docker_unavailable', 'server_unreachable', 'proxy_error', 'github_error', 'git_provider_error', 'bad_request', 'conflict', 'forbidden'] as const;
     if ((detailed as readonly string[]).includes(error.code) && error.message.length > 0 && error.message.length < 400) return error.message;
     return interpolate(m.errors.codes[error.code] ?? m.errors.unknown, error.params);
   }

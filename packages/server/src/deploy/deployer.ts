@@ -275,14 +275,14 @@ export class Deployer {
     });
   }
 
-  /** Mirror the outcome onto the GitHub commit (check mark / cross next to the commit). */
+  /** Mirror the outcome onto the commit on GitHub, GitLab or Bitbucket (check mark / cross next to the commit). */
   private reportCommitStatus(deploymentId: string): void {
     const deployment = this.ctx.stores.deployments.get(deploymentId);
     const app = deployment === undefined ? undefined : this.ctx.stores.applications.get(deployment.applicationId);
-    if (deployment === undefined || app === undefined || deployment.commitSha === null || app.sourceType !== 'github' || app.githubInstallationId === null) return;
+    if (deployment === undefined || app === undefined || deployment.commitSha === null) return;
     if (deployment.trigger !== 'push' && deployment.trigger !== 'manual') return;
     const state = deployment.status === 'succeeded' ? 'success' : deployment.status === 'cancelled' ? 'error' : 'failure';
-    void this.ctx.github.commitStatus(app, deployment.commitSha, state, deployment.id).catch(() => undefined);
+    this.ctx.gitProviders.reportCommit(app, deployment.commitSha, state, deployment.id);
   }
 
   private async containerTail(docker: DockerClient, name: string, lines = 40): Promise<string> {
@@ -572,20 +572,16 @@ export class Deployer {
   private async fetchSource(app: ApplicationRecord, deployment: DeploymentRecord, log: LogWriter, workDir: string, signal: AbortSignal): Promise<void> {
     const { stores, secrets } = this.ctx;
     const branch = app.branch ?? 'main';
-    const url = cloneUrl(app);
-    log.stage('fetch', `Cloning ${app.repository ?? url} (${branch}${deployment.commitSha ? ` @ ${deployment.commitSha.slice(0, 7)}` : ''})`);
-
-    const githubToken = app.sourceType === 'github' && app.githubInstallationId !== null
-      ? await this.ctx.github.installationToken(app.githubInstallationId)
-      : null;
-    if (githubToken !== null) log.mask([githubToken]);
+    const access = await this.ctx.gitProviders.access(app);
+    log.stage('fetch', `Cloning ${app.repository ?? access.url} (${branch}${deployment.commitSha ? ` @ ${deployment.commitSha.slice(0, 7)}` : ''})`);
+    if (access.secrets.length > 0) log.mask(access.secrets);
     await mkdir(workDir, { recursive: true });
     const commit = await checkout({
-      url,
+      url: access.url,
       branch,
       commitSha: deployment.commitSha,
       workDir,
-      githubToken,
+      httpAuth: access.httpAuth,
       deployKey: app.deployKey === null ? null : secrets.open(app.deployKey, 'ssh'),
       timeoutMs: 5 * 60_000,
       signal,
@@ -594,9 +590,7 @@ export class Deployer {
     stores.deployments.setCommit(deployment.id, { ...commit, branch });
     this.emitDeployment(deployment.id);
     log.info(`Commit ${commit.sha.slice(0, 7)} — ${commit.message} (${commit.author})`);
-    if (app.sourceType === 'github' && app.githubInstallationId !== null) {
-      void this.ctx.github.commitStatus(app, commit.sha, 'pending', deployment.id).catch(() => undefined);
-    }
+    this.ctx.gitProviders.reportCommit(app, commit.sha, 'pending', deployment.id);
   }
 
   /** FETCH for upload sources: the archive pinned on the deployment (else the application's current one) is unpacked. */

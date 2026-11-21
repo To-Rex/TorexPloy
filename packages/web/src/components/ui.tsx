@@ -301,6 +301,29 @@ export function GithubMark({ size = 16 }: { size?: number }) {
   );
 }
 
+/** GitLab's tanuki, in the current colour. */
+export function GitlabMark({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="m23.6 9.59-.03-.09-3.27-8.52a.85.85 0 0 0-.34-.4.87.87 0 0 0-1 .05.87.87 0 0 0-.29.44l-2.2 6.75H7.54L5.33 1.07a.86.86 0 0 0-.29-.44.87.87 0 0 0-1-.05.86.86 0 0 0-.34.4L.43 9.5l-.03.09a6.07 6.07 0 0 0 2.01 7.01l.01.01.03.02 4.98 3.73 2.46 1.86 1.5 1.13a1.01 1.01 0 0 0 1.22 0l1.5-1.13 2.46-1.86 5.01-3.75.01-.01a6.07 6.07 0 0 0 2.01-7z" />
+    </svg>
+  );
+}
+
+/** Bitbucket's bucket, in the current colour. */
+export function BitbucketMark({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M.78 1.21a.77.77 0 0 0-.77.89l3.26 19.81c.08.5.52.87 1.02.87h15.66a.77.77 0 0 0 .77-.65L23.99 2.1a.77.77 0 0 0-.77-.89zm13.74 14.32H9.52L8.17 8.47h7.56z" />
+    </svg>
+  );
+}
+
+/** The mark of a repository host. */
+export function HostMark({ host, size = 16 }: { host: 'github' | 'gitlab' | 'bitbucket'; size?: number }) {
+  return host === 'github' ? <GithubMark size={size} /> : host === 'gitlab' ? <GitlabMark size={size} /> : <BitbucketMark size={size} />;
+}
+
 /** The TorexPloy mark: two rising chevrons over a launch bar. */
 /**
  * The TorexPloy mark. It is `public/favicon.svg`, the same file the browser

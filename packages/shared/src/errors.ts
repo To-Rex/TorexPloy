@@ -27,6 +27,7 @@ export const ERROR_CODES = [
   'git_error',
   'github_not_configured',
   'github_error',
+  'git_provider_error',
   'deployment_in_progress',
   'nothing_to_deploy',
   'last_owner',

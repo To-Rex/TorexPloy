@@ -24,7 +24,7 @@ import { useAppContext } from './AppLayout.tsx';
 
 /** Previews run only for GitHub web apps (pull request events come from the GitHub app). */
 export function supportsPreviews(app: ApplicationDto): boolean {
-  return app.kind === 'web' && app.source.type === 'github' && app.parentApplicationId === null;
+  return app.kind === 'web' && (app.source.type === 'github' || app.source.type === 'gitlab' || app.source.type === 'bitbucket') && app.parentApplicationId === null;
 }
 
 interface Draft {
@@ -201,7 +201,7 @@ export function PreviewBanner({ app }: { app: ApplicationDto }) {
     >
       {m.previews.bannerHint}{' '}
       <a href={app.pullRequest.url} target="_blank" rel="noreferrer noopener">
-        {m.previews.bannerOpenPr}
+        {app.source.type === 'gitlab' || app.source.type === 'bitbucket' ? m.gitProviders.openOn[app.source.type] : m.previews.bannerOpenPr}
       </a>
     </Callout>
   );

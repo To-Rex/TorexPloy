@@ -18,7 +18,7 @@ import { AppError } from '../lib/errors.ts';
 import type { ApplicationRecord } from '../store/index.ts';
 import { buildpacksLabel } from './buildpacks.ts';
 import { planBuild } from './detect.ts';
-import { buildWorkDir, checkout, cloneUrl, removeWorkDir } from './git.ts';
+import { buildWorkDir, checkout, removeWorkDir } from './git.ts';
 import { detectInput, isExternal, settingsOf, settingsWarnings } from './index.ts';
 import { planWithNixpacks } from './nixpacks.ts';
 import { prepareRailpack, railpackLabel, railpackWarnings } from './railpack.ts';
@@ -97,12 +97,12 @@ async function fetchForPlan(ctx: Context, app: ApplicationRecord, workDir: strin
     await unpackUpload(archive, workDir);
     return null;
   }
-  const githubToken = app.sourceType === 'github' && app.githubInstallationId !== null ? await ctx.github.installationToken(app.githubInstallationId) : null;
+  const access = await ctx.gitProviders.access(app);
   const commit = await checkout({
-    url: cloneUrl(app),
+    url: access.url,
     branch: app.branch ?? 'main',
     workDir,
-    githubToken,
+    httpAuth: access.httpAuth,
     deployKey: app.deployKey === null ? null : ctx.secrets.open(app.deployKey, 'ssh'),
     timeoutMs: CHECKOUT_TIMEOUT_MS,
     onOutput: () => undefined,

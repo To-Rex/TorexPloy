@@ -10,6 +10,7 @@ import type { ComposeEngine } from './compose/engine.ts';
 import type { Deployer } from './deploy/deployer.ts';
 import type { Reconciler } from './deploy/reconciler.ts';
 import type { DomainChecker } from './domains/checker.ts';
+import type { GitProviders } from './git/service.ts';
 import type { GithubApp } from './github/app.ts';
 import type { StepUps } from './http/stepup.ts';
 import type { CronRunner } from './jobs/cron.ts';
@@ -45,6 +46,7 @@ export interface Context {
   services: ServiceManager;
   storage: StorageManager;
   github: GithubApp;
+  gitProviders: GitProviders;
   metrics: MetricsCollector;
   domains: DomainChecker;
   cron: CronRunner;

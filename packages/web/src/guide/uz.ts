@@ -99,7 +99,7 @@ export const guide: GuideContent = {
               type: "steps",
               items: [
                 { title: "Loyihani oching → Yaratish → Ilova", text: "Nomi, turi (veb yoki fon ishchisi) va server tanlanadi." },
-                { title: "Manbani tanlang", text: "**GitHub** — ulangan GitHub App orqali repozitoriya va branch roʻyxatdan tanlanadi, push’da avtomatik deploy yoqiladi. **Git** — istalgan URL (deploy kaliti beriladi, uni repozitoriyaga qoʻshasiz). **Docker** — `nginx:1.27` yoki `ghcr.io/jamoa/ilova:latest` kabi image; xususiy registr loginlari Sozlamalar → Registrlar’da. **Fayl yuklash** — tayyor sayt papkasini yoki .zip arxivni tashlang: panel uni ochadi, stack’ni aniqlab yigʻadi va joylashtiradi; keyingi versiyalar ham shu yerga tashlanadi yoki `curl` bilan API orqali yuboriladi." },
+                { title: "Manbani tanlang", text: "**GitHub** — ulangan GitHub App orqali repozitoriya va branch roʻyxatdan tanlanadi, push’da avtomatik deploy yoqiladi. **GitLab** va **Bitbucket** — Sozlamalar → Git’da access token bilan ulangan hisobdan xuddi shunday tanlanadi; panel repozitoriyaga webhook’ni oʻzi qoʻshadi (qoʻsha olmasa, sababi va qoʻlda qoʻshish uchun URL hamda secret koʻrsatiladi). **Git** — istalgan URL (deploy kaliti beriladi, uni repozitoriyaga qoʻshasiz). **Docker** — `nginx:1.27` yoki `ghcr.io/jamoa/ilova:latest` kabi image; xususiy registr loginlari Sozlamalar → Registrlar’da. **Fayl yuklash** — tayyor sayt papkasini yoki .zip arxivni tashlang: panel uni ochadi, stack’ni aniqlab yigʻadi va joylashtiradi; keyingi versiyalar ham shu yerga tashlanadi yoki `curl` bilan API orqali yuboriladi." },
                 { title: "Yarating", text: "Birinchi joylashtirish darhol boshlanadi. Ilova sahifasida jarayon bosqichma-bosqich koʻrinadi." },
               ],
             },
@@ -249,7 +249,7 @@ export const guide: GuideContent = {
           title: "PR preview",
           summary: "Har bir pull request oʻz manzilida ishga tushadi, PR’ga havola bilan izoh yoziladi; PR yopilganda oʻchiriladi.",
           blocks: [
-            { type: "p", text: "Ilova → **PR preview** tabida yoqiladi (GitHub App orqali ulangan ilovalar uchun). PR ochilganda preview ilova yaratilib joylashtiriladi, har yangi push’da yangilanadi, yopilganda tozalanadi. Preview oʻz oʻzgaruvchilariga ega boʻlishi mumkin (masalan, test bazasi)." },
+            { type: "p", text: "Ilova → **PR preview** tabida yoqiladi (GitHub, GitLab va Bitbucket’dan ulangan veb-ilovalar uchun: GitLab’da merge request, Bitbucket’da pull request). PR ochilganda preview ilova yaratilib joylashtiriladi, har yangi push’da yangilanadi, yopilganda tozalanadi. Preview oʻz oʻzgaruvchilariga ega boʻlishi mumkin (masalan, test bazasi)." },
             { type: "tip", tone: "info", text: "GitHub App eski boʻlsa, uning sozlamalarida **Pull requests: Read and write** ruxsati va **Pull request** hodisasi yoqilgan boʻlishi kerak." },
           ],
         },
@@ -441,7 +441,7 @@ export const guide: GuideContent = {
                 "**Image saqlash** — har bir ilova uchun nechta oxirgi image saqlansin (orqaga qaytish uchun).",
                 "**Registrlar** — Docker Hub, GHCR va xususiy registr loginlari: xususiy image’larni tortish uchun.",
                 "**S3 manzillar** — zaxira nusxalar yuboriladigan tashqi omborlar.",
-                "**Git** — GitHub App: bir bosishda yaratiladi, webhook va ruxsatlar avtomatik.",
+                "**Git** — GitHub App: bir bosishda yaratiladi, webhook va ruxsatlar avtomatik. GitLab (gitlab.com yoki oʻz serveringiz) va Bitbucket access token bilan ulanadi; token shifrlangan holda saqlanadi va brauzerga qaytarilmaydi.",
               ],
             },
           ],

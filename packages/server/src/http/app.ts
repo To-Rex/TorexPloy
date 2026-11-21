@@ -20,6 +20,7 @@ import { registerPasskeyRoutes } from './routes/passkeys.ts';
 import { registerComposeRoutes } from './routes/composes.ts';
 import { registerDeploymentRoutes } from './routes/deployments.ts';
 import { registerGithubRoutes } from './routes/github.ts';
+import { registerGitProviderRoutes } from './routes/gitProviders.ts';
 import { registerPlatformRoutes } from './routes/platform.ts';
 import { registerNotificationRoutes } from './routes/notifications.ts';
 import { registerPreviewRoutes } from './routes/previews.ts';
@@ -124,6 +125,7 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   registerS3Routes(app, ctx);
   registerRegistryRoutes(app, ctx);
   registerGithubRoutes(app, ctx);
+  registerGitProviderRoutes(app, ctx);
 
   app.all('/api/*', () => {
     throw new AppError('not_found', 'No such endpoint', { params: { resource: 'endpoint' } });

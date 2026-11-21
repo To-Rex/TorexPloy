@@ -10,6 +10,7 @@ import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useBootstrap, useGithub } from '../../lib/queries.ts';
+import { GitProvidersSection } from './GitProviders.tsx';
 import { SettingsSection } from './SettingsLayout.tsx';
 
 /** Where the GitHub App is created: the signed-in user's account, or an organization they own. */
@@ -204,6 +205,8 @@ export function GitPage() {
           )}
         </>
       )}
+      <GitProvidersSection kind="gitlab" />
+      <GitProvidersSection kind="bitbucket" />
     </>
   );
 }

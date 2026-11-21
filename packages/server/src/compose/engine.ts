@@ -17,7 +17,7 @@
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import type { Context } from '../context.ts';
-import { buildWorkDir, checkout, cloneUrl } from '../build/git.ts';
+import { buildWorkDir, checkout } from '../build/git.ts';
 import { prepareCliConfig } from '../docker/cli.ts';
 import type { ContainerSummary, DockerClient } from '../docker/client.ts';
 import { cliAuths, type CliAuths } from '../docker/registry.ts';
@@ -142,15 +142,15 @@ export class ComposeEngine {
       await writeFile(join(codeDir, RAW_FILE), app.composeFile ?? '', { mode: 0o600 });
     } else {
       const branch = app.branch ?? 'main';
-      log.stage('fetch', `Cloning ${app.repository ?? cloneUrl(app)} (${branch}${deployment.commitSha ? ` @ ${deployment.commitSha.slice(0, 7)}` : ''})`);
-      const githubToken = app.sourceType === 'github' && app.githubInstallationId !== null ? await this.ctx.github.installationToken(app.githubInstallationId) : null;
-      if (githubToken !== null) log.mask([githubToken]);
+      const access = await this.ctx.gitProviders.access(app);
+      log.stage('fetch', `Cloning ${app.repository ?? access.url} (${branch}${deployment.commitSha ? ` @ ${deployment.commitSha.slice(0, 7)}` : ''})`);
+      if (access.secrets.length > 0) log.mask(access.secrets);
       const commit = await checkout({
-        url: cloneUrl(app),
+        url: access.url,
         branch,
         commitSha: deployment.commitSha,
         workDir: codeDir,
-        githubToken,
+        httpAuth: access.httpAuth,
         deployKey: app.deployKey === null ? null : secrets.open(app.deployKey, 'ssh'),
         timeoutMs: 5 * 60_000,
         signal,
@@ -158,7 +158,7 @@ export class ComposeEngine {
       });
       stores.deployments.setCommit(deployment.id, { ...commit, branch });
       log.info(`Commit ${commit.sha.slice(0, 7)} — ${commit.message} (${commit.author})`);
-      if (app.sourceType === 'github' && app.githubInstallationId !== null) void this.ctx.github.commitStatus(app, commit.sha, 'pending', deployment.id).catch(() => undefined);
+      this.ctx.gitProviders.reportCommit(app, commit.sha, 'pending', deployment.id);
     }
 
     const sourcePath = join(codeDir, composePath);

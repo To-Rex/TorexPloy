@@ -7,12 +7,13 @@
  * top, and an address of its own. Because it is an application, builds, logs,
  * deployments, domains, routing, metrics and the terminal all work unchanged.
  *
- * GitHub drives the lifecycle. A pull request that opens, reopens or receives
- * commits creates the preview (while the parent is under its preview limit)
- * or refreshes it from the parent, then deploys its head commit; closing the
- * pull request removes the preview with its containers, images and data.
- * Pull requests from forks are ignored: their code would run with the
- * parent's secrets.
+ * The repository host drives the lifecycle: GitHub pull requests, GitLab
+ * merge requests and Bitbucket pull requests all arrive here in one shape
+ * (`PullChange`). One that opens, reopens or receives commits creates the
+ * preview (while the parent is under its preview limit) or refreshes it from
+ * the parent, then deploys its head commit; closing or merging it removes the
+ * preview with its containers, images and data. Changes from forks are
+ * ignored: their code would run with the parent's secrets.
  */
 import { BRANCH_RE, LIMITS, parseDotenv } from '@ploy/shared';
 import { emit, type Context } from '../context.ts';
@@ -20,6 +21,7 @@ import { generateDomain } from '../domains/generate.ts';
 import { publicBaseUrl } from '../github/app.ts';
 import { generateToken } from '../lib/crypto.ts';
 import { errorMessage } from '../lib/errors.ts';
+import type { GitEvent } from '../git/providers.ts';
 import type { ApplicationRecord, DeploymentRecord, PullRequestInfo } from '../store/index.ts';
 
 /** The parts of a `pull_request` webhook payload previews use. */
@@ -34,6 +36,14 @@ interface PullRequestPayload {
 
 const DEPLOY_ACTIONS = ['opened', 'reopened', 'synchronize'];
 
+/** A merge/pull request change, from any host. */
+export type PullChange = Extract<GitEvent, { kind: 'pull' }> & { sender?: string | null };
+
+/** Where a change came from: which GitHub installation or GitLab/Bitbucket connection, and its team. */
+export type PreviewSource = { kind: 'github'; installationId: number; teamId: string } | { kind: 'gitlab' | 'bitbucket'; providerId: string; teamId: string };
+
+const WORDS: Record<PreviewSource['kind'], string> = { github: 'pull request', gitlab: 'merge request', bitbucket: 'pull request' };
+
 export class PreviewManager {
   private readonly ctx: Context;
 
@@ -43,17 +53,47 @@ export class PreviewManager {
 
   // --------------------------------------------------------------- webhook
 
-  /** Handle a verified `pull_request` delivery. Returns a short summary for the delivery log. */
+  /** Handle a verified GitHub `pull_request` delivery. Returns a short summary for the delivery log. */
   async handlePullRequest(installationId: number | undefined, payload: Record<string, unknown>): Promise<string> {
-    const { stores, logger } = this.ctx;
     const action = String(payload.action ?? '');
     const pr = payload.pull_request as PullRequestPayload | undefined;
     const repository = pr?.base?.repo?.full_name ?? '';
     if (installationId === undefined || pr === undefined || !Number.isInteger(pr.number) || repository.length === 0) return 'ignored';
-    const number = pr.number!;
+    const close = action === 'closed';
+    if (!close && !DEPLOY_ACTIONS.includes(action)) return 'ignored';
+    const installation = this.ctx.stores.installations.get(installationId);
+    if (installation === undefined && !close) return 'ignored: unknown installation';
+    const headRepository = pr.head?.repo?.full_name;
+    return this.handleChange(
+      { kind: 'github', installationId, teamId: installation?.teamId ?? '' },
+      {
+        kind: 'pull',
+        action: close ? 'close' : 'deploy',
+        repository,
+        number: pr.number!,
+        baseBranch: pr.base?.ref ?? '',
+        headBranch: pr.head?.ref ?? '',
+        headSha: pr.head?.sha ?? '',
+        title: String(pr.title ?? ''),
+        url: String(pr.html_url ?? ''),
+        author: pr.user?.login ?? null,
+        fromFork: headRepository == null || headRepository.toLowerCase() !== repository.toLowerCase(),
+        sender: (payload.sender as { login?: string } | undefined)?.login ?? null,
+      },
+    );
+  }
 
-    if (action === 'closed') {
-      const previews = stores.applications.previewsForPullRequest(installationId, repository, number);
+  /** A merge/pull request opened, updated or closed, wherever the repository lives. Returns a short summary. */
+  async handleChange(source: PreviewSource, change: PullChange): Promise<string> {
+    const { stores, logger } = this.ctx;
+    const { number, repository } = change;
+    if (repository.length === 0) return 'ignored';
+
+    if (change.action === 'close') {
+      const previews =
+        source.kind === 'github'
+          ? stores.applications.previewsForPullRequest(source.installationId, repository, number)
+          : stores.applications.providerPreviewsForPullRequest(source.providerId, repository, number);
       for (const preview of previews) {
         await this.remove(preview);
         stores.audit.record({
@@ -68,34 +108,36 @@ export class PreviewManager {
       }
       return `removed ${previews.length} preview(s)`;
     }
-    if (!DEPLOY_ACTIONS.includes(action)) return 'ignored';
 
     // Code from a fork must never run with the parent's variables and databases.
-    const headRepository = pr.head?.repo?.full_name;
-    if (headRepository == null || headRepository.toLowerCase() !== repository.toLowerCase()) return 'ignored: pull request from a fork';
-    const branch = pr.head?.ref ?? '';
-    const sha = pr.head?.sha ?? '';
-    if (!BRANCH_RE.test(branch) || !/^[0-9a-f]{40}$/.test(sha) || pr.base?.ref === undefined) return 'ignored';
-    const installation = stores.installations.get(installationId);
-    if (installation === undefined) return 'ignored: unknown installation';
+    if (change.fromFork) return `ignored: ${WORDS[source.kind]} from a fork`;
+    const branch = change.headBranch;
+    const sha = change.headSha.toLowerCase();
+    // Bitbucket names the head commit by 12 characters: then the branch head is built instead of an exact commit.
+    if (!BRANCH_RE.test(branch) || !/^[0-9a-f]{7,40}$/.test(sha) || change.baseBranch.length === 0) return 'ignored';
+    const exact = sha.length === 40 ? sha : null;
 
     const info: PullRequestInfo = {
       number,
-      title: String(pr.title ?? '').slice(0, 500),
-      url: String(pr.html_url ?? ''),
-      author: pr.user?.login ?? null,
+      title: change.title.slice(0, 500),
+      url: change.url,
+      author: change.author,
       headSha: sha,
     };
-    const sender = (payload.sender as { login?: string } | undefined)?.login ?? info.author;
+    const sender = change.sender ?? info.author;
+    const parents =
+      source.kind === 'github'
+        ? stores.applications.findForPullRequest(source.installationId, repository, change.baseBranch)
+        : stores.applications.findForProviderPullRequest(source.providerId, repository, change.baseBranch);
     let queued = 0;
     let overLimit = 0;
-    for (const parent of stores.applications.findForPullRequest(installationId, repository, pr.base.ref)) {
-      if (parent.teamId !== installation.teamId) continue;
+    for (const parent of parents) {
+      if (parent.teamId !== source.teamId) continue;
       try {
         let preview = stores.applications.findPreview(parent.id, number);
         if (preview === undefined) {
           if (stores.applications.listPreviews(parent.id).length >= parent.previewLimit) {
-            logger.info('Preview limit reached; pull request not previewed', { applicationId: parent.id, pullRequest: number, limit: parent.previewLimit });
+            logger.info('Preview limit reached; change not previewed', { applicationId: parent.id, pullRequest: number, limit: parent.previewLimit });
             overLimit += 1;
             continue;
           }
@@ -104,10 +146,10 @@ export class PreviewManager {
           stores.applications.updatePullRequest(preview.id, info);
           preview = this.refresh(parent, preview, branch);
         }
-        this.ctx.deployer.enqueue({ app: preview, trigger: 'push', createdBy: null, commitSha: sha, commitMessage: info.title, commitAuthor: sender });
+        this.ctx.deployer.enqueue({ app: preview, trigger: 'push', createdBy: null, commitSha: exact, commitMessage: info.title, commitAuthor: sender });
         queued += 1;
       } catch (error) {
-        logger.warn('Could not deploy a pull request preview', { applicationId: parent.id, pullRequest: number, error: errorMessage(error) });
+        logger.warn('Could not deploy a preview', { applicationId: parent.id, pullRequest: number, error: errorMessage(error) });
       }
     }
     return `queued ${queued} preview deployment(s)${overLimit > 0 ? `, ${overLimit} over the preview limit` : ''}`;
@@ -128,8 +170,10 @@ export class PreviewManager {
         name: `${parent.name.slice(0, LIMITS.nameMax - suffix.length)}${suffix}`,
         slug: stores.projects.uniqueResourceSlug(parent.projectId, `${parent.slug.slice(0, 40 - suffix.length).replace(/-+$/, '')}${suffix}`, 'app'),
         kind: 'web',
-        sourceType: 'github',
+        // The parent's repository, wherever it lives.
+        sourceType: parent.sourceType,
         githubInstallationId: parent.githubInstallationId,
+        gitProviderId: parent.gitProviderId,
         repository: parent.repository,
         gitUrl: null,
         branch,
@@ -208,11 +252,12 @@ export class PreviewManager {
     });
   }
 
-  /** Deploy the pull request head GitHub last reported, with the parent's current settings. */
+  /** Deploy the head the repository host last reported (the branch head when only an abbreviation is known), with the parent's current settings. */
   redeploy(preview: ApplicationRecord, userId: string | null): DeploymentRecord {
     const parent = this.ctx.stores.applications.get(preview.parentApplicationId ?? '');
     const current = parent === undefined ? preview : this.refresh(parent, preview);
-    return this.ctx.deployer.enqueue({ app: current, trigger: 'manual', createdBy: userId, commitSha: preview.previewHeadSha });
+    const sha = preview.previewHeadSha !== null && preview.previewHeadSha.length === 40 ? preview.previewHeadSha : null;
+    return this.ctx.deployer.enqueue({ app: current, trigger: 'manual', createdBy: userId, commitSha: sha });
   }
 
   /** Remove a preview with its containers, images, data, logs and metrics. */
@@ -237,8 +282,9 @@ export class PreviewManager {
   async commentDeployed(previewId: string, deploymentId: string): Promise<void> {
     const { stores, github, logger } = this.ctx;
     const preview = stores.applications.get(previewId);
-    if (preview?.parentApplicationId == null || preview.previewPrNumber === null || preview.githubInstallationId === null || preview.repository === null) return;
-    if (github.credentials() === null) return;
+    if (preview?.parentApplicationId == null || preview.previewPrNumber === null || preview.repository === null) return;
+    const kind = preview.sourceType === 'gitlab' || preview.sourceType === 'bitbucket' ? preview.sourceType : 'github';
+    if (kind === 'github' && (preview.githubInstallationId === null || github.credentials() === null)) return;
     const parent = stores.applications.get(preview.parentApplicationId);
     const deployment = stores.deployments.get(deploymentId);
     const url = stores.domains.primaryUrl(preview.id);
@@ -256,13 +302,16 @@ export class PreviewManager {
       '|---|---|',
       ...rows,
       '',
-      '<sub>Redeployed on every push to this pull request and removed when it closes.</sub>',
+      `<sub>Redeployed on every push to this ${WORDS[kind]} and removed when it closes.</sub>`,
     ].join('\n');
     try {
-      const commentId = await github.upsertIssueComment(preview.githubInstallationId, preview.repository, preview.previewPrNumber, preview.previewCommentId, body);
-      if (commentId !== preview.previewCommentId) stores.applications.setPreviewComment(preview.id, commentId);
+      const commentId =
+        kind === 'github'
+          ? await github.upsertIssueComment(preview.githubInstallationId!, preview.repository, preview.previewPrNumber, preview.previewCommentId, body)
+          : await this.ctx.gitProviders.comment(preview, preview.previewPrNumber, preview.previewCommentId, body);
+      if (commentId !== null && commentId !== preview.previewCommentId) stores.applications.setPreviewComment(preview.id, commentId);
     } catch (error) {
-      logger.warn('Could not comment on the pull request', { applicationId: preview.id, pullRequest: preview.previewPrNumber, error: errorMessage(error) });
+      logger.warn('Could not comment on the merge/pull request', { applicationId: preview.id, pullRequest: preview.previewPrNumber, error: errorMessage(error) });
     }
   }
 }

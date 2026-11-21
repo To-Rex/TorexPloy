@@ -248,7 +248,7 @@ test('the build-type rebuild maps auto to torex and keeps every application, its
     assert.equal(db.scalar('SELECT COUNT(*) FROM env_vars'), 1);
     assert.deepEqual(stores.applications.listPreviews('app_a').map((app) => app.id), ['app_p']);
     const indexes = db.all("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'applications' AND name LIKE 'idx_%'").map((row) => String(row.name)).sort();
-    assert.deepEqual(indexes, ['idx_applications_preview', 'idx_applications_repo', 'idx_applications_server', 'idx_applications_team']);
+    assert.deepEqual(indexes, ['idx_applications_preview', 'idx_applications_provider_repo', 'idx_applications_repo', 'idx_applications_server', 'idx_applications_team']);
 
     // The new CHECK: every builder is accepted, `auto` no longer is.
     for (const type of ['dockerfile', 'nixpacks', 'railpack', 'heroku', 'paketo', 'static', 'torex']) db.run('UPDATE applications SET build_type = ? WHERE id = ?', type, 'app_b');

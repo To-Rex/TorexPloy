@@ -74,18 +74,35 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
   };
 
   /** Check a source belongs to things this team may use, and normalize it into columns. */
-  const sourceColumns = (teamId: string, source: SourceInput): Pick<ApplicationRecord, 'sourceType' | 'githubInstallationId' | 'repository' | 'gitUrl' | 'branch' | 'image'> => {
+  const sourceColumns = (
+    teamId: string,
+    source: SourceInput,
+  ): Pick<ApplicationRecord, 'sourceType' | 'githubInstallationId' | 'gitProviderId' | 'repository' | 'gitUrl' | 'branch' | 'image'> => {
+    const none = { githubInstallationId: null, gitProviderId: null, repository: null, gitUrl: null, branch: null, image: null };
     if (source.type === 'github') {
       const installation = stores.installations.get(source.installationId);
       if (installation === undefined || installation.teamId !== teamId) {
         throw new AppError('validation_failed', 'Unknown GitHub installation', { issues: [{ path: 'source.installationId', code: 'custom', message: 'Connect this GitHub account first' }] });
       }
-      return { sourceType: 'github', githubInstallationId: source.installationId, repository: source.repository, gitUrl: null, branch: source.branch, image: null };
+      return { ...none, sourceType: 'github', githubInstallationId: source.installationId, repository: source.repository, branch: source.branch };
     }
-    if (source.type === 'git') return { sourceType: 'git', githubInstallationId: null, repository: null, gitUrl: source.url, branch: source.branch, image: null };
+    if (source.type === 'gitlab' || source.type === 'bitbucket') {
+      const provider = stores.gitProviders.getForTeam(teamId, source.providerId);
+      if (provider === undefined || provider.kind !== source.type) {
+        throw new AppError('validation_failed', 'Unknown connection', { issues: [{ path: 'source.providerId', code: 'custom', message: 'Connect this account first' }] });
+      }
+      return { ...none, sourceType: source.type, gitProviderId: provider.id, repository: source.repository, branch: source.branch };
+    }
+    if (source.type === 'git') return { ...none, sourceType: 'git', gitUrl: source.url, branch: source.branch };
     // The archive of an upload source arrives through its own endpoint; a previous one, if any, stays on the record.
-    if (source.type === 'upload') return { sourceType: 'upload', githubInstallationId: null, repository: null, gitUrl: null, branch: null, image: null };
-    return { sourceType: 'image', githubInstallationId: null, repository: null, gitUrl: null, branch: null, image: source.image };
+    if (source.type === 'upload') return { ...none, sourceType: 'upload' };
+    return { ...none, sourceType: 'image', image: source.image };
+  };
+
+  /** A GitLab or Bitbucket repository needs its webhook: set up in the background, the result shown with the application. */
+  const ensureWebhook = (application: ApplicationRecord): void => {
+    if (application.sourceType !== 'gitlab' && application.sourceType !== 'bitbucket') return;
+    void ctx.gitProviders.ensureWebhook(application).then(() => changed(application));
   };
 
   // ------------------------------------------------------------------ CRUD
@@ -122,6 +139,7 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
       stores.applications.setDeployKey(application.id, ctx.secrets.seal(keys.privateKey, 'ssh'), keys.publicKey);
     }
     if (application.kind === 'web') generateDomain(ctx, application, project);
+    ensureWebhook(application);
     stores.projects.touch(project.id);
     audit(ctx, c, 'application.created', { type: 'application', id: application.id, name: application.name }, { source: source.sourceType });
     changed(application);
@@ -148,12 +166,13 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     if (source !== undefined) Object.assign(patch, sourceColumns(auth.teamId, source));
     // A builder whose CLI is not on this control plane cannot be chosen; the dashboard lists the ones that can.
     if (patch.buildType !== undefined) requireBuilder(patch.buildType);
-    // Previews deploy pull requests of a GitHub web application; a preview has none of its own.
-    const previewable = application.parentApplicationId === null && (patch.kind ?? application.kind) === 'web' && (patch.sourceType ?? application.sourceType) === 'github';
+    // Previews deploy pull/merge requests of a web application from GitHub, GitLab or Bitbucket; a preview has none of its own.
+    const previewable =
+      application.parentApplicationId === null && (patch.kind ?? application.kind) === 'web' && ['github', 'gitlab', 'bitbucket'].includes(patch.sourceType ?? application.sourceType);
     if (patch.previewsEnabled === true && !previewable) {
       const reason = application.parentApplicationId !== null ? 'preview' : (patch.kind ?? application.kind) !== 'web' ? 'not_web' : 'not_github';
-      throw new AppError('validation_failed', 'Previews need a GitHub web application', {
-        issues: [{ path: 'previewsEnabled', code: 'custom', message: 'Only GitHub web applications can have previews', params: { reason } }],
+      throw new AppError('validation_failed', 'Previews need a web application from GitHub, GitLab or Bitbucket', {
+        issues: [{ path: 'previewsEnabled', code: 'custom', message: 'Only web applications from GitHub, GitLab or Bitbucket can have previews', params: { reason } }],
       });
     }
     // Switching to another source or kind turns previews off rather than failing the edit.
@@ -167,10 +186,21 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
       const keys = await generateKeyPair(`torexploy-${updated.slug}`);
       stores.applications.setDeployKey(updated.id, ctx.secrets.seal(keys.privateKey, 'ssh'), keys.publicKey);
     }
+    // A new repository (or connection) needs its webhook.
+    if (source !== undefined && (updated.gitProviderId !== application.gitProviderId || updated.repository !== application.repository)) ensureWebhook(updated);
     // Routing-relevant changes (port, kind) apply to the live proxy only on the next deployment; names apply now.
     audit(ctx, c, 'application.updated', { type: 'application', id: application.id, name: updated.name }, { fields: Object.keys(input) });
     changed(updated);
     return c.json(applicationDto(ctx, stores.applications.get(application.id)!, requestOrigin(c)));
+  });
+
+  /** Set the repository's webhook up again (after fixing the token's permissions or the panel's address). */
+  app.post('/api/applications/:id/webhook', async (c) => {
+    const application = loadApp(ctx, c, 'developer');
+    if (application.sourceType !== 'gitlab' && application.sourceType !== 'bitbucket') throw new AppError('bad_request', 'Only GitLab and Bitbucket sources have a webhook to set up here');
+    await ctx.gitProviders.ensureWebhook(application);
+    changed(application);
+    return c.json(ctx.gitProviders.hookStatus(stores.applications.get(application.id)!));
   });
 
   app.delete('/api/applications/:id', async (c) => {

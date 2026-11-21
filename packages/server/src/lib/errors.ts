@@ -29,6 +29,7 @@ const STATUS: Record<ErrorCode, number> = {
   git_error: 502,
   github_not_configured: 409,
   github_error: 502,
+  git_provider_error: 502,
   deployment_in_progress: 409,
   nothing_to_deploy: 409,
   last_owner: 409,
@@ -93,6 +94,7 @@ export function reasonOf(value: unknown, fallback = 'unknown'): string {
       proxy_error: 'proxy',
       git_error: 'git',
       github_error: 'github',
+      git_provider_error: 'git_provider',
       nothing_to_deploy: 'image_gone',
     };
     return byCode[value.code] ?? fallback;

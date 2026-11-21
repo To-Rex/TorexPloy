@@ -12,10 +12,11 @@ import type {
   BackupStatus,
   BuildType,
   CronRunStatus,
-  DeployStrategy,
   DeploymentStatus,
   DeploymentTrigger,
+  DeployStrategy,
   DnsStatus,
+  GitProviderKind,
   Locale,
   NotificationEvent,
   NotificationKind,
@@ -440,8 +441,35 @@ export interface UploadInfoDto {
   uploadedAt: string;
 }
 
+/** Whether pushes reach the panel: the webhook on the repository, as last set up or checked. */
+export interface GitHookStatusDto {
+  /** pending: not set up yet (or being set up); failed: the panel could not create it, see `message`. */
+  status: 'ok' | 'failed' | 'pending';
+  message: string | null;
+  /** Why it failed, as a code the dashboard can explain (`no_public_url`, `permission`, `unreachable`…). */
+  reason: string | null;
+  /** The address the repository should call. */
+  url: string | null;
+  updatedAt: string | null;
+}
+
+export type ProviderSourceDto<K extends GitProviderKind = GitProviderKind> = {
+  type: K;
+  providerId: string;
+  /** The connection's name; null when it was removed. */
+  providerName: string | null;
+  /** Where the repository lives (`https://gitlab.com`, a GitLab of your own, `https://bitbucket.org`). */
+  webUrl: string;
+  repository: string;
+  branch: string;
+  webhook: GitHookStatusDto;
+};
+
 export type SourceDto =
   | { type: 'github'; installationId: number; repository: string; branch: string }
+  // One member per host, so that checking `type` tells the members apart.
+  | ProviderSourceDto<'gitlab'>
+  | ProviderSourceDto<'bitbucket'>
   | { type: 'git'; url: string; branch: string }
   | { type: 'image'; image: string }
   /** Compose file kept in the panel. */
@@ -956,6 +984,43 @@ export interface GithubAppDto {
   public: boolean | null;
   /** The app's settings page on GitHub (its visibility is changed there under "Advanced"). */
   settingsUrl: string;
+}
+
+/** A GitLab or Bitbucket account connected with a token. The token itself never leaves the server. */
+export interface GitProviderDto {
+  id: string;
+  kind: GitProviderKind;
+  name: string;
+  /** API and web origin: `https://gitlab.com`, a GitLab of your own, or `https://bitbucket.org`. */
+  baseUrl: string;
+  account: { login: string; name: string | null; avatarUrl: string | null };
+  /** Bitbucket: the one workspace this connection is limited to. */
+  workspace: string | null;
+  /** Bitbucket: the token is sent with an Atlassian account email (Basic auth). */
+  hasEmail: boolean;
+  /** Where repositories send pushes; null until the panel has a public address. */
+  webhookUrl: string | null;
+  /** Applications and stacks using it (a connection in use cannot be removed). */
+  usedBy: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A repository on any connected host, as the repository chooser lists it. */
+export interface GitRepositoryDto {
+  id: string;
+  fullName: string;
+  private: boolean;
+  defaultBranch: string;
+  description: string | null;
+  updatedAt: string | null;
+  language: string | null;
+}
+
+/** For setting a webhook up by hand: the address and the secret to give it (administrators only). */
+export interface GitProviderWebhookDto {
+  url: string | null;
+  secret: string;
 }
 
 export interface GithubInstallationDto {

@@ -7,16 +7,16 @@ import { useNavigate } from 'react-router';
 import { FileCode2, GitBranch, ShieldAlert } from 'lucide-react';
 import { createComposeSchema, roleAtLeast, type ApplicationDto, type CreateComposeInput } from '@ploy/shared';
 import { Dialog } from '../../components/Dialog.tsx';
-import { RepoPicker, type RepoChoice } from '../../components/RepoPicker.tsx';
-import { Button, Callout, Checkbox, Field, GithubMark, Input, Select } from '../../components/ui.tsx';
+import { githubAccounts, providerAccounts, RepoPicker, type RepoChoice } from '../../components/RepoPicker.tsx';
+import { BitbucketMark, Button, Callout, Checkbox, Field, GithubMark, GitlabMark, Input, Select } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api, ApiError } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
-import { keys, useGithub, useRole, useServers } from '../../lib/queries.ts';
+import { keys, useGithub, useGitProviders, useRole, useServers } from '../../lib/queries.ts';
 import { validate } from '../../lib/validate.ts';
 
-type SourceKind = 'raw' | 'github' | 'git';
+type SourceKind = 'raw' | 'github' | 'gitlab' | 'bitbucket' | 'git';
 
 const STARTER = `services:
   web:
@@ -29,6 +29,7 @@ export function NewComposeDialog({ projectId, open, onClose }: { projectId: stri
   const { m } = useI18n();
   const navigate = useNavigate();
   const github = useGithub();
+  const providers = useGitProviders();
   const servers = useServers();
   const role = useRole();
   const admin = role !== null && roleAtLeast(role, 'admin');
@@ -36,7 +37,7 @@ export function NewComposeDialog({ projectId, open, onClose }: { projectId: stri
 
   const [source, setSource] = useState<SourceKind>('raw');
   const [content, setContent] = useState(STARTER);
-  const [repo, setRepo] = useState<RepoChoice>({ installationId: null, repository: null, branch: '' });
+  const [repo, setRepo] = useState<RepoChoice>({ accountId: null, repository: null, branch: '' });
   const [gitUrl, setGitUrl] = useState('');
   const [branch, setBranch] = useState('');
   const [composePath, setComposePath] = useState('docker-compose.yml');
@@ -56,7 +57,7 @@ export function NewComposeDialog({ projectId, open, onClose }: { projectId: stri
   const close = () => {
     setSource('raw');
     setContent(STARTER);
-    setRepo({ installationId: null, repository: null, branch: '' });
+    setRepo({ accountId: null, repository: null, branch: '' });
     setGitUrl('');
     setBranch('');
     setComposePath('docker-compose.yml');
@@ -82,8 +83,10 @@ export function NewComposeDialog({ projectId, open, onClose }: { projectId: stri
       source === 'raw'
         ? { type: 'raw' as const, content }
         : source === 'github'
-          ? { type: 'github' as const, installationId: repo.installationId ?? 0, repository: repo.repository ?? '', branch: repo.branch }
-          : { type: 'git' as const, url: gitUrl.trim(), branch: branch.trim() || 'main' };
+          ? { type: 'github' as const, installationId: Number(repo.accountId ?? 0), repository: repo.repository ?? '', branch: repo.branch }
+          : source === 'gitlab' || source === 'bitbucket'
+            ? { type: source, providerId: repo.accountId ?? '', repository: repo.repository ?? '', branch: repo.branch }
+            : { type: 'git' as const, url: gitUrl.trim(), branch: branch.trim() || 'main' };
     const payload = { name: name.trim(), serverId, source: sourceInput, composePath: composePath.trim() || 'docker-compose.yml', allowHostAccess: hostAccess?.allow === true };
     const result = validate(m, createComposeSchema, payload);
     if (result.errors !== null) {
@@ -139,6 +142,8 @@ export function NewComposeDialog({ projectId, open, onClose }: { projectId: stri
               [
                 { value: 'raw', icon: <FileCode2 />, label: m.compose.sourceRaw, hint: m.compose.sourceRawHint },
                 { value: 'github', icon: <GithubMark />, label: m.newApp.sourceGithub, hint: m.compose.sourceRepoHint },
+                { value: 'gitlab', icon: <GitlabMark />, label: m.newApp.sourceGitlab, hint: m.compose.sourceRepoHint },
+                { value: 'bitbucket', icon: <BitbucketMark />, label: m.newApp.sourceBitbucket, hint: m.compose.sourceRepoHint },
                 { value: 'git', icon: <GitBranch />, label: m.newApp.sourceGit, hint: m.compose.sourceRepoHint },
               ] as const
             ).map((option) => (
@@ -149,6 +154,7 @@ export function NewComposeDialog({ projectId, open, onClose }: { projectId: stri
                 className="choice"
                 aria-checked={source === option.value}
                 onClick={() => {
+                  if (option.value !== source) setRepo({ accountId: null, repository: null, branch: '' });
                   setSource(option.value);
                   setErrors({});
                   setHostAccess(null);
@@ -186,9 +192,11 @@ export function NewComposeDialog({ projectId, open, onClose }: { projectId: stri
           </div>
         )}
 
-        {source === 'github' && (
+        {(source === 'github' || source === 'gitlab' || source === 'bitbucket') && (
           <RepoPicker
-            installations={installations}
+            key={source}
+            host={source}
+            accounts={source === 'github' ? githubAccounts(installations) : providerAccounts(providers.data ?? [], source)}
             value={repo}
             onChange={(next) => {
               if (next.repository !== null && next.repository !== repo.repository) suggestName(next.repository);

@@ -187,9 +187,21 @@ export function projectDto(project: ProjectWithStats): ProjectDto {
   };
 }
 
-export function sourceDto(app: ApplicationRecord): SourceDto {
+export function sourceDto(ctx: Context, app: ApplicationRecord): SourceDto {
   if (app.sourceType === 'github') {
     return { type: 'github', installationId: app.githubInstallationId ?? 0, repository: app.repository ?? '', branch: app.branch ?? 'main' };
+  }
+  if (app.sourceType === 'gitlab' || app.sourceType === 'bitbucket') {
+    const provider = app.gitProviderId === null ? undefined : ctx.stores.gitProviders.get(app.gitProviderId);
+    return {
+      type: app.sourceType,
+      providerId: app.gitProviderId ?? '',
+      providerName: provider?.name ?? null,
+      webUrl: provider?.baseUrl ?? (app.sourceType === 'gitlab' ? 'https://gitlab.com' : 'https://bitbucket.org'),
+      repository: app.repository ?? '',
+      branch: app.branch ?? 'main',
+      webhook: ctx.gitProviders.hookStatus(app),
+    };
   }
   if (app.sourceType === 'git') return { type: 'git', url: app.gitUrl ?? '', branch: app.branch ?? 'main' };
   if (app.sourceType === 'raw') return { type: 'raw' };
@@ -275,7 +287,7 @@ export function applicationDto(ctx: Context, app: ApplicationRecord, origin: str
     description: app.description,
     kind: app.kind,
     status: app.status,
-    source: sourceDto(app),
+    source: sourceDto(ctx, app),
     sourceType: app.sourceType,
     buildType: app.buildType,
     dockerfilePath: app.dockerfilePath,

@@ -40,7 +40,7 @@ export type AppKind = (typeof APP_KINDS)[number] | 'compose';
  * `raw`: a compose file kept in the panel instead of a repository.
  * `upload`: a folder or zip archive uploaded from the browser (or with the API), Netlify Drop style.
  */
-export const SOURCE_TYPES = ['github', 'git', 'image', 'raw', 'upload'] as const;
+export const SOURCE_TYPES = ['github', 'gitlab', 'bitbucket', 'git', 'image', 'raw', 'upload'] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
 /**
@@ -160,6 +160,16 @@ export const HOSTNAME_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])
 
 /** POSIX-portable environment variable name. */
 export const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Git hosts connected with an access token (GitHub connects through its App instead). */
+export const GIT_PROVIDER_KINDS = ['gitlab', 'bitbucket'] as const;
+export type GitProviderKind = (typeof GIT_PROVIDER_KINDS)[number];
+
+/** A GitLab project path: a namespace (groups and subgroups) and the project, `group/sub/project`. */
+export const GITLAB_PATH_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}(?:\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}){1,20}$/;
+
+/** A Bitbucket repository, `workspace/repo-slug`. */
+export const BITBUCKET_REPO_RE = /^[A-Za-z0-9_.-]{1,62}\/[A-Za-z0-9_.-]{1,100}$/;
 
 /** `owner/name` as GitHub spells it. */
 export const REPO_FULL_NAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;

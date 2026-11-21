@@ -7,23 +7,24 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Container, Database, ExternalLink, FileArchive, Folder, FolderUp, GitBranch, Hammer, KeyRound, Play, RotateCcw, Rocket, ScrollText, Square, SquareTerminal, Variable } from 'lucide-react';
+import { ChevronDown, ChevronRight, Container, Database, ExternalLink, FileArchive, Folder, FolderUp, GitBranch, Hammer, KeyRound, LoaderCircle, Play, RefreshCw, Rocket, RotateCcw, ScrollText, Square, SquareTerminal, TriangleAlert, Variable, Webhook } from 'lucide-react';
 import { updateApplicationSchema, type ApplicationDto, type ContainerDto, type SourceInput } from '@ploy/shared';
 import { CopyButton } from '../../components/Copy.tsx';
 import { useConfirm } from '../../components/Dialog.tsx';
 import { Card, SaveFooter } from '../../components/Frame.tsx';
 import { Menu, MenuItem } from '../../components/Menu.tsx';
 import { useReasonText } from '../../components/Reason.tsx';
-import { RepoField, type RepoChoice } from '../../components/RepoPicker.tsx';
+import { githubAccounts, providerAccounts, RepoField, type RepoChoice } from '../../components/RepoPicker.tsx';
+import { ManualWebhookDialog } from '../settings/GitProviders.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
 import { useToast } from '../../components/Toast.tsx';
 import { UploadDrop, uploadErrorText } from '../../components/UploadDrop.tsx';
-import { Button, Callout, Field, GithubMark, Input, Skeleton, Switch } from '../../components/ui.tsx';
+import { BitbucketMark, Button, Callout, Field, GithubMark, GitlabMark, Input, Skeleton, Switch } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { fieldErrors } from '../../lib/errors.ts';
 import { useAction } from '../../lib/mutate.ts';
-import { keys, useAppContainers, useAppMetrics, useDeployKey, useDeployment, useGithub, useLinks, useProject, useTemplates } from '../../lib/queries.ts';
+import { keys, useAppContainers, useAppMetrics, useDeployKey, useDeployment, useGithub, useGitProviders, useLinks, useProject, useRole, useTemplates } from '../../lib/queries.ts';
 import { isZipName, useArchiveUpload, type Picked } from '../../lib/upload.ts';
 import { validate } from '../../lib/validate.ts';
 import { TemplateMark } from '../projects/TemplatesDialog.tsx';
@@ -194,7 +195,7 @@ function DeployCard({ app, containers }: { app: ApplicationDto; containers: Cont
           {d.terminal}
         </Button>
       </div>
-      {app.source.type === 'github' && app.parentApplicationId === null && (
+      {(app.source.type === 'github' || app.source.type === 'gitlab' || app.source.type === 'bitbucket') && app.parentApplicationId === null && (
         <div className="toggle-row">
           <Switch checked={app.autoDeploy} disabled={autoDeploy.isPending} onChange={(value) => autoDeploy.mutate(value)} label={m.appSettings.autoDeploy} hint={m.appSettings.autoDeployHint} />
         </div>
@@ -291,21 +292,28 @@ function TemplateAccessCard({ app }: { app: ApplicationDto }) {
   );
 }
 
-type Provider = 'github' | 'git' | 'image' | 'upload';
+type Provider = 'github' | 'gitlab' | 'bitbucket' | 'git' | 'image' | 'upload';
+type RepoProvider = 'github' | 'gitlab' | 'bitbucket';
 
 interface ProviderDraft {
   type: Provider;
-  repo: RepoChoice;
+  /** The repository chosen for each host, so switching tabs back and forth loses nothing. */
+  repos: Record<RepoProvider, RepoChoice>;
   url: string;
   branch: string;
   image: string;
 }
 
+const EMPTY_REPO: RepoChoice = { accountId: null, repository: null, branch: '' };
+
 function draftFrom(app: ApplicationDto): ProviderDraft {
   const source = app.source;
+  const repos: Record<RepoProvider, RepoChoice> = { github: EMPTY_REPO, gitlab: EMPTY_REPO, bitbucket: EMPTY_REPO };
+  if (source.type === 'github') repos.github = { accountId: String(source.installationId), repository: source.repository, branch: source.branch };
+  if (source.type === 'gitlab' || source.type === 'bitbucket') repos[source.type] = { accountId: source.providerId, repository: source.repository, branch: source.branch };
   return {
     type: source.type === 'raw' ? 'git' : source.type,
-    repo: source.type === 'github' ? { installationId: source.installationId, repository: source.repository, branch: source.branch } : { installationId: null, repository: null, branch: '' },
+    repos,
     url: source.type === 'git' ? source.url : '',
     branch: source.type === 'git' ? source.branch : 'main',
     image: source.type === 'image' ? source.image : '',
@@ -313,9 +321,11 @@ function draftFrom(app: ApplicationDto): ProviderDraft {
 }
 
 function sourceFrom(draft: ProviderDraft): SourceInput | null {
-  if (draft.type === 'github') {
-    if (draft.repo.installationId === null || draft.repo.repository === null) return null;
-    return { type: 'github', installationId: draft.repo.installationId, repository: draft.repo.repository, branch: draft.repo.branch };
+  if (draft.type === 'github' || draft.type === 'gitlab' || draft.type === 'bitbucket') {
+    const repo = draft.repos[draft.type];
+    if (repo.accountId === null || repo.repository === null) return null;
+    if (draft.type === 'github') return { type: 'github', installationId: Number(repo.accountId), repository: repo.repository, branch: repo.branch };
+    return { type: draft.type, providerId: repo.accountId, repository: repo.repository, branch: repo.branch };
   }
   if (draft.type === 'git') return { type: 'git', url: draft.url.trim(), branch: draft.branch.trim() };
   if (draft.type === 'upload') return { type: 'upload' };
@@ -324,10 +334,54 @@ function sourceFrom(draft: ProviderDraft): SourceInput | null {
 
 function sameSource(next: SourceInput, current: ApplicationDto['source']): boolean {
   if (next.type === 'github' && current.type === 'github') return next.installationId === current.installationId && next.repository === current.repository && next.branch === current.branch;
+  if ((next.type === 'gitlab' || next.type === 'bitbucket') && current.type === next.type) {
+    return next.providerId === current.providerId && next.repository === current.repository && next.branch === current.branch;
+  }
   if (next.type === 'git' && current.type === 'git') return next.url === current.url && next.branch === current.branch;
   if (next.type === 'image' && current.type === 'image') return next.image === current.image;
   if (next.type === 'upload' && current.type === 'upload') return true;
   return false;
+}
+
+/**
+ * Whether pushes reach the panel: the webhook the panel set up on a GitLab or Bitbucket repository, or why it
+ * could not, with a way to try again and, for administrators, what to enter to set it up by hand.
+ */
+function WebhookStatus({ app }: { app: ApplicationDto }) {
+  const { m, t } = useI18n();
+  const g = m.gitProviders;
+  const role = useRole();
+  const [manual, setManual] = useState(false);
+  const source = app.source;
+  const retry = useAction(() => api.post(`/api/applications/${app.id}/webhook`), { invalidate: [keys.app(app.id)] });
+  if (source.type !== 'gitlab' && source.type !== 'bitbucket') return null;
+  const hook = source.webhook;
+  const admin = role === 'admin' || role === 'owner';
+  const reason = hook.reason === null ? null : ((g.webhookReasons as Record<string, string>)[hook.reason] ?? null);
+  return (
+    <div className="hook-status" data-state={hook.status}>
+      <span className="hook-status__mark" aria-hidden="true">
+        {hook.status === 'ok' ? <Webhook /> : hook.status === 'pending' ? <LoaderCircle className="spin" /> : <TriangleAlert />}
+      </span>
+      <div className="hook-status__text">
+        <strong>{hook.status === 'ok' ? t(g.webhookOk, { request: g.requestWord[source.type] }) : hook.status === 'pending' ? g.webhookPending : g.webhookFailed}</strong>
+        {hook.status === 'failed' && <span>{reason ?? hook.message}</span>}
+      </div>
+      {hook.status !== 'ok' && (
+        <div className="hook-status__actions">
+          <Button size="sm" icon={<RefreshCw />} busy={retry.isPending} onClick={() => retry.mutate()}>
+            {g.retry}
+          </Button>
+          {admin && hook.reason !== 'no_connection' && (
+            <Button size="sm" variant="ghost" onClick={() => setManual(true)}>
+              {g.manual}
+            </Button>
+          )}
+        </div>
+      )}
+      {admin && <ManualWebhookDialog open={manual} onClose={() => setManual(false)} providerId={source.providerId} kind={source.type} />}
+    </div>
+  );
 }
 
 /**
@@ -398,11 +452,12 @@ function UploadSection({ app }: { app: ApplicationDto }) {
   );
 }
 
-/** Where the code comes from: a connected GitHub repository, any Git URL, a ready image, or uploaded files. */
+/** Where the code comes from: a GitHub, GitLab or Bitbucket repository, any Git URL, a ready image, or uploaded files. */
 function ProviderCard({ app }: { app: ApplicationDto }) {
   const { m } = useI18n();
   const p = m.provider;
   const github = useGithub();
+  const providers = useGitProviders();
   const [draft, setDraft] = useState<ProviderDraft>(() => draftFrom(app));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const signature = JSON.stringify(app.source);
@@ -424,6 +479,8 @@ function ProviderCard({ app }: { app: ApplicationDto }) {
   };
   const choices: { value: Provider; label: string; icon: ReactNode }[] = [
     { value: 'github', label: 'GitHub', icon: <GithubMark size={16} /> },
+    { value: 'gitlab', label: 'GitLab', icon: <GitlabMark size={16} /> },
+    { value: 'bitbucket', label: 'Bitbucket', icon: <BitbucketMark size={16} /> },
     { value: 'git', label: 'Git', icon: <GitBranch aria-hidden="true" /> },
     { value: 'image', label: 'Docker', icon: <Container aria-hidden="true" /> },
     { value: 'upload', label: m.newApp.sourceUpload, icon: <FolderUp aria-hidden="true" /> },
@@ -447,7 +504,29 @@ function ProviderCard({ app }: { app: ApplicationDto }) {
         (github.data === undefined ? (
           <Skeleton height={66} />
         ) : (
-          <RepoField installations={github.data.installations} value={draft.repo} onChange={(repo) => setDraft((current) => ({ ...current, repo }))} onConnect={() => undefined} errors={errors} />
+          <RepoField
+            host="github"
+            accounts={githubAccounts(github.data.installations)}
+            value={draft.repos.github}
+            onChange={(repo) => setDraft((current) => ({ ...current, repos: { ...current.repos, github: repo } }))}
+            onConnect={() => undefined}
+            errors={errors}
+          />
+        ))}
+      {(draft.type === 'gitlab' || draft.type === 'bitbucket') &&
+        (providers.data === undefined ? (
+          <Skeleton height={66} />
+        ) : (
+          <RepoField
+            host={draft.type}
+            accounts={providerAccounts(providers.data, draft.type)}
+            value={draft.repos[draft.type]}
+            onChange={(repo) => setDraft((current) => (current.type === 'gitlab' || current.type === 'bitbucket' ? { ...current, repos: { ...current.repos, [current.type]: repo } } : current))}
+            onConnect={() => undefined}
+            errors={errors}
+            // How the saved repository's webhook is doing: only while the draft still is that repository.
+            below={!dirty && app.source.type === draft.type ? <WebhookStatus app={app} /> : undefined}
+          />
         ))}
       {draft.type === 'git' && (
         <>

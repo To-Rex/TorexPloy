@@ -99,7 +99,7 @@ export const guide: GuideContent = {
               type: "steps",
               items: [
                 { title: "Open the project → Create → Application", text: "Name, kind (web or background worker) and server." },
-                { title: "Pick the source", text: "**GitHub** — repository and branch from a list through the connected GitHub App, deploy on push. **Git** — any URL (a deploy key is issued; add it to the repository). **Docker** — an image such as `nginx:1.27` or `ghcr.io/team/app:latest`; private registry logins live in Settings → Registries. **Upload files** — drop a folder of a built site or a .zip: the panel unpacks it, detects the stack, builds and deploys; later versions are dropped in the same place or sent through the API with `curl`." },
+                { title: "Pick the source", text: "**GitHub** — repository and branch from a list through the connected GitHub App, deploy on push. **GitLab** and **Bitbucket** — the same, from an account connected with an access token in Settings → Git; the panel adds the webhook itself (when it cannot, it shows why, plus the URL and secret to add it by hand). **Git** — any URL (a deploy key is issued; add it to the repository). **Docker** — an image such as `nginx:1.27` or `ghcr.io/team/app:latest`; private registry logins live in Settings → Registries. **Upload files** — drop a folder of a built site or a .zip: the panel unpacks it, detects the stack, builds and deploys; later versions are dropped in the same place or sent through the API with `curl`." },
                 { title: "Create", text: "The first deployment starts right away. The app page shows the process stage by stage." },
               ],
             },
@@ -249,7 +249,7 @@ export const guide: GuideContent = {
           title: "PR previews",
           summary: "Every pull request runs at its own address with a comment linking to it; it is removed when the PR closes.",
           blocks: [
-            { type: "p", text: "Enabled on the app’s **PR previews** tab (for apps connected through the GitHub App). Opening a PR creates and deploys a preview app, every push updates it, closing removes it. A preview can have its own variables (a test database, say)." },
+            { type: "p", text: "Enabled on the app’s **PR previews** tab (for web apps from GitHub, GitLab and Bitbucket: merge requests on GitLab, pull requests on Bitbucket). Opening a PR creates and deploys a preview app, every push updates it, closing removes it. A preview can have its own variables (a test database, say)." },
             { type: "tip", tone: "info", text: "If the GitHub App is older, enable the **Pull requests: Read and write** permission and the **Pull request** event in its settings." },
           ],
         },
@@ -441,7 +441,7 @@ export const guide: GuideContent = {
                 "**Image retention** — how many recent images to keep per app (for rollbacks).",
                 "**Registries** — Docker Hub, GHCR and private registry logins: for pulling private images.",
                 "**S3 destinations** — external storage that receives backups.",
-                "**Git** — the GitHub App: created in one click, webhook and permissions set up automatically.",
+                "**Git** — the GitHub App: created in one click, webhook and permissions set up automatically. GitLab (gitlab.com or your own server) and Bitbucket connect with an access token, kept encrypted and never sent back to a browser.",
               ],
             },
           ],

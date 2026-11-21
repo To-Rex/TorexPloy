@@ -1,5 +1,7 @@
 /**
- * Choosing a GitHub repository and branch from the connected installations.
+ * Choosing a repository and branch: from a GitHub installation, or from a
+ * GitLab or Bitbucket connection. The same chooser serves all three; an
+ * "account" is an installation or a connection.
  *
  * `RepoBrowser` is the list itself: the account, a search, and the
  * repositories with what tells them apart (visibility, language, last
@@ -10,16 +12,46 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { BookMarked, Check, ExternalLink, GitBranch, Lock, Search, Settings2 } from 'lucide-react';
-import type { GithubInstallationDto, GithubRepositoryDto } from '@ploy/shared';
+import type { GithubInstallationDto, GitProviderDto, GitRepositoryDto } from '@ploy/shared';
 import { useI18n } from '../i18n/index.tsx';
-import { useBranches, useRepositories } from '../lib/queries.ts';
+import { useHostBranches, useHostRepositories, type RepoHost } from '../lib/queries.ts';
 import { Dialog } from './Dialog.tsx';
-import { Avatar, Button, Callout, Field, GithubMark, Select, Skeleton } from './ui.tsx';
+import { Avatar, Button, Callout, Field, HostMark, Select, Skeleton } from './ui.tsx';
 
 export interface RepoChoice {
-  installationId: number | null;
+  /** The GitHub installation (its id as a string) or the GitLab/Bitbucket connection. */
+  accountId: string | null;
   repository: string | null;
   branch: string;
+}
+
+/** An installation or a connection, as the chooser shows it. */
+export interface RepoAccount {
+  id: string;
+  login: string;
+  avatarUrl: string | null;
+  /** Where its repositories are seen on the web (`https://github.com`, a GitLab, `https://bitbucket.org`). */
+  webBase: string;
+  /** GitHub: the App sees only the repositories chosen for it; where to change that. */
+  manageUrl: string | null;
+  selectedOnly: boolean;
+}
+
+export function githubAccounts(installations: GithubInstallationDto[]): RepoAccount[] {
+  return installations.map((installation) => ({
+    id: String(installation.id),
+    login: installation.accountLogin,
+    avatarUrl: installation.avatarUrl,
+    webBase: 'https://github.com',
+    manageUrl: `https://github.com/${installation.accountType === 'Organization' ? `organizations/${installation.accountLogin}/` : ''}settings/installations/${installation.id}`,
+    selectedOnly: installation.repositorySelection === 'selected',
+  }));
+}
+
+export function providerAccounts(providers: GitProviderDto[], kind: 'gitlab' | 'bitbucket'): RepoAccount[] {
+  return providers
+    .filter((provider) => provider.kind === kind)
+    .map((provider) => ({ id: provider.id, login: provider.name, avatarUrl: provider.account.avatarUrl, webBase: provider.baseUrl, manageUrl: null, selectedOnly: false }));
 }
 
 /** GitHub's own colours for the languages most repositories are written in. */
@@ -49,19 +81,19 @@ const LANGUAGE_COLORS: Record<string, string> = {
   Dockerfile: '#384d54',
 };
 
-function NoInstallations({ onConnect }: { onConnect: () => void }) {
+function NoAccounts({ host, onConnect }: { host: RepoHost; onConnect: () => void }) {
   const { m } = useI18n();
   return (
     <Callout
       tone="info"
-      title={m.newApp.noInstallationsTitle}
+      title={host === 'github' ? m.newApp.noInstallationsTitle : m.gitProviders.noneFor[host]}
       action={
         <Link className="btn btn--sm" to="/settings/git" onClick={onConnect} style={{ textDecoration: 'none' }}>
-          {m.newApp.connectGithub}
+          {host === 'github' ? m.newApp.connectGithub : m.gitProviders.connect[host]}
         </Link>
       }
     >
-      {m.newApp.noInstallationsText}
+      {host === 'github' ? m.newApp.noInstallationsText : m.gitProviders.noneForText}
     </Callout>
   );
 }
@@ -80,22 +112,24 @@ function Marked({ text, needle }: { text: string; needle: string }): ReactNode {
 }
 
 function RepoBrowser({
-  installations,
-  installationId,
-  onInstallation,
+  host,
+  accounts,
+  accountId,
+  onAccount,
   selected,
   onSelect,
   onConfirm,
   tall = false,
   autoFocus = false,
 }: {
-  installations: GithubInstallationDto[];
-  installationId: number | null;
-  onInstallation: (id: number) => void;
+  host: RepoHost;
+  accounts: RepoAccount[];
+  accountId: string | null;
+  onAccount: (id: string) => void;
   selected: string | null;
-  onSelect: (repo: GithubRepositoryDto) => void;
+  onSelect: (repo: GitRepositoryDto) => void;
   /** Enter on the chosen repository, or a double click: "this one, go on". */
-  onConfirm?: (repo: GithubRepositoryDto) => void;
+  onConfirm?: (repo: GitRepositoryDto) => void;
   /** The roomier list of a dialog made for choosing. */
   tall?: boolean;
   autoFocus?: boolean;
@@ -105,15 +139,15 @@ function RepoBrowser({
   const [search, setSearch] = useState('');
   const [active, setActive] = useState(0);
   const list = useRef<HTMLDivElement>(null);
-  const repositories = useRepositories(installationId);
+  const repositories = useHostRepositories(host, accountId);
   const needle = search.trim().toLowerCase();
   const filtered = useMemo(
     () => (repositories.data ?? []).filter((repo) => repo.fullName.toLowerCase().includes(needle) || (repo.description ?? '').toLowerCase().includes(needle)).slice(0, 200),
     [repositories.data, needle],
   );
-  const installation = installations.find((candidate) => candidate.id === installationId);
+  const account = accounts.find((candidate) => candidate.id === accountId);
 
-  useEffect(() => setActive(0), [needle, installationId]);
+  useEffect(() => setActive(0), [needle, accountId]);
   useEffect(() => {
     list.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' });
   }, [active]);
@@ -134,12 +168,12 @@ function RepoBrowser({
 
   return (
     <div className="repo-browser" data-tall={tall || undefined}>
-      {installations.length > 1 && (
-        <div className="repo-accounts" role="group" aria-label={m.newApp.account}>
-          {installations.map((candidate) => (
-            <button key={candidate.id} type="button" aria-pressed={candidate.id === installationId} onClick={() => onInstallation(candidate.id)}>
-              <Avatar name={candidate.accountLogin} src={candidate.avatarUrl} size={20} />
-              {candidate.accountLogin}
+      {accounts.length > 1 && (
+        <div className="repo-accounts" role="group" aria-label={host === 'github' ? m.newApp.account : m.newApp.connection}>
+          {accounts.map((candidate) => (
+            <button key={candidate.id} type="button" aria-pressed={candidate.id === accountId} onClick={() => onAccount(candidate.id)}>
+              <Avatar name={candidate.login} src={candidate.avatarUrl} size={20} />
+              {candidate.login}
             </button>
           ))}
         </div>
@@ -212,10 +246,10 @@ function RepoBrowser({
           })
         )}
       </div>
-      {installation !== undefined && (
+      {account !== undefined && account.manageUrl !== null && (
         <p className="repo-browser__foot">
-          {installation.repositorySelection === 'selected' ? p.missingSelected : p.missing}{' '}
-          <a href={`https://github.com/${installation.accountType === 'Organization' ? `organizations/${installation.accountLogin}/` : ''}settings/installations/${installation.id}`} target="_blank" rel="noreferrer noopener">
+          {account.selectedOnly ? p.missingSelected : p.missing}{' '}
+          <a href={account.manageUrl} target="_blank" rel="noreferrer noopener">
             {p.manageAccess}
             <ExternalLink aria-hidden="true" />
           </a>
@@ -227,37 +261,40 @@ function RepoBrowser({
 
 /** The list in place, with the branch under it: for dialogs that are already about creating something. */
 export function RepoPicker({
-  installations,
+  host,
+  accounts,
   value,
   onChange,
   onConnect,
   errors,
 }: {
-  installations: GithubInstallationDto[];
+  host: RepoHost;
+  accounts: RepoAccount[];
   value: RepoChoice;
   onChange: (next: RepoChoice) => void;
-  /** Called when the user follows the link to connect GitHub (to close the dialog). */
+  /** Called when the user follows the link to connect an account (to close the dialog). */
   onConnect: () => void;
   errors: Record<string, string>;
 }) {
   const { m } = useI18n();
-  const branches = useBranches(value.installationId, value.repository);
+  const branches = useHostBranches(host, value.accountId, value.repository);
 
   useEffect(() => {
-    if (value.installationId === null && installations.length > 0) onChange({ ...value, installationId: installations[0]!.id });
-  }, [installations, value, onChange]);
+    if ((value.accountId === null || !accounts.some((account) => account.id === value.accountId)) && accounts.length > 0) onChange({ accountId: accounts[0]!.id, repository: null, branch: '' });
+  }, [accounts, value, onChange]);
 
-  if (installations.length === 0) return <NoInstallations onConnect={onConnect} />;
+  if (accounts.length === 0) return <NoAccounts host={host} onConnect={onConnect} />;
 
-  const sourceError = errors['source.repository'] ?? errors['source.installationId'];
+  const sourceError = errors['source.repository'] ?? errors['source.installationId'] ?? errors['source.providerId'];
   return (
     <>
       <div className="field">
         <span className="field__label">{m.newApp.repository}</span>
         <RepoBrowser
-          installations={installations}
-          installationId={value.installationId}
-          onInstallation={(installationId) => onChange({ installationId, repository: null, branch: '' })}
+          host={host}
+          accounts={accounts}
+          accountId={value.accountId}
+          onAccount={(accountId) => onChange({ accountId, repository: null, branch: '' })}
           selected={value.repository}
           onSelect={(repo) => onChange({ ...value, repository: repo.fullName, branch: repo.defaultBranch })}
         />
@@ -278,24 +315,24 @@ export function RepoPicker({
   );
 }
 
-function RepoDialog({ open, onClose, installations, value, onPick }: { open: boolean; onClose: () => void; installations: GithubInstallationDto[]; value: RepoChoice; onPick: (next: RepoChoice) => void }) {
+function RepoDialog({ host, open, onClose, accounts, value, onPick }: { host: RepoHost; open: boolean; onClose: () => void; accounts: RepoAccount[]; value: RepoChoice; onPick: (next: RepoChoice) => void }) {
   const { m } = useI18n();
   const p = m.provider;
-  const [installationId, setInstallationId] = useState<number | null>(value.installationId ?? installations[0]?.id ?? null);
+  const [accountId, setAccountId] = useState<string | null>(value.accountId ?? accounts[0]?.id ?? null);
   const [picked, setPicked] = useState<{ repository: string; branch: string } | null>(null);
   const [loadedFor, setLoadedFor] = useState(false);
   // Each opening starts from what is chosen now, not from where the last one was left.
   if (open !== loadedFor) {
     setLoadedFor(open);
     if (open) {
-      setInstallationId(value.installationId ?? installations[0]?.id ?? null);
+      setAccountId(value.accountId ?? accounts[0]?.id ?? null);
       setPicked(value.repository === null ? null : { repository: value.repository, branch: value.branch });
     }
   }
-  const branches = useBranches(installationId, picked?.repository ?? null);
+  const branches = useHostBranches(host, accountId, picked?.repository ?? null);
   const confirm = (choice: { repository: string; branch: string } | null) => {
-    if (choice === null || installationId === null) return;
-    onPick({ installationId, repository: choice.repository, branch: choice.branch });
+    if (choice === null || accountId === null) return;
+    onPick({ accountId, repository: choice.repository, branch: choice.branch });
     onClose();
   };
 
@@ -313,7 +350,7 @@ function RepoDialog({ open, onClose, installations, value, onPick }: { open: boo
               <span className="repo-pick__none">{p.selectedNone}</span>
             ) : (
               <>
-                <GithubMark size={15} />
+                <HostMark host={host} size={15} />
                 <span className="repo-pick__name truncate">{picked.repository}</span>
                 <label className="repo-pick__branch">
                   <GitBranch aria-hidden="true" />
@@ -339,10 +376,11 @@ function RepoDialog({ open, onClose, installations, value, onPick }: { open: boo
       <RepoBrowser
         tall
         autoFocus
-        installations={installations}
-        installationId={installationId}
-        onInstallation={(id) => {
-          setInstallationId(id);
+        host={host}
+        accounts={accounts}
+        accountId={accountId}
+        onAccount={(id) => {
+          setAccountId(id);
           setPicked(null);
         }}
         selected={picked?.repository ?? null}
@@ -358,35 +396,42 @@ function RepoDialog({ open, onClose, installations, value, onPick }: { open: boo
  * there), and a button that opens the list to choose another.
  */
 export function RepoField({
-  installations,
+  host,
+  accounts,
   value,
   onChange,
   onConnect,
   errors,
+  below,
 }: {
-  installations: GithubInstallationDto[];
+  host: RepoHost;
+  accounts: RepoAccount[];
   value: RepoChoice;
   onChange: (next: RepoChoice) => void;
   onConnect: () => void;
   errors: Record<string, string>;
+  /** Shown under the chosen repository (how its webhook is doing). */
+  below?: ReactNode;
 }) {
   const { m, t, formatRelative } = useI18n();
   const p = m.provider;
   const [open, setOpen] = useState(false);
-  const repositories = useRepositories(value.repository === null ? null : value.installationId);
-  const branches = useBranches(value.installationId, value.repository);
-  if (installations.length === 0) return <NoInstallations onConnect={onConnect} />;
+  const repositories = useHostRepositories(host, value.repository === null ? null : value.accountId);
+  const branches = useHostBranches(host, value.accountId, value.repository);
+  if (accounts.length === 0) return <NoAccounts host={host} onConnect={onConnect} />;
+  const account = accounts.find((candidate) => candidate.id === value.accountId) ?? accounts[0]!;
+  const onHost = host === 'github' ? p.openOnGithub : m.gitProviders.openOn[host];
 
   const details = repositories.data?.find((repo) => repo.fullName === value.repository);
   const [owner, ...rest] = (value.repository ?? '').split('/');
-  const error = errors['source.repository'] ?? errors['source.installationId'] ?? errors['source.branch'];
+  const error = errors['source.repository'] ?? errors['source.installationId'] ?? errors['source.providerId'] ?? errors['source.branch'];
   return (
     <div className="field">
       <span className="field__label">{m.newApp.repository}</span>
       {value.repository === null ? (
         <button type="button" className="repo-empty" onClick={() => setOpen(true)}>
           <span className="repo-card__mark" aria-hidden="true">
-            <GithubMark size={18} />
+            <HostMark host={host} size={18} />
           </span>
           <span className="repo-empty__text">
             <strong>{p.none}</strong>
@@ -397,10 +442,10 @@ export function RepoField({
       ) : (
         <div className="repo-card">
           <span className="repo-card__mark" aria-hidden="true">
-            <GithubMark size={18} />
+            <HostMark host={host} size={18} />
           </span>
           <div className="repo-card__text">
-            <a className="repo-card__name" href={`https://github.com/${value.repository}`} target="_blank" rel="noreferrer noopener" title={p.openOnGithub}>
+            <a className="repo-card__name" href={`${account.webBase}/${value.repository}`} target="_blank" rel="noreferrer noopener" title={onHost}>
               <span className="repo-option__owner">{owner}/</span>
               {rest.join('/')}
               <ExternalLink aria-hidden="true" />
@@ -439,8 +484,9 @@ export function RepoField({
           </Button>
         </div>
       )}
+      {value.repository !== null && below}
       {error !== undefined && <p className="field__error">{error}</p>}
-      <RepoDialog open={open} onClose={() => setOpen(false)} installations={installations} value={value} onPick={onChange} />
+      <RepoDialog host={host} open={open} onClose={() => setOpen(false)} accounts={accounts} value={value} onPick={onChange} />
     </div>
   );
 }

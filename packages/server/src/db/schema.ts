@@ -789,6 +789,113 @@ CREATE INDEX idx_deployments_team ON deployments(team_id, created_at DESC);
 CREATE INDEX idx_deployments_open ON deployments(status, created_at) WHERE status IN ('queued','building','deploying');
 `;
 
+const GIT_PROVIDERS_V16 = /* sql */ `
+-- A GitLab or Bitbucket account connected with an access token (sealed with the token's account email, if any).
+CREATE TABLE git_providers (
+  id              TEXT PRIMARY KEY,
+  team_id         TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  kind            TEXT NOT NULL CHECK (kind IN ('gitlab','bitbucket')),
+  name            TEXT NOT NULL,
+  base_url        TEXT NOT NULL,
+  account_login   TEXT NOT NULL,
+  account_name    TEXT,
+  avatar_url      TEXT,
+  workspace       TEXT,
+  credentials     TEXT NOT NULL,
+  -- What webhooks from this account are verified with (GitLab: X-Gitlab-Token; Bitbucket: the HMAC signature).
+  webhook_secret  TEXT NOT NULL,
+  created_by      TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL
+);
+CREATE INDEX idx_git_providers_team ON git_providers(team_id);
+
+-- The webhook the panel set up on a repository (one per repository and connection, whatever uses it).
+CREATE TABLE git_hooks (
+  provider_id  TEXT NOT NULL REFERENCES git_providers(id) ON DELETE CASCADE,
+  repository   TEXT NOT NULL COLLATE NOCASE,
+  hook_id      TEXT,
+  status       TEXT NOT NULL CHECK (status IN ('ok','failed')),
+  reason       TEXT,
+  message      TEXT,
+  updated_at   TEXT NOT NULL,
+  PRIMARY KEY (provider_id, repository)
+);
+
+CREATE TABLE applications_v16 (
+  id                       TEXT PRIMARY KEY,
+  project_id               TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  team_id                  TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  server_id                TEXT NOT NULL REFERENCES servers(id) ON DELETE RESTRICT,
+  name                     TEXT NOT NULL,
+  slug                     TEXT NOT NULL,
+  description              TEXT,
+  kind                     TEXT NOT NULL DEFAULT 'web' CHECK (kind IN ('web','worker','compose')),
+  source_type              TEXT NOT NULL CHECK (source_type IN ('github','gitlab','bitbucket','git','image','raw','upload')),
+  github_installation_id   INTEGER,
+  -- A GitLab or Bitbucket connection (source_type gitlab/bitbucket); the repository is its path there.
+  git_provider_id          TEXT REFERENCES git_providers(id) ON DELETE SET NULL,
+  repository               TEXT,
+  git_url                  TEXT,
+  branch                   TEXT,
+  image                    TEXT,
+  build_type               TEXT NOT NULL DEFAULT 'torex' CHECK (build_type IN ('torex','dockerfile','nixpacks','railpack','heroku','paketo','static')),
+  dockerfile_path          TEXT NOT NULL DEFAULT 'Dockerfile',
+  root_directory           TEXT NOT NULL DEFAULT '',
+  install_command          TEXT,
+  build_command            TEXT,
+  start_command            TEXT,
+  output_directory         TEXT,
+  build_stage              TEXT,
+  buildpack_builder        TEXT,
+  system_packages          TEXT,
+  port                     INTEGER,
+  replicas                 INTEGER NOT NULL DEFAULT 1 CHECK (replicas BETWEEN 1 AND 20),
+  cpu_limit                REAL,
+  memory_limit_mb          INTEGER,
+  health_check_path        TEXT,
+  health_check_timeout_sec INTEGER NOT NULL DEFAULT 120,
+  strategy                 TEXT NOT NULL DEFAULT 'rolling' CHECK (strategy IN ('rolling','recreate')),
+  auto_deploy              INTEGER NOT NULL DEFAULT 1 CHECK (auto_deploy IN (0,1)),
+  deploy_hook_token        TEXT,
+  deploy_key               TEXT,
+  deploy_public_key        TEXT,
+  status                   TEXT NOT NULL DEFAULT 'idle'
+                           CHECK (status IN ('idle','queued','building','deploying','running','crashed','failed','stopped')),
+  active_deployment_id     TEXT REFERENCES deployments(id) ON DELETE SET NULL,
+  config_updated_at        TEXT NOT NULL,
+  created_at               TEXT NOT NULL,
+  updated_at               TEXT NOT NULL,
+  template_id              TEXT,
+  compose_file             TEXT,
+  compose_path             TEXT NOT NULL DEFAULT 'docker-compose.yml',
+  host_access              INTEGER NOT NULL DEFAULT 0 CHECK (host_access IN (0,1)),
+  parent_application_id    TEXT REFERENCES applications(id) ON DELETE CASCADE,
+  preview_pr_number        INTEGER CHECK ((parent_application_id IS NULL) = (preview_pr_number IS NULL)),
+  preview_pr_title         TEXT,
+  preview_pr_url           TEXT,
+  preview_pr_author        TEXT,
+  preview_head_sha         TEXT,
+  preview_comment_id       INTEGER,
+  previews_enabled         INTEGER NOT NULL DEFAULT 0 CHECK (previews_enabled IN (0,1)),
+  preview_limit            INTEGER NOT NULL DEFAULT 3 CHECK (preview_limit BETWEEN 1 AND 20),
+  preview_env_sealed       TEXT,
+  -- Upload sources: the current archive as JSON {id, name, size, files, bytes, uploadedAt}; the file lives under uploads/<app>/<id>.zip.
+  upload                   TEXT,
+  UNIQUE (project_id, slug),
+  CHECK (kind <> 'compose' OR source_type IN ('github','gitlab','bitbucket','git','raw')),
+  CHECK (source_type <> 'raw' OR (kind = 'compose' AND compose_file IS NOT NULL))
+);
+INSERT INTO applications_v16 (id, project_id, team_id, server_id, name, slug, description, kind, source_type, github_installation_id, repository, git_url, branch, image, build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, build_stage, buildpack_builder, system_packages, port, replicas, cpu_limit, memory_limit_mb, health_check_path, health_check_timeout_sec, strategy, auto_deploy, deploy_hook_token, deploy_key, deploy_public_key, status, active_deployment_id, config_updated_at, created_at, updated_at, template_id, compose_file, compose_path, host_access, parent_application_id, preview_pr_number, preview_pr_title, preview_pr_url, preview_pr_author, preview_head_sha, preview_comment_id, previews_enabled, preview_limit, preview_env_sealed, upload) SELECT id, project_id, team_id, server_id, name, slug, description, kind, source_type, github_installation_id, repository, git_url, branch, image, build_type, dockerfile_path, root_directory, install_command, build_command, start_command, output_directory, build_stage, buildpack_builder, system_packages, port, replicas, cpu_limit, memory_limit_mb, health_check_path, health_check_timeout_sec, strategy, auto_deploy, deploy_hook_token, deploy_key, deploy_public_key, status, active_deployment_id, config_updated_at, created_at, updated_at, template_id, compose_file, compose_path, host_access, parent_application_id, preview_pr_number, preview_pr_title, preview_pr_url, preview_pr_author, preview_head_sha, preview_comment_id, previews_enabled, preview_limit, preview_env_sealed, upload FROM applications;
+DROP TABLE applications;
+ALTER TABLE applications_v16 RENAME TO applications;
+CREATE INDEX idx_applications_team ON applications(team_id);
+CREATE INDEX idx_applications_server ON applications(server_id);
+CREATE INDEX idx_applications_repo ON applications(repository, branch) WHERE source_type = 'github';
+CREATE INDEX idx_applications_provider_repo ON applications(git_provider_id, repository, branch) WHERE git_provider_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_applications_preview ON applications(parent_application_id, preview_pr_number) WHERE parent_application_id IS NOT NULL;
+`;
+
 /** Append-only. Never edit a released migration; add a new one. */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'initial', sql: INITIAL },
@@ -996,6 +1103,7 @@ CREATE INDEX idx_volume_backups_volume ON volume_backups(volume_id, started_at D
 CREATE INDEX idx_volume_backups_app ON volume_backups(application_id);
 `,
   },
+  { version: 16, name: 'git-providers', sql: GIT_PROVIDERS_V16, rebuildsTables: true },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

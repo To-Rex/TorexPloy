@@ -28,7 +28,9 @@ export function registerPreviewRoutes(app: Hono<Env>, ctx: Context): void {
       enabled: application.previewsEnabled,
       limit: application.previewLimit,
       env: application.previewEnvSealed === null ? '' : ctx.secrets.open(application.previewEnvSealed, 'env'),
-      webhookReady: ctx.github.webhookReady(),
+      // GitHub: its App's webhook reaches the panel. GitLab and Bitbucket: the repository's own webhook is set up.
+      webhookReady:
+        application.sourceType === 'gitlab' || application.sourceType === 'bitbucket' ? ctx.gitProviders.hookStatus(application).status === 'ok' : ctx.github.webhookReady(),
     };
     return c.json(settings);
   });

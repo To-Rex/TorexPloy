@@ -23,6 +23,8 @@ import type {
   DomainDto,
   GithubRepositoryDto,
   GithubStatusDto,
+  GitRepositoryDto,
+  GitProviderDto,
   HostMetricPoint,
   AppMetricPoint,
   InvitationDto,
@@ -82,6 +84,7 @@ export const keys = {
   serverPart: (id: string, part: string, ...rest: unknown[]) => ['server', id, part, ...rest] as const,
   catalog: ['catalog'] as const,
   github: ['github'] as const,
+  gitProviders: ['git-providers'] as const,
   repositories: (installationId: number) => ['github', 'repositories', installationId] as const,
   branches: (installationId: number, repository: string) => ['github', 'branches', installationId, repository] as const,
   settings: ['settings'] as const,
@@ -240,6 +243,30 @@ export const useServerContainerLogs = (serverId: string, containerId: string | n
 export const useServerProxy = (id: string) =>
   useQuery({ queryKey: keys.serverPart(id, 'proxy'), queryFn: () => api.get<ProxyOverviewDto>(`/api/servers/${id}/proxy`), refetchInterval: 15_000, retry: false });
 export const useGithub = (enabled = true) => useQuery({ queryKey: keys.github, queryFn: () => api.get<GithubStatusDto>('/api/github'), enabled });
+export const useGitProviders = (enabled = true) => useQuery({ queryKey: keys.gitProviders, queryFn: () => api.get<GitProviderDto[]>('/api/git-providers'), enabled });
+
+/** A repository host, as the repository chooser deals with it. */
+export type RepoHost = 'github' | 'gitlab' | 'bitbucket';
+
+/** Repositories of a GitHub installation or a GitLab/Bitbucket connection, with ids as strings whatever the host. */
+export const useHostRepositories = (host: RepoHost, accountId: string | null) =>
+  useQuery({
+    queryKey: ['repos', host, accountId],
+    queryFn: async () =>
+      host === 'github'
+        ? (await api.get<GithubRepositoryDto[]>(`/api/github/installations/${accountId}/repositories`)).map((repo): GitRepositoryDto => ({ ...repo, id: String(repo.id) }))
+        : api.get<GitRepositoryDto[]>(`/api/git-providers/${accountId}/repositories`),
+    enabled: accountId !== null && accountId.length > 0,
+    staleTime: 60_000,
+  });
+
+export const useHostBranches = (host: RepoHost, accountId: string | null, repository: string | null) =>
+  useQuery({
+    queryKey: ['branches', host, accountId, repository],
+    queryFn: () => api.get<string[]>(host === 'github' ? `/api/github/installations/${accountId}/branches${qs({ repository })}` : `/api/git-providers/${accountId}/branches${qs({ repository })}`),
+    enabled: accountId !== null && accountId.length > 0 && repository !== null,
+    staleTime: 60_000,
+  });
 export const useRepositories = (installationId: number | null) =>
   useQuery({
     queryKey: keys.repositories(installationId ?? 0),
