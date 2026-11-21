@@ -708,6 +708,35 @@ export interface VolumeDto {
   name: string;
   mountPath: string;
   createdAt: string;
+  /** Cron expression in the instance time zone; null: backed up by hand only. */
+  backupSchedule: string | null;
+  backupRetention: number;
+  backupDestinationId: string | null;
+  /** The application's containers are paused while a copy is taken. */
+  backupPause: boolean;
+  /** When the schedule next fires; null without one. */
+  nextBackupAt: string | null;
+  /** The newest backup, whatever became of it; null when there is none. */
+  lastBackup: VolumeBackupDto | null;
+  /** Backups that succeeded and are kept. */
+  backupCount: number;
+}
+
+export interface VolumeBackupDto {
+  id: string;
+  volumeId: string;
+  applicationId: string;
+  status: BackupStatus;
+  trigger: 'manual' | 'schedule' | 'before_restore';
+  /** Size of the archive. */
+  sizeBytes: number | null;
+  /** Size of the files before compression. */
+  rawBytes: number | null;
+  errorMessage: string | null;
+  remote: { destinationId: string; destinationName: string | null; key: string } | null;
+  onServer: boolean;
+  startedAt: string;
+  finishedAt: string | null;
 }
 
 export interface LinkDto {

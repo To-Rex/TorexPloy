@@ -508,6 +508,18 @@ export const updateDomainSchema = z.object({
 });
 export type UpdateDomainInput = z.infer<typeof updateDomainSchema>;
 
+/** How a volume is backed up. A schedule is a cron expression (checked by the server). */
+export const updateVolumeBackupSchema = z
+  .object({
+    backupSchedule: z.string().trim().min(9).max(120).nullable(),
+    backupRetention: z.int().min(1).max(365),
+    /** S3 destination that receives a copy of every backup; null keeps them on the server only. */
+    backupDestinationId: z.string().min(1).max(64).nullable(),
+    backupPause: z.boolean(),
+  })
+  .partial();
+export type UpdateVolumeBackupInput = z.infer<typeof updateVolumeBackupSchema>;
+
 export const createVolumeSchema = z.object({
   name: z.string().trim().toLowerCase().regex(/^[a-z0-9][a-z0-9_.-]{0,62}$/),
   mountPath: z

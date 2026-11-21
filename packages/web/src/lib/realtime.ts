@@ -79,6 +79,9 @@ export function applyEvent(client: QueryClient, event: PlatformEvent): void {
     case 'backup.updated':
       invalidate(keys.servicePart(event.serviceId, 'backups'));
       break;
+    case 'volume-backup.updated':
+      invalidate(keys.appPart(event.applicationId, 'volumes'));
+      break;
     case 'cron.updated':
       invalidate(keys.appPart(event.applicationId, 'cron'));
       invalidate(keys.teamCron);

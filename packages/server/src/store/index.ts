@@ -5,7 +5,7 @@ import type { Database } from '../db/database.ts';
 import type { Secrets } from '../lib/secrets.ts';
 import { ApplicationStore, DeploymentStore, ProjectStore } from './apps.ts';
 import { ApiTokenStore, PasskeyStore, SessionStore, UserStore } from './identity.ts';
-import { BackupStore, CronStore, DomainStore, EnvStore, InstallationStore, LinkStore, MetricStore, ServiceStore, VolumeStore } from './resources.ts';
+import { BackupStore, CronStore, DomainStore, EnvStore, InstallationStore, LinkStore, MetricStore, ServiceStore, VolumeBackupStore, VolumeStore } from './resources.ts';
 import { NotificationStore } from './notifications.ts';
 import { RegistryStore } from './registries.ts';
 import { S3DestinationStore } from './s3.ts';
@@ -29,6 +29,7 @@ export interface Stores {
   env: EnvStore;
   domains: DomainStore;
   volumes: VolumeStore;
+  volumeBackups: VolumeBackupStore;
   services: ServiceStore;
   links: LinkStore;
   backups: BackupStore;
@@ -59,6 +60,7 @@ export function createStores(db: Database, secrets: Secrets): Stores {
     env: new EnvStore(db, secrets),
     domains: new DomainStore(db),
     volumes: new VolumeStore(db),
+    volumeBackups: new VolumeBackupStore(db),
     services: new ServiceStore(db, secrets),
     links: new LinkStore(db),
     backups: new BackupStore(db),

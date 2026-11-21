@@ -28,6 +28,7 @@ import type { ServiceManager } from './services/manager.ts';
 import type { StorageManager } from './storage/manager.ts';
 import type { Stores } from './store/index.ts';
 import type { UpdateChecker } from './updates/checker.ts';
+import type { VolumeBackups } from './volumes/backups.ts';
 
 export interface Context {
   config: AppConfig;
@@ -51,6 +52,7 @@ export interface Context {
   notifier: Notifier;
   previews: PreviewManager;
   updates: UpdateChecker;
+  volumeBackups: VolumeBackups;
   /** Fresh confirmations of a session's owner (GitHub or a passkey), which stand in for the password for a few minutes. */
   stepUps: StepUps;
   startedAt: number;

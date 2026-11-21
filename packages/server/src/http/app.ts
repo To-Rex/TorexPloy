@@ -31,6 +31,7 @@ import { registerServiceRoutes } from './routes/services.ts';
 import { registerStorageRoutes } from './routes/storage.ts';
 import { registerTemplateRoutes } from './routes/templates.ts';
 import { registerUpdateRoutes } from './routes/updates.ts';
+import { registerVolumeRoutes } from './routes/volumes.ts';
 
 const MAX_JSON_BYTES = 1024 * 1024;
 
@@ -112,6 +113,7 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   registerServerRoutes(app, ctx);
   registerProjectRoutes(app, ctx);
   registerApplicationRoutes(app, ctx);
+  registerVolumeRoutes(app, ctx);
   registerPreviewRoutes(app, ctx);
   registerComposeRoutes(app, ctx);
   registerDeploymentRoutes(app, ctx);

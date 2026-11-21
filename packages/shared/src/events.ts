@@ -22,6 +22,7 @@ export type PlatformEvent =
   | { type: 'project.updated'; id: string }
   | { type: 'project.deleted'; id: string }
   | { type: 'backup.updated'; id: string; serviceId: string }
+  | { type: 'volume-backup.updated'; id: string; volumeId: string; applicationId: string }
   | { type: 'cron.updated'; id: string; applicationId: string };
 
 export type PlatformEventType = PlatformEvent['type'];

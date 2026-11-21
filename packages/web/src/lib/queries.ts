@@ -60,6 +60,7 @@ import type {
   UpdateStatusDto,
   UserDto,
   VariablesDto,
+  VolumeBackupDto,
   VolumeDto,
   HostMetricPoint as HostPoint,
 } from '@ploy/shared';
@@ -143,7 +144,20 @@ export const useAppContainers = (id: string) =>
 export const useCompose = (id: string, enabled = true) => useQuery({ queryKey: keys.appPart(id, 'compose'), queryFn: () => api.get<ComposeDto>(`/api/applications/${id}/compose`), enabled });
 export const useAppVariables = (id: string) => useQuery({ queryKey: keys.appPart(id, 'variables'), queryFn: () => api.get<VariablesDto>(`/api/applications/${id}/variables`) });
 export const useDomains = (id: string) => useQuery({ queryKey: keys.appPart(id, 'domains'), queryFn: () => api.get<DomainDto[]>(`/api/applications/${id}/domains`) });
-export const useVolumes = (id: string) => useQuery({ queryKey: keys.appPart(id, 'volumes'), queryFn: () => api.get<VolumeDto[]>(`/api/applications/${id}/volumes`) });
+export const useVolumes = (id: string) =>
+  useQuery({
+    queryKey: keys.appPart(id, 'volumes'),
+    queryFn: () => api.get<VolumeDto[]>(`/api/applications/${id}/volumes`),
+    // A backup in flight finishes with an event; the poll is only the fallback when events are not coming through.
+    refetchInterval: (query) => (query.state.data?.some((volume) => volume.lastBackup?.status === 'running') === true ? 4_000 : false),
+  });
+export const useVolumeBackups = (appId: string, volumeId: string | null) =>
+  useQuery({
+    queryKey: keys.appPart(appId, 'volumes', volumeId, 'backups'),
+    queryFn: () => api.get<VolumeBackupDto[]>(`/api/applications/${appId}/volumes/${volumeId}/backups`),
+    enabled: volumeId !== null,
+    refetchInterval: (query) => (query.state.data?.some((backup) => backup.status === 'running') === true ? 3_000 : false),
+  });
 export const useLinks = (id: string) => useQuery({ queryKey: keys.appPart(id, 'links'), queryFn: () => api.get<LinkDto[]>(`/api/applications/${id}/links`) });
 export const useCronJobs = (id: string) => useQuery({ queryKey: keys.appPart(id, 'cron'), queryFn: () => api.get<CronJobDto[]>(`/api/applications/${id}/cron`) });
 export const useCronRuns = (appId: string, cronId: string | null) =>

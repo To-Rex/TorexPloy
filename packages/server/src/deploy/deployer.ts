@@ -859,8 +859,10 @@ export class Deployer {
     const runIds = stores.db
       .all('SELECT r.id FROM cron_runs r JOIN cron_jobs j ON j.id = r.cron_job_id WHERE j.application_id = ?', app.id)
       .map((row) => String(row.id));
+    const volumeIds = stores.volumes.listForApplication(app.id).map((volume) => volume.id);
     stores.applications.delete(app.id);
     stores.metrics.deleteOwner(app.id);
+    for (const id of volumeIds) await this.ctx.volumeBackups.forgetVolume(id).catch(() => undefined);
     await removeUploads(config.dataDir, app.id).catch(() => undefined);
     for (const id of deploymentIds) await removeLog(logPath(config.dataDir, 'deployments', id));
     for (const id of runIds) await removeLog(logPath(config.dataDir, 'cron', id));

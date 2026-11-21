@@ -14,7 +14,7 @@ import type { NotificationEvent } from '@ploy/shared';
 import type { Context } from '../context.ts';
 import { publicBaseUrl } from '../github/app.ts';
 import { errorMessage } from '../lib/errors.ts';
-import type { ApplicationRecord, NotificationChannelRecord, ServerRecord, ServiceRecord } from '../store/index.ts';
+import type { ApplicationRecord, NotificationChannelRecord, ServerRecord, ServiceRecord, VolumeRecord } from '../store/index.ts';
 import { fill, MESSAGES, type MessageTexts } from './messages.ts';
 
 export interface Message {
@@ -127,6 +127,17 @@ export class Notifier {
       lines: [fill(texts.project, { project })],
       detail: error,
       path: `/services/${service.id}/backups`,
+    }));
+  }
+
+  /** A copy of an application's volume failed (or reached the server but not S3). Same event as a database backup. */
+  volumeBackupFailed(app: ApplicationRecord, volume: VolumeRecord, error: string): void {
+    const project = this.ctx.stores.projects.get(app.projectId)?.name ?? '';
+    this.dispatch(app.teamId, 'backup.failed', null, (texts) => ({
+      title: fill(texts.backupFailed, { service: `${app.name} → ${volume.name}` }),
+      lines: [fill(texts.project, { project })],
+      detail: error,
+      path: `/apps/${app.id}/advanced`,
     }));
   }
 

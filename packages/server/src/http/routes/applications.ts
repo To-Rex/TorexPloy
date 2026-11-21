@@ -440,7 +440,8 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
 
   app.get('/api/applications/:id/volumes', (c) => {
     const application = loadApp(ctx, c, 'viewer');
-    return c.json(stores.volumes.listForApplication(application.id).map(volumeDto));
+    const latest = stores.volumeBackups.latestForApplication(application.id);
+    return c.json(stores.volumes.listForApplication(application.id).map((volume) => volumeDto(ctx, volume, latest.get(volume.id) ?? null)));
   });
 
   app.post('/api/applications/:id/volumes', async (c) => {
@@ -454,15 +455,21 @@ export function registerApplicationRoutes(app: Hono<Env>, ctx: Context): void {
     stores.applications.markConfigChanged(application.id);
     audit(ctx, c, 'volume.created', { type: 'volume', id: volume.id, name: volume.name }, { mountPath: volume.mountPath });
     changed(application);
-    return c.json(volumeDto(volume), 201);
+    return c.json(volumeDto(ctx, volume, null), 201);
   });
 
   app.delete('/api/applications/:id/volumes/:volumeId', async (c) => {
     const application = loadApp(ctx, c, 'admin');
     const volume = stores.volumes.get(c.req.param('volumeId'));
     if (volume === undefined || volume.applicationId !== application.id) throw notFound('Volume');
+    if (stores.volumeBackups.isRunning(volume.id) || ctx.volumeBackups.isRestoring(volume.id)) {
+      throw new AppError('conflict', 'A backup or restore of this volume is running', { params: { reason: 'backup_running' } });
+    }
     stores.volumes.delete(volume.id);
     stores.applications.markConfigChanged(application.id);
+    ctx.maintenance.forgetBackupSchedule(volume.id);
+    // Its backups on the server go with it, unless the data stays: then they are still worth having.
+    if (c.req.query('removeData') === 'true') await ctx.volumeBackups.forgetVolume(volume.id);
     if (c.req.query('removeData') === 'true') {
       // Removal succeeds only once no container uses the volume (after the next deployment).
       const docker = await ctx.connections.docker(application.serverId).catch(() => null);

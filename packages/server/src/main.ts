@@ -31,6 +31,7 @@ import { StorageManager } from './storage/manager.ts';
 import { createStores } from './store/index.ts';
 import { TerminalGateway } from './terminal/gateway.ts';
 import { UpdateChecker } from './updates/checker.ts';
+import { VolumeBackups } from './volumes/backups.ts';
 import type { Context } from './context.ts';
 
 /** Upper bound for a graceful stop (deployments in flight get this long to wind down). */
@@ -66,6 +67,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   ctx.notifier = new Notifier(ctx);
   ctx.previews = new PreviewManager(ctx);
   ctx.updates = new UpdateChecker(ctx);
+  ctx.volumeBackups = new VolumeBackups(ctx);
   return ctx;
 }
 
@@ -94,6 +96,7 @@ async function start(): Promise<void> {
   ctx.deployer.recover();
   ctx.cron.initialize();
   stores.backups.failInterrupted();
+  await ctx.volumeBackups.recover();
 
   const app = createHttpApp(ctx);
   const server: ServerType = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {

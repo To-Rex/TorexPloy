@@ -96,6 +96,7 @@ export interface ContainerInspect {
   State: {
     Status: string;
     Running: boolean;
+    Paused?: boolean;
     Restarting: boolean;
     OOMKilled: boolean;
     ExitCode: number;
@@ -491,6 +492,17 @@ export class DockerClient {
   }
 
   /** Volumes carrying a label (`key=value`). */
+  /** Whether a named volume exists (Docker would otherwise create an empty one the moment a container names it). */
+  async volumeExists(name: string): Promise<boolean> {
+    try {
+      await this.call('GET', `/volumes/${encodeURIComponent(name)}`, { timeoutMs: 30_000 });
+      return true;
+    } catch (error) {
+      if (error instanceof DockerError && error.isNotFound) return false;
+      throw error;
+    }
+  }
+
   async listVolumes(label: string): Promise<{ Name: string; Labels: Record<string, string> | null }[]> {
     const result = await this.call<{ Volumes: { Name: string; Labels: Record<string, string> | null }[] | null }>('GET', '/volumes', { query: { filters: { label: [label] } } });
     return result.Volumes ?? [];
@@ -720,13 +732,32 @@ export class DockerClient {
   }
 
   /** Upload a tar archive and extract it at `path` inside the container. */
-  async putArchive(id: string, path: string, tar: Buffer | Readable): Promise<void> {
+  /**
+   * Extract a tar archive (plain or gzip-compressed) into `path` of a container. With `keepOwners` the files keep
+   * the owners recorded in the archive instead of becoming root's, which a restore needs for non-root programs.
+   */
+  async putArchive(id: string, path: string, tar: Buffer | Readable, options: { keepOwners?: boolean; timeoutMs?: number } = {}): Promise<void> {
     await this.call('PUT', `/containers/${encodeURIComponent(id)}/archive`, {
-      query: { path },
+      query: { path, ...(options.keepOwners === true ? { copyUIDGID: true } : {}) },
       raw: tar,
       contentType: 'application/x-tar',
-      timeoutMs: 600_000,
+      timeoutMs: options.timeoutMs ?? 600_000,
     });
+  }
+
+  /** Freeze every process of a running container (cgroup freezer); `unpauseContainer` resumes them. */
+  async pauseContainer(id: string): Promise<void> {
+    await this.call('POST', `/containers/${encodeURIComponent(id)}/pause`, { timeoutMs: 30_000 });
+  }
+
+  async unpauseContainer(id: string): Promise<void> {
+    try {
+      await this.call('POST', `/containers/${encodeURIComponent(id)}/unpause`, { timeoutMs: 30_000 });
+    } catch (error) {
+      // Not paused (or gone): already where it should be.
+      if (error instanceof DockerError && (error.isNotFound || error.isConflict || /not paused/i.test(error.message))) return;
+      throw error;
+    }
   }
 
   /** Download `path` from a container as a tar stream. */

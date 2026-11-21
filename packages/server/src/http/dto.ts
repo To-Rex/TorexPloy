@@ -35,10 +35,12 @@ import {
   type TeamDto,
   type UploadInfoDto,
   type UserDto,
+  type VolumeBackupDto,
   type VolumeDto,
 } from '@ploy/shared';
 import type { Context } from '../context.ts';
 import { publicBaseUrl } from '../github/app.ts';
+import { nextRunFor } from '../lib/cron.ts';
 import type { S3Listing } from '../lib/s3.ts';
 import { catalogEntry, linkEnv } from '../services/catalog.ts';
 import type { BucketStats } from '../storage/manager.ts';
@@ -47,6 +49,7 @@ import type {
   ApplicationRecord,
   AuditRecord,
   BackupRecord,
+  VolumeBackupRecord,
   CronJobRecord,
   CronRunRecord,
   DeploymentRecord,
@@ -351,8 +354,50 @@ export function domainDto(ctx: Context, domain: DomainRecord): DomainDto {
   };
 }
 
-export function volumeDto(volume: VolumeRecord): VolumeDto {
-  return { id: volume.id, applicationId: volume.applicationId, name: volume.name, mountPath: volume.mountPath, createdAt: volume.createdAt };
+export function volumeBackupDto(ctx: Context, backup: VolumeBackupRecord): VolumeBackupDto {
+  const destination = backup.remoteDestinationId === null ? undefined : ctx.stores.s3.get(backup.remoteDestinationId);
+  const file = ctx.volumeBackups.file(backup);
+  return {
+    id: backup.id,
+    volumeId: backup.volumeId,
+    applicationId: backup.applicationId,
+    status: backup.status,
+    trigger: backup.trigger,
+    sizeBytes: backup.sizeBytes,
+    rawBytes: backup.rawBytes,
+    errorMessage: backup.errorMessage,
+    remote: backup.remoteDestinationId === null || backup.remoteKey === null ? null : { destinationId: backup.remoteDestinationId, destinationName: destination?.name ?? null, key: backup.remoteKey },
+    onServer: file !== null && existsSync(file),
+    startedAt: backup.startedAt,
+    finishedAt: backup.finishedAt,
+  };
+}
+
+/** A volume with how it is backed up. `latest` is its newest backup, when the caller has it at hand. */
+export function volumeDto(ctx: Context, volume: VolumeRecord, latest?: VolumeBackupRecord | null): VolumeDto {
+  let nextBackupAt: string | null = null;
+  if (volume.backupSchedule !== null) {
+    try {
+      nextBackupAt = nextRunFor(volume.backupSchedule, new Date(), ctx.stores.settings.timezone()).toISOString();
+    } catch {
+      nextBackupAt = null;
+    }
+  }
+  const newest = latest === undefined ? (ctx.stores.volumeBackups.listForVolume(volume.id)[0] ?? null) : latest;
+  return {
+    id: volume.id,
+    applicationId: volume.applicationId,
+    name: volume.name,
+    mountPath: volume.mountPath,
+    createdAt: volume.createdAt,
+    backupSchedule: volume.backupSchedule,
+    backupRetention: volume.backupRetention,
+    backupDestinationId: volume.backupDestinationId,
+    backupPause: volume.backupPause,
+    nextBackupAt,
+    lastBackup: newest === null ? null : volumeBackupDto(ctx, newest),
+    backupCount: ctx.stores.volumeBackups.countForVolume(volume.id),
+  };
 }
 
 export function linkDto(ctx: Context, link: LinkRecord): LinkDto | null {

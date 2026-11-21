@@ -300,6 +300,7 @@ export const guide: GuideContent = {
               ],
             },
             { type: "tip", tone: "bad", title: "Restoring", text: "A restore replaces the database’s current data with the backup’s state. Take a fresh backup first." },
+            { type: "list", items: ["**Application volumes** — Application → Advanced → Volumes → **Backups**: the volume’s files (uploads, SQLite) are kept as a `.tar.gz` with their owners and permissions. Schedule (every 6 hours, daily, weekly or a cron expression of your own), how many to keep and an S3 destination work as for databases.", "For a program that writes to its files, turn on **Pause the application while copying**: the application freezes for a few seconds, requests wait instead of failing, and the copy is consistent.", "Restoring a volume stops the application, first takes a copy of what is there now (“Before a restore”), replaces the files and starts the application again. If something went wrong, that copy takes you back."] },
           ],
         },
         {

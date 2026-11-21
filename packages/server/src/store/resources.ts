@@ -343,6 +343,19 @@ export interface VolumeRecord {
   mountPath: string;
   dockerVolume: string;
   createdAt: string;
+  /** Cron expression in the instance time zone; null: backed up by hand only. */
+  backupSchedule: string | null;
+  backupRetention: number;
+  backupDestinationId: string | null;
+  /** Pause the application's containers while the copy is taken. */
+  backupPause: boolean;
+}
+
+export interface VolumeBackupPolicy {
+  backupSchedule?: string | null;
+  backupRetention?: number;
+  backupDestinationId?: string | null;
+  backupPause?: boolean;
 }
 
 function mapVolume(row: Row): VolumeRecord {
@@ -353,6 +366,10 @@ function mapVolume(row: Row): VolumeRecord {
     mountPath: str(row.mount_path),
     dockerVolume: str(row.docker_volume),
     createdAt: str(row.created_at),
+    backupSchedule: strOrNull(row.backup_schedule),
+    backupRetention: num(row.backup_retention ?? 7),
+    backupDestinationId: strOrNull(row.backup_destination_id),
+    backupPause: bool(row.backup_pause ?? 0),
   };
 }
 
@@ -386,8 +403,157 @@ export class VolumeStore {
     return this.db.all('SELECT * FROM volumes WHERE application_id = ? ORDER BY created_at', applicationId).map(mapVolume);
   }
 
+  /** Volumes with a backup schedule, for the scheduler. */
+  listWithBackupSchedule(): VolumeRecord[] {
+    return this.db.all('SELECT * FROM volumes WHERE backup_schedule IS NOT NULL').map(mapVolume);
+  }
+
+  setBackupPolicy(id: string, policy: VolumeBackupPolicy): VolumeRecord {
+    const sets: string[] = [];
+    const values: (string | number | null)[] = [];
+    if (policy.backupSchedule !== undefined) sets.push('backup_schedule = ?'), values.push(policy.backupSchedule);
+    if (policy.backupRetention !== undefined) sets.push('backup_retention = ?'), values.push(policy.backupRetention);
+    if (policy.backupDestinationId !== undefined) sets.push('backup_destination_id = ?'), values.push(policy.backupDestinationId);
+    if (policy.backupPause !== undefined) sets.push('backup_pause = ?'), values.push(int01(policy.backupPause));
+    if (sets.length > 0) this.db.run(`UPDATE volumes SET ${sets.join(', ')} WHERE id = ?`, ...values, id);
+    return this.get(id)!;
+  }
+
   delete(id: string): void {
     this.db.run('DELETE FROM volumes WHERE id = ?', id);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Volume backups
+// ---------------------------------------------------------------------------
+
+export type VolumeBackupTrigger = 'manual' | 'schedule' | 'before_restore';
+
+export interface VolumeBackupRecord {
+  id: string;
+  volumeId: string;
+  applicationId: string;
+  status: 'running' | 'succeeded' | 'failed';
+  trigger: VolumeBackupTrigger;
+  /** File name under the volume's backup directory; null until written (or when it failed). */
+  filePath: string | null;
+  /** Size of the .tar.gz. */
+  sizeBytes: number | null;
+  /** Size of the files before compression. */
+  rawBytes: number | null;
+  errorMessage: string | null;
+  remoteDestinationId: string | null;
+  remoteKey: string | null;
+  /** Containers paused for this backup, while they are. */
+  pausedContainers: string[];
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+function mapVolumeBackup(row: Row): VolumeBackupRecord {
+  return {
+    id: str(row.id),
+    volumeId: str(row.volume_id),
+    applicationId: str(row.application_id),
+    status: str(row.status) as VolumeBackupRecord['status'],
+    trigger: str(row.trigger) as VolumeBackupTrigger,
+    filePath: strOrNull(row.file_path),
+    sizeBytes: numOrNull(row.size_bytes),
+    rawBytes: numOrNull(row.raw_bytes),
+    errorMessage: strOrNull(row.error_message),
+    remoteDestinationId: strOrNull(row.remote_destination_id),
+    remoteKey: strOrNull(row.remote_key),
+    pausedContainers: row.paused_containers === null || row.paused_containers === undefined ? [] : json<string[]>(row.paused_containers, []),
+    startedAt: str(row.started_at),
+    finishedAt: strOrNull(row.finished_at),
+  };
+}
+
+export class VolumeBackupStore {
+  private readonly db: Database;
+
+  constructor(db: Database) {
+    this.db = db;
+  }
+
+  create(volume: VolumeRecord, trigger: VolumeBackupTrigger): VolumeBackupRecord {
+    const id = newId('bak');
+    this.db.run(
+      "INSERT INTO volume_backups (id, volume_id, application_id, status, trigger, started_at) VALUES (?, ?, ?, 'running', ?, ?)",
+      id,
+      volume.id,
+      volume.applicationId,
+      trigger,
+      nowIso(),
+    );
+    return this.get(id)!;
+  }
+
+  get(id: string): VolumeBackupRecord | undefined {
+    const row = this.db.get('SELECT * FROM volume_backups WHERE id = ?', id);
+    return row === undefined ? undefined : mapVolumeBackup(row);
+  }
+
+  listForVolume(volumeId: string): VolumeBackupRecord[] {
+    return this.db.all('SELECT * FROM volume_backups WHERE volume_id = ? ORDER BY started_at DESC, rowid DESC', volumeId).map(mapVolumeBackup);
+  }
+
+  /** The newest backup of each of an application's volumes, for the volume list. */
+  latestForApplication(applicationId: string): Map<string, VolumeBackupRecord> {
+    const latest = new Map<string, VolumeBackupRecord>();
+    for (const row of this.db.all('SELECT * FROM volume_backups WHERE application_id = ? ORDER BY started_at DESC, rowid DESC', applicationId)) {
+      const backup = mapVolumeBackup(row);
+      if (!latest.has(backup.volumeId)) latest.set(backup.volumeId, backup);
+    }
+    return latest;
+  }
+
+  countForVolume(volumeId: string): number {
+    return num(this.db.scalar("SELECT COUNT(*) FROM volume_backups WHERE volume_id = ? AND status = 'succeeded'", volumeId));
+  }
+
+  isRunning(volumeId: string): boolean {
+    return this.db.get("SELECT 1 FROM volume_backups WHERE volume_id = ? AND status = 'running'", volumeId) !== undefined;
+  }
+
+  setPaused(id: string, containers: string[]): void {
+    this.db.run('UPDATE volume_backups SET paused_containers = ? WHERE id = ?', containers.length === 0 ? null : JSON.stringify(containers), id);
+  }
+
+  finish(id: string, result: { status: 'succeeded' | 'failed'; filePath?: string | null; sizeBytes?: number | null; rawBytes?: number | null; error?: string | null }): void {
+    this.db.run(
+      'UPDATE volume_backups SET status = ?, file_path = ?, size_bytes = ?, raw_bytes = ?, error_message = ?, paused_containers = NULL, finished_at = ? WHERE id = ?',
+      result.status,
+      result.filePath ?? null,
+      result.sizeBytes ?? null,
+      result.rawBytes ?? null,
+      result.error?.slice(0, 2_000) ?? null,
+      nowIso(),
+      id,
+    );
+  }
+
+  /** Backups a restart cut short: marked failed, and returned with the containers they had paused. */
+  failInterrupted(): VolumeBackupRecord[] {
+    const interrupted = this.db.all("SELECT * FROM volume_backups WHERE status = 'running'").map(mapVolumeBackup);
+    this.db.run(
+      "UPDATE volume_backups SET status = 'failed', error_message = 'Interrupted by a control-plane restart', paused_containers = NULL, finished_at = ? WHERE status = 'running'",
+      nowIso(),
+    );
+    return interrupted;
+  }
+
+  setRemote(id: string, destinationId: string, key: string): void {
+    this.db.run('UPDATE volume_backups SET remote_destination_id = ?, remote_key = ? WHERE id = ?', destinationId, key, id);
+  }
+
+  setWarning(id: string, message: string): void {
+    this.db.run('UPDATE volume_backups SET error_message = ? WHERE id = ?', message.slice(0, 2_000), id);
+  }
+
+  delete(id: string): void {
+    this.db.run('DELETE FROM volume_backups WHERE id = ?', id);
   }
 }
 

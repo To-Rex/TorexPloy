@@ -426,7 +426,28 @@ servislarning nusxalari esa shu omborga yoziladi. Kod: `services/catalog.ts` (`f
   bucket satrlari va domenlar `ON DELETE CASCADE` bilan yoʻqoladi, boshqa servislar `backup_destination_id`ni
   yoʻqotadi (`SET NULL`).
 
-### 5.10 Yuklangan manbalar (Netlify Drop uslubi)
+### 5.10 Ilova disklarining zaxirasi
+
+Ilova diski (`volumes`) zaxirasi `volumes/backups.ts`da. Ilova konteyneriga hech narsa qoʻyilmaydi (image'da shell
+yoki tar boʻlmasligi mumkin): proksi image'idan (u har bir serverda bor) vaqtinchalik yordamchi konteyner yaratiladi,
+disk unga `/volume` sifatida ulanadi (nusxa olishda `ro`, tiklashda `rw`, tarmoqsiz), va fayllarni Docker'ning oʻzi
+tar oqimi qilib beradi (`GET /containers/{id}/archive`). Egalari, ruxsatlari va havolalari saqlanadi, xotirada hech
+narsa toʻplanmaydi; oqim gzip'lanib `backups/volumes/<volume>/<vaqt>.tar.gz`ga yoziladi, soʻng S3 manziliga yuboriladi.
+
+- **Sozlamalar** (`volumes` jadvali, migratsiya 15): `backup_schedule` (instansiya vaqt zonasida cron), `backup_retention`,
+  `backup_destination_id`, `backup_pause`. Jadval bazalar zaxirasi bilan bitta `Maintenance.runBackups` siklida.
+- **Pauza.** `backup_pause` yoqilgan boʻlsa, faol deploy konteynerlari nusxa paytida `docker pause` qilinadi:
+  jarayonlar muzlatiladi, toʻxtatilmaydi, ulanishlar kutib turadi. Pauza qilingan konteynerlar zaxira yozuviga
+  (`paused_containers`) yoziladi, shuning uchun boshqaruv paneli oʻrtada qayta ishga tushsa, `recover()` ularni davom ettiradi.
+- **Tiklash** (`POST …/backups/:id/restore`, admin): ilova toʻxtatiladi, avval hozirgi fayllarning nusxasi olinadi
+  (`trigger = before_restore`; bu nusxa olinmasa, hech narsa oʻzgartirilmaydi), disk boʻshatiladi va arxiv
+  `PUT /containers/{id}/archive?copyUIDGID=true` bilan ochiladi (egalari arxivdagidek qoladi). Ochish xato bersa,
+  oʻsha nusxa qaytarib qoʻyiladi. Ilova ishlab turgan boʻlsa, qayta ishga tushiriladi. Tiklashdan oldingi nusxalar
+  saqlash sonidan alohida, eng koʻpi 3 tasi qoladi.
+- **Rollar.** Koʻrish — viewer; nusxa olish va sozlash — developer; yuklab olish, tiklash, oʻchirish — admin.
+  Disk ma'lumotlari bilan oʻchirilsa, serverdagi nusxalari ham oʻchadi; S3'dagilari qoladi.
+
+### 5.11 Yuklangan manbalar (Netlify Drop uslubi)
 
 Manbasi `upload` boʻlgan ilova repozitoriyasiz, boshqaruv serveridagi zip arxivdan yigʻiladi.
 

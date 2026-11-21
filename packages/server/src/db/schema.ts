@@ -961,6 +961,41 @@ CREATE UNIQUE INDEX idx_env_text_app ON env_texts(application_id) WHERE applicat
 CREATE UNIQUE INDEX idx_env_text_project ON env_texts(project_id) WHERE project_id IS NOT NULL;
 `,
   },
+  {
+    version: 15,
+    name: 'volume-backups',
+    sql: `
+-- How an application's volume is backed up: a cron schedule in the instance time zone (null: by hand only),
+-- how many copies to keep, an S3 destination for an off-server copy, and whether the application is paused
+-- while the copy is taken (a consistent snapshot of files being written, such as SQLite, at the cost of a pause).
+ALTER TABLE volumes ADD COLUMN backup_schedule TEXT;
+ALTER TABLE volumes ADD COLUMN backup_retention INTEGER NOT NULL DEFAULT 7;
+ALTER TABLE volumes ADD COLUMN backup_destination_id TEXT REFERENCES s3_destinations(id) ON DELETE SET NULL;
+ALTER TABLE volumes ADD COLUMN backup_pause INTEGER NOT NULL DEFAULT 0 CHECK (backup_pause IN (0,1));
+
+-- A copy of a volume's files: a .tar.gz under backups/volumes/<volume>/ on the control plane, and perhaps in S3.
+CREATE TABLE volume_backups (
+  id                    TEXT PRIMARY KEY,
+  volume_id             TEXT NOT NULL REFERENCES volumes(id) ON DELETE CASCADE,
+  application_id        TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  status                TEXT NOT NULL CHECK (status IN ('running','succeeded','failed')),
+  -- before_restore: taken by a restore just before it replaces the files, so the restore can be undone.
+  trigger               TEXT NOT NULL CHECK (trigger IN ('manual','schedule','before_restore')),
+  file_path             TEXT,
+  size_bytes            INTEGER,
+  raw_bytes             INTEGER,
+  error_message         TEXT,
+  remote_destination_id TEXT,
+  remote_key            TEXT,
+  -- The containers paused for this copy (JSON array), while they are paused: a restart finds and resumes them.
+  paused_containers     TEXT,
+  started_at            TEXT NOT NULL,
+  finished_at           TEXT
+);
+CREATE INDEX idx_volume_backups_volume ON volume_backups(volume_id, started_at DESC);
+CREATE INDEX idx_volume_backups_app ON volume_backups(application_id);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

@@ -10,6 +10,7 @@ Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy 
 - **Ishlash:** uzilishsiz (rolling) yoki recreate strategiyasi, health-check, replikalar, avtomatik qayta ishga tushirish, bir bosishda rollback, self-heal.
 - **Tarmoq:** Caddy orqali avtomatik HTTPS (Let’s Encrypt), DNS va sertifikat holatini real tekshirish, avtomatik domenlar.
 - **Servislar:** PostgreSQL, MySQL, MariaDB, MongoDB, Redis, RabbitMQ, MinIO, ClickHouse. Ilovaga ulash, zaxira nusxa va tiklash.
+- **Ilova disklari zaxirasi:** disk (volume) fayllari jadval boʻyicha yoki qoʻlda `.tar.gz` qilib olinadi, S3’ga ham yuboriladi; kerak boʻlsa nusxa paytida ilova pauza qilinadi; tiklashdan oldin hozirgi holat saqlab qoʻyiladi.
 - **Fayl ombori:** S3-mos obyekt ombori (SeaweedFS) bir bosishda: bucket’lar va fayl brauzeri, vaqtinchalik (presigned) havolalar, cheklangan kirish kalitlari, ochiq bucket’lar, domen orqali HTTPS bilan tashqi kirish; boshqa servislarning zaxira nusxalari shu omborga yoziladi.
 - **Kuzatuv:** real vaqtdagi build va runtime loglar (qidiruv, daraja boʻyicha filtr, replika va vaqt oraligʻi tanlovi, pauza, nusxalash, yuklab olish, toʻliq ekran), CPU/RAM/disk/tarmoq metrikalari, audit jurnali.
 - **Jamoa:** rollar (egasi/admin/dasturchi/kuzatuvchi), taklifnomalar, passkey (barmoq izi, yuz yoki PIN bilan parolsiz kirish), 2FA (TOTP), unutilgan parolni GitHub yoki passkey orqali tasdiqlab almashtirish, API tokenlar, GitHub orqali kirish.

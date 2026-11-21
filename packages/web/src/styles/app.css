@@ -1990,4 +1990,177 @@
       justify-content: flex-start;
     }
   }
+
+  /* ------------------------------------------------------------ volumes */
+  .volume-list {
+    display: grid;
+    gap: 8px;
+  }
+  .volume {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 10px 10px 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+  }
+  .volume:hover {
+    border-color: var(--line-strong);
+  }
+  .volume__mark {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--r-md);
+    background: var(--muted);
+    color: var(--ink-2);
+  }
+  .volume__mark svg {
+    width: 16px;
+    height: 16px;
+  }
+  .volume__main {
+    display: grid;
+    flex: 1;
+    gap: 3px;
+    min-width: 0;
+  }
+  .volume__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+    font-weight: 600;
+  }
+  .volume__title code {
+    color: var(--ink-3);
+    font-size: var(--text-xs);
+    font-weight: 400;
+  }
+  .volume__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 16px;
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    line-height: var(--lh-sm);
+  }
+  .volume__meta .status {
+    font-size: var(--text-sm);
+  }
+  .volume__meta code {
+    font-size: var(--text-xs);
+  }
+  .volume__actions {
+    display: flex;
+    flex: none;
+    gap: 4px;
+  }
+  .volume__actions .count {
+    margin-left: 2px;
+  }
+  @media (max-width: 640px) {
+    .volume {
+      flex-wrap: wrap;
+    }
+    .volume__main {
+      flex-basis: calc(100% - 50px);
+    }
+    .volume__actions {
+      margin-left: 46px;
+    }
+  }
+
+  /* The backups dialog: what is mounted where and the button, the copies, then how it is scheduled. */
+  .backup-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .backup-head__path {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border-radius: var(--r-md);
+    background: var(--surface-sunken);
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+  }
+  .backup-head__path svg {
+    width: 15px;
+    height: 15px;
+  }
+  .backup-list {
+    max-height: min(42dvh, 360px);
+    overflow-y: auto;
+  }
+  .backup-row {
+    position: relative;
+    flex-wrap: wrap;
+  }
+  .backup-row__trigger {
+    margin-left: 8px;
+    color: var(--ink-3);
+    font-size: var(--text-xs);
+    font-weight: 500;
+  }
+  .backup-row[data-trigger='before_restore'] .backup-row__trigger {
+    color: var(--info-ink);
+  }
+  .backup-row__busy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-basis: 100%;
+    padding: 8px 10px;
+    border-radius: var(--r-md);
+    background: var(--work-soft);
+    color: var(--work-ink);
+    font-size: var(--text-sm);
+  }
+  .backup-row__busy svg {
+    width: 14px;
+    height: 14px;
+  }
+  .backup-policy {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: color-mix(in srgb, var(--surface-sunken) 45%, var(--surface));
+  }
+  .backup-policy__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--text-md);
+    font-weight: 600;
+  }
+  .backup-policy__title svg {
+    width: 16px;
+    height: 16px;
+    color: var(--ink-3);
+  }
+  .backup-policy__foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .backup-policy__foot > span {
+    margin-right: auto;
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+  }
 }

@@ -300,6 +300,7 @@ export const guide: GuideContent = {
               ],
             },
             { type: "tip", tone: "bad", title: "Tiklash", text: "Tiklash bazadagi joriy maʼlumotlarni nusxadagi holat bilan almashtiradi. Avval yangi nusxa oling." },
+            { type: "list", items: ["**Ilova disklari** — Ilova → Kengaytirilgan → Disklar → **Zaxiralar**: diskdagi fayllar (yuklamalar, SQLite) `.tar.gz` arxiv sifatida olinadi, egalari va ruxsatlari bilan. Jadval (har 6 soatda, har kuni, har hafta yoki oʻz cron ifodangiz), saqlash soni va S3 manzil bazalardagi kabi.", "Faylga yozib turgan dastur uchun **Zaxira paytida ilovani pauza qilish**ni yoqing: ilova bir necha soniya muzlatiladi, soʻrovlar uzilmaydi, nusxa esa toʻliq mos chiqadi.", "Diskni tiklashda ilova toʻxtatiladi, avval hozirgi holatning nusxasi olinadi (“Tiklashdan oldingi holat”), fayllar almashtiriladi va ilova qayta ishga tushadi. Biror narsa notoʻgʻri ketsa, oʻsha nusxadan orqaga qaytish mumkin."] },
           ],
         },
         {
