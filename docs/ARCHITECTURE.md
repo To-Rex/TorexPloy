@@ -502,6 +502,52 @@ Manbasi `upload` boʻlgan ilova repozitoriyasiz, boshqaruv serveridagi zip arxiv
   Caddy image sifatida yigʻadi). `build-plan` ham arxivni ochib reja beradi (`commit: null`). Arxiv diskda yoʻq boʻlsa
   (tiklangan data katalogi) — `nothing_to_deploy` / `upload_missing`.
 
+### 5.13 Maʼlumotlar bazasi konsoli
+
+PostgreSQL, MySQL va MariaDB servislari uchun brauzerdagi boshqaruv (`database/`, `http/routes/database.ts`, veb'da
+`pages/database/`).
+
+- **Tunnel (`database/tunnel.ts`).** Servis konteynerlari port ochmaydi, server esa SSH orqali boshqarilishi mumkin,
+  shuning uchun har bir ulanishga proxy image'dan (busybox `nc <konteyner> <port>`) loyiha tarmogʻida kichik konteyner
+  yaratiladi; panel unga Docker API'ning `attach` (hijack, terminal bilan bir xil kanal) orqali ulanadi: stdin — bazaga
+  ketadigan baytlar, multipleks stdout — javoblar, stderr — `nc` xatosi. Konteyner `nobody`, `CapDrop: ALL`, faqat
+  oʻqiladigan fayl tizimi, 32 MB xotira va **log drayverisiz** (`LogConfig: none`: bazaning javoblari diskdagi logga
+  tushmasin). Ulanish yopilganda konteyner oʻchiriladi (`AutoRemove` va majburiy `remove`); panel qayta ishga tushganda
+  shu serverdagi eski `ploy.role=db-tunnel` konteynerlari birinchi ulanishdan oldin tozalanadi.
+- **Protokol mijozlari (bogʻliqliksiz).** `database/postgres.ts` — protokol 3.0: SCRAM-SHA-256 (server imzosi tekshiriladi),
+  md5, cleartext; extended query (Parse/Bind/Describe/Execute/Sync) — qiymatlar SQL ichiga yozilmaydi, matnli parametr
+  boʻlib boradi; `Execute` qator chegarasi (limit+1) bilan, shuning uchun server ortiqcha qatorni umuman ishlab chiqarmaydi
+  (`PortalSuspended`); eksport uchun `Execute`+`Flush` bilan partiyalab oʻqish (xotira tekis); `COPY TO STDOUT` natija
+  sifatida, `COPY FROM STDIN` rad etiladi; notice'lar, tranzaksiya holati (`I/T/E`), bekor qilish `CancelRequest` bilan
+  yangi tunnel orqali. `database/mysql.ts` — klassik protokol: `caching_sha2_password` (birinchi kirishda shifrlanmagan
+  ulanishda RSA-OAEP almashinuvi), `sha256_password`, `mysql_native_password`, auth switch; matnli protokol, bir nechta
+  natija (`CALL`), `CLIENT_DEPRECATE_EOF`, `LOAD DATA LOCAL` rad etiladi; satr literallari sessiyaning `sql_mode`iga
+  (`NO_BACKSLASH_ESCAPES` OK paketidagi status bayrogʻidan) qarab ekranlanadi, binar qiymatlar `X'…'`.
+- **Seanslar (`database/console.ts`).** Har bir foydalanuvchiga servis boʻyicha bitta katalog ulanishi (PostgreSQL'da
+  baza boʻyicha) va har bir soʻrov tabiga alohida ulanish — tranzaksiya runlar orasida saqlanadi. Ulanishdagi ishlar
+  navbat bilan (`Mutex`); bitta ulanish ikkinchi soʻrovni olmaydi (`conflict`). Harakatsiz katalog ulanishi 3 daqiqada,
+  tab ulanishi 20 daqiqada yopiladi; servis boʻyicha 24 va har kishiga 8 tab chegarasi (eng eski boʻsh ulanish
+  yopiladi). Servis toʻxtatilganda, qayta yaratilganda yoki oʻchirilganda barcha ulanishlari yopiladi.
+- **Run.** Skript `shared/sql.ts` dagi `splitSql` bilan boʻlinadi (psql va mysql mijozi qoidalari: qoʻshtirnoqlar, `$$`,
+  ichma-ich izohlar, `BEGIN ATOMIC`, `DELIMITER`, protsedura tanasidagi `BEGIN … END`) va birinchi xatoda toʻxtaydi; xato
+  oʻrni skriptdagi offsetga aylantiriladi (PostgreSQL `P` belgilar soni, MySQL `near '…' at line N`). Natija chegarasi:
+  PostgreSQL'da `Execute` limiti, MySQL'da `sql_select_limit` (faqat yuqori darajadagi SELECT, subquery va
+  `INSERT … SELECT`ga taʼsir qilmaydi), zaxira sifatida ortiqcha qatorda `KILL QUERY`. Javob hajmi 24 MB, katak 256 KB
+  bilan cheklanadi. Vaqt chegarasida (standart 300 s) server tomonda bekor qilinadi. Nomaʼlum PostgreSQL turlari (enum,
+  domain, kengaytma turlari) katalog ulanishi orqali `pg_type`dan nomlanadi va keshlanadi. "Faqat oʻqish" —
+  `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` / `SET SESSION TRANSACTION READ ONLY`.
+- **Jadval maʼlumoti.** Identifikatorlar har doim qoʻshtirnoqda; filtrlar parametr (PostgreSQL) yoki ekranlangan literal
+  (MySQL), `LIKE` maxsus belgilari `!` bilan ekranlanadi. Qatorlar sonini sanash 4 soniya bilan cheklanadi, juda katta
+  jadvalda statistikadagi taxmin beriladi. Tahrir (`POST …/db/changes`) bitta tranzaksiya: har bir yangilash va oʻchirish
+  kalit ustunlari (birlamchi kalit yoki NULL'siz unikal kalit) boʻyicha aynan bitta qatorga tegishi shart, aks holda
+  hammasi bekor qilinadi (MySQL'da `Rows matched` hisoblanadi, chunki oʻzgarmagan qator `affected` emas).
+- **Huquq.** Barcha yoʻllar `developer` roli (kirish maʼlumotlarini koʻrish bilan teng). Audit: yangi tab ulanishi
+  (`service.database_console_opened`), maʼlumot yoki sxemani oʻzgartiruvchi run (`service.database_query`, faqat buyruq
+  nomlari), tahrir (`service.database_rows_changed`, sonlar), eksport va seansni bekor qilish/uzish. Soʻrov matni va
+  qiymatlar jurnalga yozilmaydi. Run va tahrir yoʻllari uchun body chegarasi 32 MB.
+- **Test.** Toza qismlar (`splitSql`, eksport formatlari) har doim; protokol, tunnel (Docker attach dublyori bilan) va
+  API esa `PLOY_TEST_POSTGRES` / `PLOY_TEST_MYSQL` (`user:parol@host:port`) berilganda haqiqiy serverlarda tekshiriladi.
+
 ## 6. Xavfsizlik
 
 | Xavf | Chora |

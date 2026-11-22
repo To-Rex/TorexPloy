@@ -90,6 +90,7 @@ export function registerServiceRoutes(app: Hono<Env>, ctx: Context): void {
   app.delete('/api/services/:id', async (c) => {
     const service = load(c, 'admin');
     const removeData = c.req.query('removeData') === 'true';
+    await ctx.dbConsole.closeService(service.id);
     await ctx.services.destroy(service, removeData);
     stores.applications.markConfigChangedForService(service.id);
     stores.services.delete(service.id);
@@ -103,14 +104,16 @@ export function registerServiceRoutes(app: Hono<Env>, ctx: Context): void {
     app.post(`/api/services/:id/${action}`, async (c) => {
       const service = load(c, 'developer');
       audit(ctx, c, `service.${action}`, { type: 'service', id: service.id, name: service.name });
+      if (action !== 'start') await ctx.dbConsole.closeService(service.id);
       if (action === 'stop') await ctx.services.stop(service);
       else void ctx.services[action](service);
       return c.json(serviceDto(ctx, stores.services.get(service.id)!));
     });
   }
 
-  app.post('/api/services/:id/redeploy', (c) => {
+  app.post('/api/services/:id/redeploy', async (c) => {
     const service = load(c, 'developer');
+    await ctx.dbConsole.closeService(service.id);
     void ctx.services.provision(service.id);
     audit(ctx, c, 'service.recreated', { type: 'service', id: service.id, name: service.name });
     return c.json(serviceDto(ctx, stores.services.get(service.id)!));

@@ -4,9 +4,9 @@
  * as a dialog.
  */
 import { useState } from 'react';
-import { Outlet, useNavigate, useOutletContext, useParams } from 'react-router';
-import { Activity, BookOpen, DatabaseBackup, Ellipsis, FolderOpen, Globe, KeyRound, LayoutDashboard, Pencil, ScrollText, Server, SlidersHorizontal, SquareTerminal, Trash2 } from 'lucide-react';
-import { updateServiceSchema, type ServiceDto } from '@ploy/shared';
+import { Link, Outlet, useNavigate, useOutletContext, useParams } from 'react-router';
+import { Activity, BookOpen, DatabaseBackup, Ellipsis, FolderOpen, Globe, KeyRound, LayoutDashboard, Pencil, ScrollText, Server, SlidersHorizontal, SquareTerminal, Table2, Trash2 } from 'lucide-react';
+import { hasDbConsole, updateServiceSchema, type ServiceDto } from '@ploy/shared';
 import { Dialog, useConfirm } from '../../components/Dialog.tsx';
 import { ServiceMark } from '../../components/KindMark.tsx';
 import { Menu, MenuItem, MenuSeparator } from '../../components/Menu.tsx';
@@ -130,6 +130,12 @@ export function ServiceLayout() {
             </div>
             {data !== undefined && (
               <div className="resource__actions">
+                {hasDbConsole(data.type) && (
+                  <Link to={`/services/${data.id}/database`} className="btn btn--primary" style={{ textDecoration: 'none' }}>
+                    <Table2 aria-hidden="true" />
+                    {m.db.open}
+                  </Link>
+                )}
                 <Menu trigger={(props) => <Button {...props} iconOnly icon={<Ellipsis />}>{m.common.more}</Button>}>
                   <MenuItem icon={<Pencil />} onSelect={() => setRenaming(true)}>
                     {m.services.rename}
@@ -137,6 +143,11 @@ export function ServiceLayout() {
                   <MenuItem icon={<SquareTerminal />} onSelect={() => setTerminal(true)}>
                     {m.deploySettings.terminal}
                   </MenuItem>
+                  {hasDbConsole(data.type) && (
+                    <MenuItem icon={<Table2 />} onSelect={() => void navigate(`/services/${data.id}/database`)}>
+                      {m.db.open}
+                    </MenuItem>
+                  )}
                   <MenuSeparator />
                   <MenuItem
                     icon={<Trash2 />}

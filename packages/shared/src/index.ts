@@ -4,4 +4,6 @@ export * from './dto.ts';
 export * from './errors.ts';
 export * from './events.ts';
 export * from './schemas.ts';
+export * from './sql.ts';
+export * from './database.ts';
 export * from './zip.ts';

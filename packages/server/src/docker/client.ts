@@ -850,10 +850,19 @@ export class DockerClient {
     }
   }
 
+  /**
+   * Attach to a created container's standard streams before it starts and
+   * return the hijacked connection: writes reach its stdin, reads are its
+   * multiplexed stdout and stderr (the container has no TTY).
+   */
+  attach(id: string): Promise<Duplex> {
+    return this.upgrade(`/containers/${encodeURIComponent(id)}/attach?stream=1&stdin=1&stdout=1&stderr=1`, null);
+  }
+
   /** POST with `Upgrade: tcp` and resolve with the raw socket once the daemon switches protocols. */
   private async upgrade(path: string, body: unknown): Promise<Duplex> {
     await this.ensureVersion();
-    const payload = Buffer.from(JSON.stringify(body), 'utf8');
+    const payload = body === null ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body), 'utf8');
     return new Promise((resolve, reject) => {
       const req = request({
         socketPath: this.socketPath,

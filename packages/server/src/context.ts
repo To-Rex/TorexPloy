@@ -8,6 +8,7 @@
 import type { PlatformEvent } from '@ploy/shared';
 import type { ComposeEngine } from './compose/engine.ts';
 import type { Deployer } from './deploy/deployer.ts';
+import type { DbConsole } from './database/console.ts';
 import type { Reconciler } from './deploy/reconciler.ts';
 import type { DomainChecker } from './domains/checker.ts';
 import type { GitProviders } from './git/service.ts';
@@ -55,6 +56,8 @@ export interface Context {
   previews: PreviewManager;
   updates: UpdateChecker;
   volumeBackups: VolumeBackups;
+  /** The database console's connections. */
+  dbConsole: DbConsole;
   /** Fresh confirmations of a session's owner (GitHub or a passkey), which stand in for the password for a few minutes. */
   stepUps: StepUps;
   startedAt: number;

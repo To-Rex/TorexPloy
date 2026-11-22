@@ -10,6 +10,7 @@ Oʻz serveringizda ishlaydigan PaaS: GitHub repozitoriyasini ulaysiz, TorexPloy 
 - **Ishlash:** uzilishsiz (rolling) yoki recreate strategiyasi, health-check, replikalar, avtomatik qayta ishga tushirish, bir bosishda rollback, self-heal.
 - **Tarmoq:** Caddy orqali avtomatik HTTPS (Let’s Encrypt), DNS va sertifikat holatini real tekshirish, avtomatik domenlar.
 - **Servislar:** PostgreSQL, MySQL, MariaDB, MongoDB, Redis, RabbitMQ, MinIO, ClickHouse. Ilovaga ulash, zaxira nusxa va tiklash.
+- **Baza konsoli:** PostgreSQL, MySQL va MariaDB uchun pgAdmin uslubidagi alohida sahifa: obyektlar daraxti, jadval maʼlumotlarini filtrlash, saralash va tahrirlash (bitta tranzaksiyada saqlanadi), CSV import/eksport, tuzilma va DDL, avtomatik toʻldiruvchi SQL muharriri, EXPLAIN rejasi daraxti, tranzaksiyalar, jonli grafiklar, seanslar va rollarni boshqarish.
 - **Ilova disklari zaxirasi:** disk (volume) fayllari jadval boʻyicha yoki qoʻlda `.tar.gz` qilib olinadi, S3’ga ham yuboriladi; kerak boʻlsa nusxa paytida ilova pauza qilinadi; tiklashdan oldin hozirgi holat saqlab qoʻyiladi.
 - **Fayl ombori:** S3-mos obyekt ombori (SeaweedFS) bir bosishda: bucket’lar va fayl brauzeri, vaqtinchalik (presigned) havolalar, cheklangan kirish kalitlari, ochiq bucket’lar, domen orqali HTTPS bilan tashqi kirish; boshqa servislarning zaxira nusxalari shu omborga yoziladi.
 - **Kuzatuv:** real vaqtdagi build va runtime loglar (qidiruv, daraja boʻyicha filtr, replika va vaqt oraligʻi tanlovi, pauza, nusxalash, yuklab olish, toʻliq ekran), CPU/RAM/disk/tarmoq metrikalari, audit jurnali.
@@ -173,6 +174,15 @@ await s3.send(new PutObjectCommand({ Bucket: 'photos', Key: 'avatars/rasm.png', 
 ```
 
 Laravel: `config/filesystems.php` dagi `s3` diski uchun `AWS_ENDPOINT=${S3_ENDPOINT}`, `AWS_USE_PATH_STYLE_ENDPOINT=true`, `AWS_BUCKET=photos`, `AWS_DEFAULT_REGION=us-east-1` — kalitlar bogʻlanganda `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` sifatida oʻzi keladi. Ilova ichidan presigned havola yaratish uchun `S3_ENDPOINT` oʻrniga omborning umumiy manzilini (`https://files.example.uz`) bering — ichki manzil brauzerdan ochilmaydi.
+
+## Baza konsoli
+
+PostgreSQL, MySQL yoki MariaDB sahifasidagi **Bazani boshqarish** tugmasi alohida ish joyini ochadi (`/services/<id>/database`).
+
+- **Ulanish.** Panel bazaga ochiq port orqali emas, loyiha tarmogʻida har bir ulanish uchun ishga tushadigan kichik yordamchi konteyner (`nc`, proxy image’dan) orqali ulanadi va PostgreSQL hamda MySQL protokollarida oʻzi gaplashadi. Tashqi port shart emas, SSH orqali ulangan serverlarda ham ishlaydi. PostgreSQL’ga servis foydalanuvchisi, MySQL/MariaDB’ga `root` bilan ulanadi.
+- **Imkoniyatlar.** Obyektlar daraxti (sxemalar, jadvallar, koʻrinishlar, ketma-ketliklar, funksiyalar, triggerlar, kengaytmalar), jadval maʼlumotlari (server tomonida sahifalash, saralash, filtrlar, `WHERE`, kataklarni tahrirlash, qator qoʻshish/oʻchirish — hammasi bitta tranzaksiyada), tuzilma (ustunlar, indekslar, cheklovlar, triggerlar, statistika) va DDL, SQL muharriri (ranglash, jadval/ustun takliflari, Ctrl+Enter, xato joyini chizish, tarix, .sql fayllar), EXPLAIN / EXPLAIN ANALYZE rejasi daraxt koʻrinishida, har tabning oʻz ulanishi va tranzaksiyasi, “faqat oʻqish” rejimi, CSV/JSON/INSERT eksport va CSV import, seanslar (bekor qilish, uzish), rollar va foydalanuvchilar, bazalar yaratish va oʻchirish, jonli grafiklar.
+- **Huquq va audit.** Konsol `developer` roli bilan ochiladi (kirish maʼlumotlarini koʻrish bilan teng). Maʼlumotni oʻzgartiruvchi soʻrovlar, tahrirlangan qatorlar, eksport va seanslarni uzish audit jurnaliga yoziladi (soʻrov matni va qiymatlarsiz).
+- **Cheklovlar.** Bir natijada 10 000 qatorgacha (standart 1 000), uzun kataklar qisqartiriladi; soʻrov vaqt chegarasidan oshsa serverda bekor qilinadi; 20 daqiqa harakatsiz tab ulanishi yopiladi (ochiq tranzaksiya bekor boʻladi).
 
 ## Xavfsizlik
 

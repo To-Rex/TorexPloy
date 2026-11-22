@@ -286,6 +286,28 @@ export const guide: GuideContent = {
           ],
         },
         {
+          id: "database-console",
+          icon: "grid",
+          title: "Database console",
+          summary: "Manage PostgreSQL, MySQL and MariaDB on a page of their own, pgAdmin style: tables, SQL, editing, plans, sessions and roles.",
+          blocks: [
+            {
+              type: "steps",
+              items: [
+                { title: "Database page → Manage database", text: "The console opens on its own page: the object browser on the left (databases, schemas, tables, views, sequences, functions, triggers), tabs on the right. Open tabs and query text are kept in this browser, so a reload puts everything back." },
+                { title: "Overview tab", text: "Server version, uptime, size and connections; live charts (sessions, transactions or queries per second, rows read and written, cache hit ratio); the list of databases — create, drop, open; server settings." },
+                { title: "Table → Data", text: "Paging on the server, sorting by clicking a header (Shift for several columns), filters and a free **WHERE** condition. Double-click a cell to edit it (JSON and long text in a larger box, ENUM and booleans from a list, NULL and DEFAULT one click away), add rows or select and delete them — changes are tinted and sent in one transaction on **Save**: if one fails, none is applied." },
+                { title: "Table → Structure and DDL", text: "Columns (type, NULL, default, keys, references), indexes with their size, constraints, the tables that reference this one, triggers and statistics. Add, rename or drop a column or index, VACUUM/ANALYZE (OPTIMIZE/CHECK on MySQL), TRUNCATE and DROP — each shows its SQL first and runs when you confirm." },
+                { title: "Query tab", text: "A coloured SQL editor that suggests table and column names (Ctrl+Space). **Ctrl+Enter** runs the statement at the caret or the selection, **Ctrl+Shift+Enter** or F5 the whole script. Each result gets a tab; an error is underlined in the editor. Results download as CSV/JSON or copy as a table; there is a history, and .sql files open and save." },
+                { title: "Plan (EXPLAIN)", text: "PostgreSQL’s plan as a tree: each step’s share of the cost or time as a colour, expected and actual rows side by side (a big gap means statistics need ANALYZE). **EXPLAIN ANALYZE** really runs the query." },
+              ],
+            },
+            { type: "tip", tone: "info", title: "Transactions", text: "Every query tab has a connection of its own: after `BEGIN`, others do not see your changes until you press **Commit** or **Rollback** — the yellow bar on top of the tab reminds you. A connection idle for 20 minutes is closed and its open transaction rolled back. Turn on **Read only** and the tab’s queries cannot change data." },
+            { type: "list", items: ["The **Sessions** tab shows everything connected to the database, live: who, from where, which query and for how long. A long query can be **cancelled** or the session **terminated**.", "**Roles** (Users on MySQL): privileges and membership; create a role or user (with a generated password), change a password, drop one.", "A table downloads as CSV, JSON or an INSERT script (with the current filter and sort); an imported CSV shows up as new rows first, for you to look over and save.", "The console needs the **developer** role (the same as revealing the credentials). Queries that change data, edited rows, exports and terminated sessions are written to the audit log; query text and values are not."] },
+            { type: "tip", tone: "work", text: "The console reaches the database through a short-lived helper container on the project network, not an open port — no public port is needed, and it works on remote (SSH) servers too." },
+          ],
+        },
+        {
           id: "backups",
           icon: "archive",
           title: "Backups",

@@ -39,6 +39,8 @@ export const ERROR_CODES = [
   'update_in_progress',
   'storage_unavailable',
   'bucket_not_empty',
+  'database_unreachable',
+  'database_error',
   'internal_error',
 ] as const;
 

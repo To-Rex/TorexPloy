@@ -33,8 +33,12 @@ import { registerStorageRoutes } from './routes/storage.ts';
 import { registerTemplateRoutes } from './routes/templates.ts';
 import { registerUpdateRoutes } from './routes/updates.ts';
 import { registerVolumeRoutes } from './routes/volumes.ts';
+import { registerDatabaseRoutes } from './routes/database.ts';
 
 const MAX_JSON_BYTES = 1024 * 1024;
+/** Scripts and batches of edited rows sent to the database console can be larger than an ordinary request. */
+const DB_CONSOLE_BODY = /^\/api\/services\/[^/]+\/db\/(run|changes)$/;
+const MAX_DB_CONSOLE_BYTES = 32 * 1024 * 1024;
 
 /** Object uploads into a file store are raw bodies with their own (much larger) limit. */
 const OBJECT_UPLOAD = /^\/api\/services\/[^/]+\/storage\/buckets\/[^/]+\/objects\//;
@@ -97,7 +101,9 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   app.use('/api/*', async (c, next) => {
     const length = Number(c.req.header('content-length') ?? 0);
     const rawUpload = (c.req.method === 'PUT' && OBJECT_UPLOAD.test(c.req.path)) || (c.req.method === 'POST' && SOURCE_UPLOAD.test(c.req.path));
-    if (length > MAX_JSON_BYTES && !c.req.path.startsWith('/api/webhooks/') && !rawUpload) {
+    const consoleBody = c.req.method === 'POST' && DB_CONSOLE_BODY.test(c.req.path);
+    if (consoleBody && length > MAX_DB_CONSOLE_BYTES) throw new AppError('payload_too_large', 'Request body too large');
+    if (length > MAX_JSON_BYTES && !c.req.path.startsWith('/api/webhooks/') && !rawUpload && !consoleBody) {
       throw new AppError('payload_too_large', 'Request body too large');
     }
     c.header('Cache-Control', 'no-store');
@@ -119,6 +125,7 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   registerComposeRoutes(app, ctx);
   registerDeploymentRoutes(app, ctx);
   registerServiceRoutes(app, ctx);
+  registerDatabaseRoutes(app, ctx);
   registerStorageRoutes(app, ctx);
   registerTemplateRoutes(app, ctx);
   registerNotificationRoutes(app, ctx);

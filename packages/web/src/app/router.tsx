@@ -67,6 +67,7 @@ export const router = createBrowserRouter([
         ],
       },
       { path: 'deployments/:deploymentId', lazy: async () => ({ Component: (await import('../pages/Deployment.tsx')).DeploymentPage }) },
+      { path: 'services/:serviceId/database', lazy: async () => ({ Component: (await import('../pages/database/DatabaseConsole.tsx')).DatabaseConsolePage }) },
       {
         path: 'services/:serviceId',
         lazy: async () => ({ Component: (await import('../pages/service/ServiceLayout.tsx')).ServiceLayout }),

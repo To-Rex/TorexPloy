@@ -41,6 +41,8 @@ const STATUS: Record<ErrorCode, number> = {
   update_in_progress: 409,
   storage_unavailable: 503,
   bucket_not_empty: 409,
+  database_unreachable: 502,
+  database_error: 422,
   internal_error: 500,
 };
 

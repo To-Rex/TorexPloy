@@ -286,6 +286,28 @@ export const guide: GuideContent = {
           ],
         },
         {
+          id: "database-console",
+          icon: "grid",
+          title: "Maʼlumotlar bazasi konsoli",
+          summary: "PostgreSQL, MySQL va MariaDB’ni pgAdmin kabi alohida sahifada boshqarish: jadvallar, SQL, tahrirlash, reja, seanslar va rollar.",
+          blocks: [
+            {
+              type: "steps",
+              items: [
+                { title: "Baza sahifasi → Bazani boshqarish", text: "Konsol alohida sahifada ochiladi: chapda obyektlar daraxti (baza, sxemalar, jadvallar, koʻrinishlar, ketma-ketliklar, funksiyalar, triggerlar), oʻngda tablar. Ochiq tablar va soʻrov matnlari shu brauzerda saqlanadi — sahifa yangilansa ham joyida qoladi." },
+                { title: "Umumiy tab", text: "Server versiyasi, ishlash vaqti, hajm va ulanishlar; jonli grafiklar (seanslar, tranzaksiyalar yoki soʻrovlar soniyasiga, oʻqilgan va yozilgan qatorlar, kesh samarasi); bazalar roʻyxati — yaratish, oʻchirish, ochish; server sozlamalari." },
+                { title: "Jadval → Maʼlumot", text: "Server tomonida sahifalash, ustun sarlavhasini bosib saralash (Shift bilan bir nechta ustun), filtrlar va erkin **WHERE** sharti. Katakni ikki marta bosib tahrirlang (JSON va uzun matn katta oynada, ENUM va mantiqiy qiymatlar roʻyxatdan, NULL/DEFAULT bir bosishda), qator qoʻshing yoki belgilab oʻchiring — oʻzgarishlar rang bilan belgilanadi va **Saqlash**da bitta tranzaksiyada yuboriladi: bittasi xato boʻlsa, hech biri qoʻllanmaydi." },
+                { title: "Jadval → Tuzilma va DDL", text: "Ustunlar (tur, NULL, standart qiymat, kalitlar, bogʻlanishlar), indekslar va hajmi, cheklovlar, bu jadvalga bogʻlangan jadvallar, triggerlar va statistika. Ustun yoki indeks qoʻshish, nomini oʻzgartirish, oʻchirish, VACUUM/ANALYZE (MySQL’da OPTIMIZE/CHECK), TRUNCATE va DROP — har biri avval SQL’ni koʻrsatadi, siz tasdiqlaysiz." },
+                { title: "Soʻrov tabi", text: "Ranglangan SQL muharriri jadval va ustun nomlarini taklif qiladi (Ctrl+Space). **Ctrl+Enter** — kursor turgan soʻrov yoki belgilangan qism, **Ctrl+Shift+Enter** yoki F5 — butun skript. Har natija alohida tabda, xato boʻlsa joyi muharrirda chiziladi. Natijani CSV/JSON qilib yuklab olish yoki jadval sifatida nusxalash mumkin; tarix va .sql fayl ochish/saqlash bor." },
+                { title: "Reja (EXPLAIN)", text: "PostgreSQL rejasi daraxt koʻrinishida: har qadamning narx yoki vaqtdagi ulushi rang bilan, kutilgan va haqiqiy qatorlar yonma-yon (katta farq — ANALYZE kerakligi belgisi). **EXPLAIN ANALYZE** soʻrovni haqiqatan bajaradi." },
+              ],
+            },
+            { type: "tip", tone: "info", title: "Tranzaksiyalar", text: "Har bir soʻrov tabining oʻz ulanishi bor: `BEGIN` dan keyingi oʻzgarishlar **Commit** yoki **Rollback** bosilguncha boshqalarga koʻrinmaydi — tab tepasidagi sariq panel shuni eslatadi. 20 daqiqa harakatsiz qolgan ulanish yopiladi va ochiq tranzaksiya bekor qilinadi. **Faqat oʻqish** kalitini yoqsangiz, tabdagi soʻrovlar maʼlumotni oʻzgartira olmaydi." },
+            { type: "list", items: ["**Seanslar** tabi bazaga ulangan barcha seanslarni jonli koʻrsatadi: kim, qaysi bazadan, qaysi soʻrov va qancha vaqtdan beri. Uzoq soʻrovni **bekor qilish** yoki seansni **uzish** mumkin.", "**Rollar** (MySQL’da Foydalanuvchilar): huquqlar, aʼzolik, yangi rol yoki foydalanuvchi yaratish (parol avtomatik), parolni almashtirish va oʻchirish.", "Jadvalni CSV, JSON yoki INSERT skript sifatida yuklab olish mumkin (joriy filtr va saralash bilan); CSV faylni import qilsangiz, qatorlar avval yangi qator sifatida koʻrinadi — tekshirib saqlaysiz.", "Konsol **dasturchi** roli bilan ochiladi (kirish maʼlumotlarini koʻrish bilan bir xil huquq). Maʼlumotni oʻzgartiruvchi soʻrovlar, tahrirlangan qatorlar, eksport va seanslarni uzish audit jurnaliga yoziladi; soʻrov matni va qiymatlar yozilmaydi."] },
+            { type: "tip", tone: "work", text: "Konsol bazaga ochiq port orqali emas, loyiha tarmogʻidagi vaqtinchalik yordamchi konteyner orqali ulanadi — tashqi port ochish shart emas va masofaviy (SSH) serverlarda ham ishlaydi." },
+          ],
+        },
+        {
           id: "backups",
           icon: "archive",
           title: "Zaxira nusxalar",

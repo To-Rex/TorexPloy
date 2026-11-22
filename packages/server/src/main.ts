@@ -5,6 +5,7 @@ import { serve, type ServerType } from '@hono/node-server';
 import type { Server } from 'node:http';
 import { detectBuilders } from './build/tools.ts';
 import { ComposeEngine } from './compose/engine.ts';
+import { DbConsole } from './database/console.ts';
 import { openDatabase } from './db/database.ts';
 import { Deployer } from './deploy/deployer.ts';
 import { Reconciler } from './deploy/reconciler.ts';
@@ -70,6 +71,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   ctx.previews = new PreviewManager(ctx);
   ctx.updates = new UpdateChecker(ctx);
   ctx.volumeBackups = new VolumeBackups(ctx);
+  ctx.dbConsole = new DbConsole(ctx);
   return ctx;
 }
 
@@ -125,6 +127,7 @@ async function start(): Promise<void> {
 
   const scheduler = schedule(ctx);
   ctx.updates.start();
+  ctx.dbConsole.start();
 
   let stopping = false;
   const shutdown = async (signal: string): Promise<void> => {
@@ -145,6 +148,7 @@ async function start(): Promise<void> {
     ctx.reconciler.stopAll();
     ctx.domains.stop();
     terminals.close();
+    await ctx.dbConsole.stop().catch(() => undefined);
     const closed = new Promise<void>((resolve) => server.close(() => resolve()));
     // Open dashboards hold SSE streams forever; close() alone would wait for them indefinitely.
     (server as Server).closeAllConnections();
