@@ -2,12 +2,13 @@
  * HTTP plumbing shared by every route: the request environment, auth
  * resolution, CSRF defence, validation, authorization and rate limiting.
  */
+import { matchApi, riskOf } from '../ai/catalog.ts';
 import type { HttpBindings } from '@hono/node-server';
 import type { Context as HonoContext, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { isIP } from 'node:net';
 import type { ZodType } from 'zod';
-import { API_TOKEN_PREFIX, roleAtLeast, type TeamRole, type ValidationIssue } from '@ploy/shared';
+import { API_TOKEN_PREFIX, roleAtLeast, type TeamRole, type ValidationIssue, type TokenAccess, type TokenKind } from '@ploy/shared';
 import type { Context } from '../context.ts';
 import { AppError, forbidden, unauthorized } from '../lib/errors.ts';
 import type { UserRecord } from '../store/index.ts';
@@ -24,6 +25,10 @@ export interface Auth {
   role: TeamRole | null;
   /** Set when TorexAi makes the request for this person: the conversation it acts in (recorded in the audit log). */
   ai?: string;
+  /** Set when an outside agent makes the request over MCP: the app's name (recorded in the audit log). */
+  mcp?: string;
+  /** For a request made with an API token: how it was made and how far it reaches. */
+  token?: { kind: TokenKind; access: TokenAccess };
 }
 
 /**
@@ -126,8 +131,9 @@ export function authMiddleware(ctx: Context): MiddlewareHandler<Env> {
         const record = stores.tokens.resolve(token);
         const user = record === undefined ? undefined : stores.users.getById(record.userId);
         const role = record === undefined || user === undefined ? undefined : stores.teams.getRole(record.teamId, user.id);
-        if (record !== undefined && user !== undefined && role !== undefined) {
-          c.set('auth', { user, sessionId: null, tokenId: record.id, teamId: record.teamId, role });
+        // A token made for an app over OAuth is for the MCP endpoint only: it was issued for that resource.
+        if (record !== undefined && user !== undefined && role !== undefined && record.kind !== 'oauth') {
+          c.set('auth', { user, sessionId: null, tokenId: record.id, teamId: record.teamId, role, token: { kind: record.kind, access: record.access } });
         }
       }
       await next();
@@ -176,6 +182,34 @@ export function csrfMiddleware(): MiddlewareHandler<Env> {
       if (c.req.header('x-ploy-request') !== '1') throw new AppError('csrf_failed', 'Missing request header');
       const origin = c.req.header('origin');
       if (origin !== undefined && origin !== requestOrigin(c)) throw new AppError('csrf_failed', 'Cross-origin request rejected');
+    }
+    await next();
+  };
+}
+
+/**
+ * What a token's reach allows. A `read` token only looks; a `write` token may
+ * change things but not destroy them. "Destroying" is decided per endpoint by
+ * the same catalog that decides it for TorexAi and MCP agents, so the three
+ * agree on what deleting looks like.
+ */
+export function tokenReachMiddleware(): MiddlewareHandler<Env> {
+  return async (c, next) => {
+    const reach = c.get('auth')?.token?.access;
+    const method = c.req.method.toUpperCase();
+    if (reach === undefined || reach === 'full' || method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+      await next();
+      return;
+    }
+    if (reach === 'read') throw new AppError('forbidden', 'This token can only read', { params: { reason: 'token_read_only' } });
+    const entry = matchApi(method, c.req.path);
+    let body: Record<string, unknown> = {};
+    if (entry !== null && typeof entry.entry.risk === 'function' && (c.req.header('content-type') ?? '').includes('application/json')) {
+      const parsed: unknown = await c.req.json().catch(() => ({}));
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) body = parsed as Record<string, unknown>;
+    }
+    if (entry !== null && riskOf(entry.entry, body) === 'danger') {
+      throw new AppError('forbidden', 'This token may change things but not delete or destroy them; use a token with full access', { params: { reason: 'token_no_destroy' } });
     }
     await next();
   };
@@ -272,7 +306,7 @@ export function audit(
     targetId: target.id ?? null,
     targetName: target.name ?? null,
     ip: c.get('ip'),
-    metadata: { ...metadata, ...(auth?.tokenId == null ? {} : { viaToken: auth.tokenId }), ...(auth?.ai === undefined ? {} : { viaAi: auth.ai }) },
+    metadata: { ...metadata, ...(auth?.tokenId == null ? {} : { viaToken: auth.tokenId }), ...(auth?.ai === undefined ? {} : { viaAi: auth.ai }), ...(auth?.mcp === undefined ? {} : { viaMcp: auth.mcp }) },
   });
 }
 

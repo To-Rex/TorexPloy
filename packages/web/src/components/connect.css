@@ -1,0 +1,211 @@
+/*
+ * CLI and MCP: connecting AI agents and the command line, and saying yes to
+ * them. The reach of a connection is three cards, so the difference between
+ * "read" and "full" is read, not guessed.
+ */
+@layer components {
+  .mcp-step {
+    display: grid;
+    gap: 8px;
+  }
+  .mcp-step > p {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+  }
+  .mcp-access {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .mcp-access__option {
+    position: relative;
+    display: flex;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    cursor: pointer;
+  }
+  .mcp-access__option:hover {
+    border-color: var(--line-strong);
+  }
+  .mcp-access__option[data-checked] {
+    border-color: var(--lapis);
+    box-shadow: 0 0 0 1px var(--lapis) inset;
+    background: var(--lapis-soft);
+  }
+  .mcp-access__option input {
+    flex: none;
+    margin: 3px 0 0;
+    accent-color: var(--lapis);
+  }
+  .mcp-access__option span {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+  .mcp-access__option strong {
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+  .mcp-access__option small {
+    color: var(--ink-2);
+    font-size: var(--text-xs);
+    line-height: 1.4;
+  }
+  .mcp-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--r-md);
+    background: var(--lapis-soft);
+    color: var(--lapis-ink);
+  }
+  .mcp-icon[data-kind='cli'] {
+    background: var(--muted);
+    color: var(--ink);
+  }
+  .mcp-icon[data-kind='api'] {
+    background: var(--work-soft);
+    color: var(--work-ink);
+  }
+  .mcp-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+  .mcp-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    margin: 0 4px 0 2px;
+    border-radius: var(--r-full);
+    background: var(--idle);
+  }
+  .mcp-dot[data-status='done'] {
+    background: var(--ok);
+  }
+  .mcp-dot[data-status='failed'] {
+    background: var(--bad);
+  }
+  .mcp-dot[data-status='rejected'],
+  .mcp-dot[data-status='cancelled'] {
+    background: var(--work);
+  }
+  .mcp-dot[data-status='running'],
+  .mcp-dot[data-status='pending'] {
+    background: var(--info);
+  }
+  .mcp-step-row code {
+    max-width: 46ch;
+    color: var(--ink-3);
+    font-size: 11.5px;
+  }
+  .mcp-commands {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 18px;
+  }
+  .mcp-commands > div {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    font-size: var(--text-sm);
+  }
+  .mcp-commands code {
+    flex: none;
+    padding: 1px 6px;
+    border-radius: var(--r-sm);
+    background: var(--muted);
+    font-size: 12px;
+  }
+  .mcp-commands span {
+    color: var(--ink-2);
+  }
+
+  /* ---------------------------------------------------- saying yes to an app */
+  .connect {
+    gap: 14px;
+  }
+  .connect h2 {
+    margin: 0;
+  }
+  .connect > p {
+    margin: 0;
+  }
+  .connect__mark {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--r-lg);
+    background: var(--lapis-soft);
+    color: var(--lapis-ink);
+  }
+  .connect__mark[data-tone='bad'] {
+    background: var(--bad-soft);
+    color: var(--bad-ink);
+  }
+  .connect__mark svg {
+    width: 22px;
+    height: 22px;
+  }
+  .connect__facts {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--surface-sunken);
+    font-size: var(--text-sm);
+    overflow-wrap: anywhere;
+  }
+  .connect__facts > span:first-child {
+    color: var(--ink-3);
+    font-size: var(--text-xs);
+  }
+  .connect__facts strong {
+    font-family: var(--font-mono);
+    font-size: var(--text-md);
+  }
+  .connect__code {
+    padding: 12px;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--r-lg);
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-align: center;
+  }
+  .connect__code-input {
+    font-family: var(--font-mono);
+    font-size: var(--text-lg);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .connect__actions {
+    display: flex;
+    gap: 10px;
+  }
+  .connect__actions .btn {
+    flex: 1;
+  }
+  .connect__small {
+    margin: 0;
+    font-size: var(--text-xs);
+  }
+  .connect .mcp-access {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (max-width: 860px) {
+    .mcp-access,
+    .mcp-commands {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

@@ -5,12 +5,12 @@
  */
 import type { ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router';
-import { BellRing, CloudUpload, GitBranch, Globe, KeyRound, Package, ScrollText, Settings, Shield, Sparkles, UserRound, Users } from 'lucide-react';
+import { BellRing, CloudUpload, GitBranch, Globe, KeyRound, Package, Plug, ScrollText, Settings, Shield, Sparkles, UserRound, Users } from 'lucide-react';
 import { Card, Frame } from '../../components/Frame.tsx';
 import { usePageMeta } from '../../components/PageMeta.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 
-type Page = 'profile' | 'security' | 'team' | 'git' | 'tokens' | 'notifications' | 'storage' | 'registries' | 'platform' | 'audit' | 'ai';
+type Page = 'profile' | 'security' | 'team' | 'git' | 'tokens' | 'notifications' | 'storage' | 'registries' | 'platform' | 'audit' | 'ai' | 'mcp';
 
 const ICONS: Record<Page, ReactNode> = {
   profile: <UserRound />,
@@ -24,6 +24,7 @@ const ICONS: Record<Page, ReactNode> = {
   platform: <Globe />,
   audit: <ScrollText />,
   ai: <Sparkles />,
+  mcp: <Plug />,
 };
 
 export function SettingsLayout() {

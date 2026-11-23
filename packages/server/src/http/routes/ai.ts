@@ -48,7 +48,8 @@ export function registerAiRoutes(app: Hono<Env>, ctx: Context): void {
   const loadChat = (c: Ctx): { chat: AiChatRecord; actor: Actor } => {
     const auth = ai.require(c.get('auth'));
     const chat = stores.ai.getChatFor(auth.user.id, auth.teamId, c.req.param('id')!);
-    if (chat === undefined) throw notFound('Conversation');
+    // What an MCP connection did is kept like a conversation, but it is not one: nobody writes to it.
+    if (chat === undefined || chat.kind !== 'chat') throw notFound('Conversation');
     return { chat, actor: { userId: auth.user.id, teamId: auth.teamId, sessionId: auth.sessionId, ip: c.get('ip'), origin: requestOrigin(c), chatId: chat.id } };
   };
 
@@ -295,6 +296,11 @@ export function registerAiRoutes(app: Hono<Env>, ctx: Context): void {
   app.post('/api/ai/actions/:id/decision', async (c) => {
     const { chat, actionId } = loadAction(c);
     const input = await body(c, aiDecisionSchema);
+    // A sign-in that may not destroy anything (a `write` token, say `torex ai` on a laptop) cannot say yes to TorexAi destroying it either.
+    const reach = c.get('auth')?.token?.access;
+    if (input.approve && reach !== undefined && reach !== 'full' && stores.ai.getAction(actionId)?.risk === 'danger') {
+      throw new AppError('forbidden', 'This sign-in may not approve steps that delete or destroy; approve it in the dashboard', { params: { reason: 'token_no_destroy' } });
+    }
     ai.decide(chat, actionId, input);
     audit(ctx, c, input.approve ? 'ai.action_approved' : 'ai.action_declined', { type: 'ai_action', id: actionId, name: stores.ai.getAction(actionId)?.detail ?? null }, { always: input.always });
     return c.json({ ok: true });

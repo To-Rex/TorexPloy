@@ -319,7 +319,8 @@ export function registerAccountRoutes(app: Hono<Env>, ctx: Context): void {
 
   app.get('/api/tokens', (c) => {
     const auth = requireTeam(c, 'developer');
-    return c.json(stores.tokens.listForTeam(auth.teamId).filter((token) => token.userId === auth.user.id || roleAtLeast(auth.role, 'admin')).map((token) => tokenDto(token)));
+    // An app connected over OAuth trades its short-lived tokens by itself: it is shown (and removed) as a connection on the CLI and MCP page.
+    return c.json(stores.tokens.listForTeam(auth.teamId).filter((token) => token.kind !== 'oauth' && (token.userId === auth.user.id || roleAtLeast(auth.role, 'admin'))).map((token) => tokenDto(token)));
   });
 
   app.post('/api/tokens', async (c) => {
@@ -327,8 +328,8 @@ export function registerAccountRoutes(app: Hono<Env>, ctx: Context): void {
     if (auth.tokenId !== null) throw forbidden('API tokens cannot create other tokens');
     const input = await body(c, createApiTokenSchema);
     const expiresAt = input.expiresInDays === null ? null : new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString();
-    const { token, record } = stores.tokens.create({ userId: auth.user.id, teamId: auth.teamId, name: input.name, expiresAt, tokenPrefix: API_TOKEN_PREFIX });
-    audit(ctx, c, 'token.created', { type: 'token', id: record.id, name: record.name });
+    const { token, record } = stores.tokens.create({ userId: auth.user.id, teamId: auth.teamId, name: input.name, expiresAt, tokenPrefix: API_TOKEN_PREFIX, kind: 'api', access: input.access });
+    audit(ctx, c, 'token.created', { type: 'token', id: record.id, name: record.name }, { access: record.access });
     return c.json(tokenDto(record, token), 201);
   });
 

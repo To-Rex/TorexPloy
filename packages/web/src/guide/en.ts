@@ -308,6 +308,28 @@ export const guide: GuideContent = {
           ],
         },
         {
+          id: "cli-mcp",
+          icon: "terminal",
+          title: "CLI and MCP",
+          summary: "Run the platform from the terminal with torex, and from AI agents like Claude, Cursor and VS Code over MCP.",
+          to: "/settings/mcp",
+          blocks: [
+            { type: "p", text: "**torex** is TorexPloy’s command line. **MCP** is the open standard AI agents (Claude Code, Claude, Cursor, VS Code, Codex and more) use to run the platform. Both act as you, within your role." },
+            { type: "code", label: "Install torex (macOS, Linux; Windows and npm are on the CLI and MCP page)", text: "curl -fsSL https://<panel>/cli/install.sh | sh" },
+            {
+              type: "steps",
+              items: [
+                { title: "Sign in", text: "`torex login https://<panel>`: the browser opens; check the code matches the one in your terminal, then pick a team and an access level." },
+                { title: "Link a folder", text: "Run `torex link` in your project. After that, commands need no application name." },
+                { title: "Work", text: "`torex deploy` (with the build log), `torex up` (uploads the folder’s code and deploys it), `torex logs -f`, `torex env pull`, `torex rollback`, `torex ai \"…\"`." },
+                { title: "Connect an AI agent", text: "Take the ready command for your app from [Settings → CLI and MCP](/settings/mcp), for Claude Code `claude mcp add --transport http torexploy https://<panel>/mcp`. The app opens a TorexPloy page in the browser: pick a team and an access level and click **Allow**." },
+              ],
+            },
+            { type: "list", items: ["Access levels: **read only** changes nothing; **changes** deploys and edits variables and domains but deletes nothing; **full** is everything your role allows.", "Deleting, losing data or showing secret values never happens without your explicit yes: the agent first says what would happen and asks you.", "Connected apps and every step they took are on the [CLI and MCP](/settings/mcp) page; most steps undo with one click, and an app can be disconnected any time.", "For an app without OAuth, make a token on that page, or give any MCP client the command `torex mcp`.", "For CI: with `TOREX_URL` and `TOREX_TOKEN` set, torex works without signing in."] },
+            { type: "tip", tone: "info", title: "How it differs from TorexAi", text: "TorexAi is the assistant inside the panel and runs on the model the administrator connected. Over MCP your own AI agent (Claude Code, say) works with the same tools and skills." },
+          ],
+        },
+        {
           id: "database-console",
           icon: "grid",
           title: "Database console",

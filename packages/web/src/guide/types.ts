@@ -30,7 +30,7 @@ export type GuideIcon =
   | 'refresh'
   | 'wrench'
   | 'download'
-  | 'sparkles';
+  | 'sparkles' | 'terminal';
 
 export interface GuideStep {
   title: string;

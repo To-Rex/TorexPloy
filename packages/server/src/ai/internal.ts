@@ -23,6 +23,8 @@ export interface Actor {
   /** The address the dashboard was opened at, so links the API builds (invitations, hooks) point there. */
   origin: string;
   chatId: string;
+  /** Set when an outside agent acts over MCP: the app, and the token it came with (instead of TorexAi). */
+  mcp?: { client: string; tokenId: string };
 }
 
 export interface ApiResult {
@@ -53,6 +55,7 @@ export class InternalApi {
     if (user === undefined) throw new AppError('unauthorized', 'The account no longer exists');
     const role = this.ctx.stores.teams.getRole(actor.teamId, user.id);
     if (role === undefined) throw new AppError('forbidden', 'You are no longer a member of this team');
+    if (actor.mcp !== undefined) return { user, sessionId: null, tokenId: actor.mcp.tokenId, teamId: actor.teamId, role, mcp: actor.mcp.client };
     return { user, sessionId: actor.sessionId, tokenId: null, teamId: actor.teamId, role, ai: actor.chatId };
   }
 

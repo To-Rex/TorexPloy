@@ -73,3 +73,15 @@ export function PublicOnly({ children, allowSignedIn = false }: { children: Reac
   if (bootstrap.data.user !== null && !allowSignedIn) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
+
+/** A page for a signed-in person, without the dashboard around it (saying yes to an app or to the command line). */
+export function AuthedPlain({ children }: { children: ReactNode }) {
+  const bootstrap = useBootstrap();
+  const location = useLocation();
+  useProfilePreferences(bootstrap.data?.user?.locale, bootstrap.data?.user?.theme);
+  if (bootstrap.isPending) return <Splash />;
+  if (bootstrap.isError) return <Unreachable error={bootstrap.error} retry={() => void bootstrap.refetch()} />;
+  if (bootstrap.data.setupRequired) return <Navigate to="/setup" replace />;
+  if (bootstrap.data.user === null) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  return <>{children}</>;
+}

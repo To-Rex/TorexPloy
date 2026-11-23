@@ -12,9 +12,13 @@ import type { Context } from '../context.ts';
 import { randomId } from '../lib/ids.ts';
 import { DockerUnavailableError } from '../docker/client.ts';
 import { AppError, isAppError } from '../lib/errors.ts';
-import { authMiddleware, csrfMiddleware, isHttps, requestOrigin, type Env } from './core.ts';
+import { authMiddleware, csrfMiddleware, tokenReachMiddleware, isHttps, requestOrigin, type Env } from './core.ts';
 import { registerAccountRoutes } from './routes/account.ts';
 import { AI_UPLOAD, registerAiRoutes } from './routes/ai.ts';
+import { registerMcpRoutes } from './routes/mcp.ts';
+import { registerCliRoutes } from '../mcp/cli.ts';
+import { registerMcpEndpoint } from '../mcp/http.ts';
+import { registerOAuthRoutes } from '../mcp/oauth.ts';
 import { registerApplicationRoutes } from './routes/applications.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerPasskeyRoutes } from './routes/passkeys.ts';
@@ -115,6 +119,7 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   });
   app.use('/api/*', authMiddleware(ctx));
   app.use('/api/*', csrfMiddleware());
+  app.use('/api/*', tokenReachMiddleware());
 
   registerAuthRoutes(app, ctx);
   registerPasskeyRoutes(app, ctx);
@@ -138,8 +143,13 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   registerGithubRoutes(app, ctx);
   registerGitProviderRoutes(app, ctx);
   registerAiRoutes(app, ctx);
+  registerMcpRoutes(app, ctx);
+  registerCliRoutes(app, ctx, ctx.mcp.cli);
+  registerOAuthRoutes(app, ctx, ctx.mcp.oauth);
   // TorexAi reaches the platform through this same application, as the person it acts for.
   ctx.ai.api.attach(app);
+  // Outside agents: the MCP endpoint, beside the API rather than under it (bearer tokens only, no cookies, no CSRF rules).
+  registerMcpEndpoint(app, ctx, ctx.mcp);
 
   app.all('/api/*', () => {
     throw new AppError('not_found', 'No such endpoint', { params: { resource: 'endpoint' } });

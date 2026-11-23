@@ -54,7 +54,7 @@ const MAX_STEPS = 60;
 const MODEL_OUTPUT_MAX = 12_000;
 const MODEL_OUTPUT_HEAD = 8_500;
 /** How much of an output is kept at all. */
-const STORED_OUTPUT_MAX = 400_000;
+export const STORED_OUTPUT_MAX = 400_000;
 /** How much of it the dashboard is sent with the conversation. */
 const PREVIEW_MAX = 6_000;
 const MAX_RUNS_PER_USER = 4;
@@ -90,7 +90,7 @@ class RunEnded extends Error {
   }
 }
 
-function clipForModel(output: string, actionId: string): string {
+export function clipForModel(output: string, actionId: string): string {
   if (output.length <= MODEL_OUTPUT_MAX) return output;
   const tail = MODEL_OUTPUT_MAX - MODEL_OUTPUT_HEAD - 500;
   const omitted = output.length - MODEL_OUTPUT_HEAD - tail;
@@ -310,7 +310,8 @@ export class AiManager {
 
   // ------------------------------------------------------------ conversation
 
-  private toolEnv(actor: Actor, chat: AiChatRecord): ToolEnv {
+  /** What a tool works with: also how the MCP server runs TorexAi's tools for an outside agent. */
+  toolEnv(actor: Actor, chat: AiChatRecord): ToolEnv {
     return { ctx: this.ctx, actor, chat, api: this.api, settings: this.settings, host: this.host, workspaces: this.workspaces, storage: this.storage, store: this.ctx.stores.ai, skills: this.skills };
   }
 

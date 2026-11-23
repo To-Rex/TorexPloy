@@ -120,6 +120,8 @@ export function tokenDto(record: ApiTokenRecord, token?: string): ApiTokenDto {
     id: record.id,
     name: record.name,
     prefix: record.prefix,
+    kind: record.kind,
+    access: record.access,
     lastUsedAt: record.lastUsedAt,
     expiresAt: record.expiresAt,
     createdAt: record.createdAt,

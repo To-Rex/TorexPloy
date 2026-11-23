@@ -399,6 +399,7 @@ export const EXCLUDED: readonly { pattern: RegExp; why: string }[] = [
   { pattern: /^POST \/api\/applications\/:id\/upload$/, why: 'a raw archive upload: the code tool deploys edited sources' },
   { pattern: /^\w+ \/api\/github\/(manifest|install|setup|pending)|^DELETE \/api\/github(\/|$)/, why: 'connecting GitHub happens in the browser, on github.com' },
   { pattern: /^GET \/api\/git-providers\/:id\/webhook$/, why: 'a webhook secret' },
+  { pattern: /^\w+ \/api\/(mcp|connect|cli)(\/|$)/, why: 'connecting outside apps and the command line: people decide that in the dashboard, not an assistant' },
   { pattern: /^\*|^ALL /, why: 'catch-all handlers' },
 ];
 

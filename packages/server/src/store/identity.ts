@@ -1,6 +1,7 @@
 /**
  * Users, sessions, passkeys, API tokens and external identities.
  */
+import { TOKEN_ACCESS, TOKEN_KINDS, type TokenAccess, type TokenKind } from '@ploy/shared';
 import type { Locale, Theme } from '@ploy/shared';
 import type { Database } from '../db/database.ts';
 import { generateToken, sha256 } from '../lib/crypto.ts';
@@ -393,18 +394,30 @@ export interface ApiTokenRecord {
   teamId: string;
   name: string;
   prefix: string;
+  kind: TokenKind;
+  access: TokenAccess;
+  /** The app or computer it was made for. */
+  client: string | null;
+  /** The OAuth grant an app's token belongs to. */
+  grantId: string | null;
   lastUsedAt: string | null;
   expiresAt: string | null;
   createdAt: string;
 }
 
 function mapToken(row: Row): ApiTokenRecord {
+  const kind = str(row.kind);
+  const access = str(row.access);
   return {
     id: str(row.id),
     userId: str(row.user_id),
     teamId: str(row.team_id),
     name: str(row.name),
     prefix: str(row.prefix),
+    kind: (TOKEN_KINDS as readonly string[]).includes(kind) ? (kind as TokenKind) : 'api',
+    access: (TOKEN_ACCESS as readonly string[]).includes(access) ? (access as TokenAccess) : 'read',
+    client: strOrNull(row.client),
+    grantId: strOrNull(row.grant_id),
     lastUsedAt: strOrNull(row.last_used_at),
     expiresAt: strOrNull(row.expires_at),
     createdAt: str(row.created_at),
@@ -418,21 +431,35 @@ export class ApiTokenStore {
     this.db = db;
   }
 
-  create(input: { userId: string; teamId: string; name: string; expiresAt: string | null; tokenPrefix: string }): {
+  create(input: {
+    userId: string;
+    teamId: string;
+    name: string;
+    expiresAt: string | null;
+    tokenPrefix: string;
+    kind?: TokenKind;
+    access?: TokenAccess;
+    client?: string | null;
+    grantId?: string | null;
+  }): {
     token: string;
     record: ApiTokenRecord;
   } {
     const token = `${input.tokenPrefix}${generateToken(30)}`;
     const id = newId('tok');
     this.db.run(
-      `INSERT INTO api_tokens (id, user_id, team_id, name, token_hash, prefix, expires_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO api_tokens (id, user_id, team_id, name, token_hash, prefix, kind, access, client, grant_id, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.userId,
       input.teamId,
       input.name,
       sha256(token),
       token.slice(0, input.tokenPrefix.length + 6),
+      input.kind ?? 'api',
+      input.access ?? 'full',
+      input.client ?? null,
+      input.grantId ?? null,
       input.expiresAt,
       nowIso(),
     );
@@ -465,5 +492,20 @@ export class ApiTokenStore {
 
   delete(id: string): void {
     this.db.run('DELETE FROM api_tokens WHERE id = ?', id);
+  }
+
+  /** Every token of an OAuth grant (an app keeps at most a couple alive while it trades them in). */
+  listForGrant(grantId: string): ApiTokenRecord[] {
+    return this.db.all('SELECT * FROM api_tokens WHERE grant_id = ? ORDER BY created_at DESC', grantId).map(mapToken);
+  }
+
+  deleteForGrant(grantId: string, except?: string): void {
+    if (except === undefined) this.db.run('DELETE FROM api_tokens WHERE grant_id = ?', grantId);
+    else this.db.run('DELETE FROM api_tokens WHERE grant_id = ? AND id <> ?', grantId, except);
+  }
+
+  /** Tokens that have run out: kept a week for the record, then removed. */
+  pruneExpired(before: string): number {
+    return this.db.run('DELETE FROM api_tokens WHERE expires_at IS NOT NULL AND expires_at < ?', before).changes;
   }
 }

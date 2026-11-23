@@ -7,7 +7,7 @@
  */
 import { decryptSecret, encryptSecret } from './crypto.ts';
 
-export type SecretPurpose = 'env' | 'ssh' | 'totp' | 'service' | 'github' | 'git' | 'hook' | 'registry' | 'notification' | 's3' | 'storage' | 'ai';
+export type SecretPurpose = 'env' | 'ssh' | 'totp' | 'service' | 'github' | 'git' | 'hook' | 'registry' | 'notification' | 's3' | 'storage' | 'ai' | 'mcp';
 
 export class Secrets {
   readonly #key: string;

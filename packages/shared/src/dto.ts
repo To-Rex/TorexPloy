@@ -6,6 +6,7 @@
  * are booleans, and related data the UI always needs is embedded so a page
  * renders from one request.
  */
+import type { TokenAccess, TokenKind } from './mcp.ts';
 import type {
   AppKind,
   AppStatus,
@@ -268,6 +269,9 @@ export interface ApiTokenDto {
   id: string;
   name: string;
   prefix: string;
+  /** Made by hand, by `torex login`, or for an app connected over OAuth. */
+  kind: TokenKind;
+  access: TokenAccess;
   lastUsedAt: string | null;
   expiresAt: string | null;
   createdAt: string;

@@ -5,6 +5,7 @@
  * same schemas on its forms, so what the UI accepts and what the API accepts
  * cannot drift apart.
  */
+import { TOKEN_ACCESS } from './mcp.ts';
 import { z } from 'zod';
 import {
   APP_KINDS,
@@ -198,6 +199,8 @@ export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 export const createApiTokenSchema = z.object({
   name: nameSchema,
   expiresInDays: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(365)]).nullable(),
+  /** How far the token reaches; tokens made before reaches existed can do everything. */
+  access: z.enum(TOKEN_ACCESS).default('full'),
 });
 export type CreateApiTokenInput = z.infer<typeof createApiTokenSchema>;
 

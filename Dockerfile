@@ -30,13 +30,16 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
+COPY packages/cli/package.json packages/cli/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 FROM deps AS web
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY packages/web packages/web
-RUN npm --workspace @ploy/web run build
+COPY packages/cli packages/cli
+# The dashboard, and the torex command line the panel hands out (one file, served at /cli/torex.mjs).
+RUN npm --workspace @ploy/web run build && npm --workspace @ploy/cli run build
 
 # Builder CLIs: musl/static Linux builds for the target architecture, verified before extraction.
 FROM node:26-alpine AS tools
@@ -82,10 +85,12 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
+COPY packages/cli/package.json packages/cli/
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund --workspace @ploy/server --workspace @ploy/shared
 COPY packages/shared/src packages/shared/src
 COPY packages/server/src packages/server/src
 COPY --from=web /app/packages/web/dist packages/web/dist
+COPY --from=web /app/packages/cli/dist packages/cli/dist
 RUN find packages -name '*.test.ts' -delete && mkdir -p /var/lib/torexploy /run/torexploy && chmod 700 /var/lib/torexploy /run/torexploy
 
 ARG PLOY_COMMIT

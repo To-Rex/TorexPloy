@@ -182,7 +182,9 @@ async function place(env: ToolEnv, where: string): Promise<Place> {
 }
 
 function audit(env: ToolEnv, action: string, target: { type: string; id?: string | null; name?: string | null }, metadata: Record<string, unknown> = {}): void {
-  env.ctx.stores.audit.record({ teamId: env.actor.teamId, userId: env.actor.userId, action, targetType: target.type, targetId: target.id ?? null, targetName: target.name ?? null, ip: env.actor.ip, metadata: { ...metadata, viaAi: env.chat.id } });
+  // An outside agent connected over MCP is told apart from TorexAi in the audit log.
+  const via = env.chat.kind === 'mcp' ? { viaMcp: env.chat.title || env.chat.id } : { viaAi: env.chat.id };
+  env.ctx.stores.audit.record({ teamId: env.actor.teamId, userId: env.actor.userId, action, targetType: target.type, targetId: target.id ?? null, targetName: target.name ?? null, ip: env.actor.ip, metadata: { ...metadata, ...via } });
 }
 
 // ---------------------------------------------------------------------------

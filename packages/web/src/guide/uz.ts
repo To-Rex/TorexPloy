@@ -308,6 +308,28 @@ export const guide: GuideContent = {
           ],
         },
         {
+          id: "cli-mcp",
+          icon: "terminal",
+          title: "CLI va MCP",
+          summary: "Terminaldan torex buyrugʻi bilan, Claude, Cursor va VS Code kabi AI agentlar bilan esa MCP orqali boshqarish.",
+          to: "/settings/mcp",
+          blocks: [
+            { type: "p", text: "**torex** TorexPloy’ning terminal buyrugʻi. **MCP** AI agentlar (Claude Code, Claude, Cursor, VS Code, Codex va boshqalar) platformani boshqarishi uchun ochiq standart. Ikkalasi ham sizning nomingizdan va rolingiz doirasida ishlaydi." },
+            { type: "code", label: "torex’ni oʻrnatish (macOS, Linux; Windows va npm usullari CLI va MCP sahifasida)", text: "curl -fsSL https://<panel>/cli/install.sh | sh" },
+            {
+              type: "steps",
+              items: [
+                { title: "Kirish", text: "`torex login https://<panel>`: brauzer ochiladi, terminaldagi kod sahifadagi kod bilan mosligini tekshirib, jamoa va ruxsat darajasini tanlaysiz." },
+                { title: "Papkani bogʻlash", text: "Loyiha papkasida `torex link`. Shundan keyin buyruqlarda ilova nomini yozish shart emas." },
+                { title: "Ishlash", text: "`torex deploy` (build logi bilan), `torex up` (papkadagi kodni yuklab deploy qiladi), `torex logs -f`, `torex env pull`, `torex rollback`, `torex ai \"…\"`." },
+                { title: "AI agentni ulash", text: "[Sozlamalar → CLI va MCP](/settings/mcp) sahifasidan ilovangiz uchun tayyor buyruqni oling, masalan Claude Code uchun `claude mcp add --transport http torexploy https://<panel>/mcp`. Ilova brauzerda TorexPloy sahifasini ochadi: jamoa va ruxsat darajasini tanlab, **Ruxsat berish**ni bosasiz." },
+              ],
+            },
+            { type: "list", items: ["Ruxsat darajalari: **faqat oʻqish** hech narsani oʻzgartirmaydi; **oʻzgartirish** deploy, oʻzgaruvchilar va domenlarni oʻzgartiradi, lekin hech narsani oʻchirmaydi; **toʻliq** rolingiz ruxsat bergan hamma narsa.", "Oʻchirish, maʼlumotni yoʻqotish yoki maxfiy qiymatni koʻrsatish kabi qadamlar aniq roziligingizsiz bajarilmaydi: agent avval nima boʻlishini aytib, sizdan soʻraydi.", "Ulangan ilovalar va ular qilgan har bir amal [CLI va MCP](/settings/mcp) sahifasida koʻrinadi; koʻp amallarni bir tugma bilan qaytarasiz, ilovani istalgan vaqtda uzasiz.", "OAuth’ni qoʻllamaydigan ilova uchun shu sahifada token yarating, yoki istalgan MCP mijozida buyruq sifatida `torex mcp` ni bering.", "CI uchun: `TOREX_URL` va `TOREX_TOKEN` muhit oʻzgaruvchilari bilan torex kirishsiz ishlaydi."] },
+            { type: "tip", tone: "info", title: "TorexAi’dan farqi", text: "TorexAi panel ichidagi yordamchi va administrator ulagan model bilan ishlaydi. MCP orqali esa oʻz AI agentingiz (masalan, Claude Code) xuddi shu asboblar va skillar bilan ishlaydi." },
+          ],
+        },
+        {
           id: "database-console",
           icon: "grid",
           title: "Maʼlumotlar bazasi konsoli",

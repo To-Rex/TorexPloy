@@ -1261,6 +1261,59 @@ CREATE TABLE ai_skill_catalog (
 );
 `,
   },
+  {
+    version: 19,
+    name: 'mcp-and-cli',
+    sql: `
+-- A token remembers how it was made (by hand, by \`torex login\`, for an app connected over OAuth) and how far it
+-- reaches: read, write (no destroying), or full. Tokens made before this keep reaching everything they did.
+ALTER TABLE api_tokens ADD COLUMN kind TEXT NOT NULL DEFAULT 'api';
+ALTER TABLE api_tokens ADD COLUMN access TEXT NOT NULL DEFAULT 'full';
+-- The app or computer it was made for, as the person will recognise it.
+ALTER TABLE api_tokens ADD COLUMN client TEXT;
+-- An OAuth token belongs to a grant: the app keeps the grant and trades its refresh token for new tokens.
+ALTER TABLE api_tokens ADD COLUMN grant_id TEXT;
+CREATE INDEX idx_api_tokens_grant ON api_tokens(grant_id);
+
+-- What an MCP connection did is kept as a TorexAi conversation of its own (never listed among the conversations),
+-- so its steps are recorded, shown and undone the same way.
+ALTER TABLE ai_chats ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat';
+ALTER TABLE ai_chats ADD COLUMN connection TEXT;
+CREATE UNIQUE INDEX idx_ai_chats_connection ON ai_chats(connection);
+
+-- Apps that may ask people to connect over OAuth: registered by themselves (dcr), or known by the address of their
+-- own description (cimd, the address is the id).
+CREATE TABLE oauth_clients (
+  id            TEXT PRIMARY KEY,
+  kind          TEXT NOT NULL CHECK (kind IN ('dcr','cimd')),
+  name          TEXT NOT NULL,
+  uri           TEXT,
+  redirect_uris TEXT NOT NULL,
+  -- Confidential clients only (client_secret_post / client_secret_basic); public clients prove themselves with PKCE.
+  secret_hash   TEXT,
+  auth_method   TEXT NOT NULL DEFAULT 'none',
+  created_at    TEXT NOT NULL,
+  last_used_at  TEXT
+);
+
+-- A person's yes to an app: the team and reach it acts in, and the refresh token it trades for access tokens.
+CREATE TABLE oauth_grants (
+  id                 TEXT PRIMARY KEY,
+  client_id          TEXT NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+  user_id            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  team_id            TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  access             TEXT NOT NULL,
+  redirect_uri       TEXT NOT NULL,
+  resource           TEXT,
+  refresh_hash       TEXT UNIQUE,
+  refresh_expires_at TEXT,
+  created_at         TEXT NOT NULL,
+  last_used_at       TEXT
+);
+CREATE INDEX idx_oauth_grants_user ON oauth_grants(user_id);
+CREATE INDEX idx_oauth_grants_team ON oauth_grants(team_id);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

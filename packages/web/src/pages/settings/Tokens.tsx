@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { KeyRound, Plus, Trash2 } from 'lucide-react';
-import { createApiTokenSchema, type ApiTokenDto } from '@ploy/shared';
+import { createApiTokenSchema, type ApiTokenDto, type TokenAccess } from '@ploy/shared';
+import { AccessChoice } from '../../components/AccessChoice.tsx';
 import { CopyButton } from '../../components/Copy.tsx';
 import { useConfirm, Dialog } from '../../components/Dialog.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
-import { Button, Callout, EmptyState, Field, Input, Select, Skeleton } from '../../components/ui.tsx';
+import { Badge, Button, Callout, EmptyState, Field, Input, Select, Skeleton } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { useAction } from '../../lib/mutate.ts';
@@ -21,10 +22,11 @@ export function TokensPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [expiry, setExpiry] = useState<(typeof EXPIRY)[number]>('90');
+  const [access, setAccess] = useState<TokenAccess>('full');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [created, setCreated] = useState<string | null>(null);
 
-  const create = useAction((input: { name: string; expiresInDays: number | null }) => api.post<ApiTokenDto>('/api/tokens', input), {
+  const create = useAction((input: { name: string; expiresInDays: number | null; access: TokenAccess }) => api.post<ApiTokenDto>('/api/tokens', input), {
     invalidate: [keys.tokens],
     onSuccess: (result) => setCreated(result.token ?? null),
   });
@@ -54,9 +56,12 @@ export function TokensPage() {
             <div key={token.id} className="list__row">
               <KeyRound width={18} height={18} className="faint" aria-hidden="true" />
               <div className="grow">
-                <div className="list__title">{token.name}</div>
+                <div className="list__title">
+                  {token.name} <Badge tone={token.access === 'full' ? 'work' : token.access === 'write' ? 'info' : 'idle'}>{m.tokens.access[token.access]}</Badge>
+                </div>
                 <div className="list__meta">
                   <code>{token.prefix}…</code>
+                  {token.kind !== 'api' && <span>{m.tokens.kinds[token.kind]}</span>}
                   <span>
                     {token.lastUsedAt === null ? (
                       m.tokens.neverUsed
@@ -103,7 +108,7 @@ export function TokensPage() {
             close();
             return;
           }
-          const payload = { name, expiresInDays: expiry === 'never' ? null : Number(expiry) };
+          const payload = { name, expiresInDays: expiry === 'never' ? null : Number(expiry), access };
           const result = validate(m, createApiTokenSchema, payload);
           if (result.errors !== null) {
             setErrors(result.errors);
@@ -130,6 +135,9 @@ export function TokensPage() {
           <div className="form-grid">
             <Field label={m.tokens.name} error={errors.name}>
               <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={m.tokens.namePlaceholder} autoFocus />
+            </Field>
+            <Field label={m.tokens.accessLabel}>
+              <AccessChoice value={access} onChange={setAccess} />
             </Field>
             <Field label={m.tokens.expires}>
               <Select value={expiry} onChange={(event) => setExpiry(event.target.value as (typeof EXPIRY)[number])}>

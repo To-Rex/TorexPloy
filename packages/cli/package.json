@@ -1,0 +1,13 @@
+{
+  "name": "@ploy/cli",
+  "version": "0.9.0",
+  "private": true,
+  "type": "module",
+  "description": "torex: the TorexPloy command line, and an MCP server on stdio",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

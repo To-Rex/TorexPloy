@@ -4,6 +4,7 @@
 import { serve, type ServerType } from '@hono/node-server';
 import type { Server } from 'node:http';
 import { AiManager } from './ai/manager.ts';
+import { McpManager } from './mcp/manager.ts';
 import { detectBuilders } from './build/tools.ts';
 import { ComposeEngine } from './compose/engine.ts';
 import { DbConsole } from './database/console.ts';
@@ -74,6 +75,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   ctx.volumeBackups = new VolumeBackups(ctx);
   ctx.dbConsole = new DbConsole(ctx);
   ctx.ai = new AiManager(ctx);
+  ctx.mcp = new McpManager(ctx);
   return ctx;
 }
 
@@ -92,6 +94,7 @@ function schedule(ctx: Context): Scheduler {
   scheduler.every('docker-prune', 24 * 60 * minute, () => ctx.maintenance.pruneDocker(), 60 * minute);
   scheduler.every('ai-workspaces', 6 * 60 * minute, () => ctx.ai.prune(), 15 * minute);
   scheduler.every('ai-skills', 3 * 60 * minute, () => ctx.ai.skills.syncDue(), 2 * minute);
+  scheduler.every('oauth-prune', 60 * minute, () => ctx.mcp.oauth.prune(), 20 * minute);
   scheduler.every('wal-checkpoint', 30 * minute, () => ctx.stores.db.checkpoint());
   return scheduler;
 }

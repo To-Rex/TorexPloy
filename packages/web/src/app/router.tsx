@@ -1,6 +1,6 @@
 /** Routes. Every page is a lazily loaded chunk; the shell and the session load once. */
 import { createBrowserRouter, Navigate } from 'react-router';
-import { AuthedRoot, PublicOnly } from './Gate.tsx';
+import { AuthedPlain, AuthedRoot, PublicOnly } from './Gate.tsx';
 import { NotFound, RouteError } from './RouteError.tsx';
 
 export const router = createBrowserRouter([
@@ -26,6 +26,30 @@ export const router = createBrowserRouter([
     lazy: async () => {
       const { InvitePage } = await import('../pages/auth/Invite.tsx');
       return { element: <PublicOnly allowSignedIn><InvitePage /></PublicOnly> };
+    },
+  },
+  {
+    path: '/connect/invalid',
+    errorElement: <RouteError />,
+    lazy: async () => {
+      const { ConnectInvalidPage } = await import('../pages/connect/Connect.tsx');
+      return { element: <ConnectInvalidPage /> };
+    },
+  },
+  {
+    path: '/connect/cli',
+    errorElement: <RouteError />,
+    lazy: async () => {
+      const { ConnectCliPage } = await import('../pages/connect/Connect.tsx');
+      return { element: <AuthedPlain><ConnectCliPage /></AuthedPlain> };
+    },
+  },
+  {
+    path: '/connect/:id',
+    errorElement: <RouteError />,
+    lazy: async () => {
+      const { ConnectAppPage } = await import('../pages/connect/Connect.tsx');
+      return { element: <AuthedPlain><ConnectAppPage /></AuthedPlain> };
     },
   },
   {
@@ -101,6 +125,7 @@ export const router = createBrowserRouter([
           { path: 'team', lazy: async () => ({ Component: (await import('../pages/settings/Team.tsx')).TeamPage }) },
           { path: 'git', lazy: async () => ({ Component: (await import('../pages/settings/Git.tsx')).GitPage }) },
           { path: 'tokens', lazy: async () => ({ Component: (await import('../pages/settings/Tokens.tsx')).TokensPage }) },
+          { path: 'mcp', lazy: async () => ({ Component: (await import('../pages/settings/Mcp.tsx')).McpPage }) },
           { path: 'notifications', lazy: async () => ({ Component: (await import('../pages/settings/Notifications.tsx')).NotificationsPage }) },
           { path: 'storage', lazy: async () => ({ Component: (await import('../pages/settings/Storage.tsx')).StoragePage }) },
           { path: 'registries', lazy: async () => ({ Component: (await import('../pages/settings/Registries.tsx')).RegistriesPage }) },

@@ -7,6 +7,7 @@
  */
 import type { PlatformEvent } from '@ploy/shared';
 import type { AiManager } from './ai/manager.ts';
+import type { McpManager } from './mcp/manager.ts';
 import type { ComposeEngine } from './compose/engine.ts';
 import type { Deployer } from './deploy/deployer.ts';
 import type { DbConsole } from './database/console.ts';
@@ -61,6 +62,8 @@ export interface Context {
   dbConsole: DbConsole;
   /** TorexAi: its settings and the conversations being answered. */
   ai: AiManager;
+  /** The MCP server outside agents connect to, OAuth for them, and the command line's sign-ins. */
+  mcp: McpManager;
   /** Fresh confirmations of a session's owner (GitHub or a passkey), which stand in for the password for a few minutes. */
   stepUps: StepUps;
   startedAt: number;

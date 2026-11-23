@@ -12,6 +12,10 @@ export interface AiChatRecord {
   id: string;
   userId: string;
   teamId: string;
+  /** A conversation with TorexAi, or the record of what an MCP connection did. */
+  kind: 'chat' | 'mcp';
+  /** The MCP connection it records (`grant:<id>` or `token:<id>`). */
+  connection: string | null;
   title: string;
   model: string | null;
   pinned: boolean;
@@ -102,6 +106,8 @@ function mapChat(row: Row): AiChatRecord {
     id: str(row.id),
     userId: str(row.user_id),
     teamId: str(row.team_id),
+    kind: str(row.kind) === 'mcp' ? 'mcp' : 'chat',
+    connection: strOrNull(row.connection),
     title: str(row.title),
     model: strOrNull(row.model),
     pinned: bool(row.pinned),
@@ -185,6 +191,43 @@ export class AiStore {
     return this.getChat(id)!;
   }
 
+  /**
+   * The record of an MCP connection, made the first time it acts. One message
+   * anchors its steps (every step belongs to a message); it never grows.
+   */
+  mcpChat(userId: string, teamId: string, connection: string, client: string): AiChatRecord {
+    const found = this.db.get('SELECT * FROM ai_chats WHERE connection = ?', connection);
+    if (found !== undefined) {
+      const chat = mapChat(found);
+      if (chat.userId === userId && chat.teamId === teamId) return chat;
+      // The same connection now acts for someone else (cannot happen for a token, which never changes hands): start afresh.
+      this.deleteChat(chat.id);
+    }
+    const id = newId('aic');
+    const now = nowIso();
+    this.db.transaction(() => {
+      this.db.run("INSERT INTO ai_chats (id, user_id, team_id, kind, connection, title, created_at, updated_at) VALUES (?, ?, ?, 'mcp', ?, ?, ?, ?)", id, userId, teamId, connection, client.slice(0, 120), now, now);
+      this.db.run("INSERT INTO ai_messages (id, chat_id, seq, role, blocks, created_at) VALUES (?, ?, 1, 'assistant', '[]', ?)", newId('aim'), id, now);
+    });
+    return this.getChat(id)!;
+  }
+
+  /** The message every step of an MCP connection hangs from. */
+  mcpAnchor(chatId: string): string {
+    return str(this.db.scalar('SELECT id FROM ai_messages WHERE chat_id = ? ORDER BY seq ASC LIMIT 1', chatId));
+  }
+
+  /** What MCP connections did lately, newest first: the person's own, or the whole team's. */
+  mcpActions(filter: { userId?: string; teamId: string }, limit = 50): { action: AiActionRecord; client: string; chatId: string }[] {
+    const rows = this.db.all(
+      `SELECT a.*, c.title AS client_name FROM ai_actions a JOIN ai_chats c ON c.id = a.chat_id
+        WHERE c.kind = 'mcp' AND c.team_id = ? ${filter.userId === undefined ? '' : 'AND c.user_id = ?'}
+        ORDER BY a.created_at DESC LIMIT ?`,
+      ...(filter.userId === undefined ? [filter.teamId, limit] : [filter.teamId, filter.userId, limit]),
+    );
+    return rows.map((row) => ({ action: mapAction(row), client: str(row.client_name), chatId: str(row.chat_id) }));
+  }
+
   getChat(id: string): AiChatRecord | undefined {
     const row = this.db.get('SELECT * FROM ai_chats WHERE id = ?', id);
     return row === undefined ? undefined : mapChat(row);
@@ -198,14 +241,14 @@ export class AiStore {
 
   listChats(userId: string, teamId: string, search: string | undefined, limit = 200): AiChatRecord[] {
     if (search === undefined || search.length === 0) {
-      return this.db.all('SELECT * FROM ai_chats WHERE user_id = ? AND team_id = ? ORDER BY pinned DESC, updated_at DESC LIMIT ?', userId, teamId, limit).map(mapChat);
+      return this.db.all("SELECT * FROM ai_chats WHERE user_id = ? AND team_id = ? AND kind = 'chat' ORDER BY pinned DESC, updated_at DESC LIMIT ?", userId, teamId, limit).map(mapChat);
     }
     // The title, or anything the person or the assistant wrote.
     const pattern = `%${search.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
     return this.db
       .all(
         `SELECT c.* FROM ai_chats c
-          WHERE c.user_id = ? AND c.team_id = ?
+          WHERE c.user_id = ? AND c.team_id = ? AND c.kind = 'chat'
             AND (c.title LIKE ? ESCAPE '\\' OR EXISTS (
               SELECT 1 FROM ai_messages m WHERE m.chat_id = c.id AND m.role IN ('user','assistant') AND m.blocks LIKE ? ESCAPE '\\'))
           ORDER BY c.pinned DESC, c.updated_at DESC LIMIT ?`,
@@ -219,7 +262,7 @@ export class AiStore {
   }
 
   countChats(userId: string, teamId: string): number {
-    return num(this.db.scalar('SELECT COUNT(*) FROM ai_chats WHERE user_id = ? AND team_id = ?', userId, teamId) ?? 0);
+    return num(this.db.scalar("SELECT COUNT(*) FROM ai_chats WHERE user_id = ? AND team_id = ? AND kind = 'chat'", userId, teamId) ?? 0);
   }
 
   updateChat(id: string, patch: Partial<Pick<AiChatRecord, 'title' | 'model' | 'pinned' | 'autoApprove'>>, touch = false): void {

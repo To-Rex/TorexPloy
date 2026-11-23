@@ -7,36 +7,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  BookOpen,
-  Activity,
-  ArrowUpCircle,
-  BellRing,
-  CalendarClock,
-  Check,
-  ChevronRight,
-  ChevronsUpDown,
-  CloudUpload,
-  Container,
-  FolderKanban,
-  GitBranch,
-  Globe,
-  KeyRound,
-  LogOut,
-  Menu as MenuIcon,
-  Network,
-  Package,
-  PanelLeft,
-  Plus,
-  Rocket,
-  ScrollText,
-  Search,
-  Server,
-  Shield,
-  Sparkles,
-  UserRound,
-  Users,
-} from 'lucide-react';
+import { Activity, ArrowUpCircle, BellRing, BookOpen, CalendarClock, Check, ChevronRight, ChevronsUpDown, CloudUpload, Container, FolderKanban, GitBranch, Globe, KeyRound, LogOut, Menu as MenuIcon, Network, Package, PanelLeft, Plug, Plus, Rocket, ScrollText, Search, Server, Shield, Sparkles, UserRound, Users } from 'lucide-react';
 import { LOCALES, THEMES, roleAtLeast, type BootstrapDto } from '@ploy/shared';
 import { CommandPalette, usePaletteShortcut } from '../components/CommandPalette.tsx';
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/Menu.tsx';
@@ -193,6 +164,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
             {admin && <SideLink to="/settings/storage" icon={<CloudUpload aria-hidden="true" />} label={m.settings.nav.storage} />}
             {admin && <SideLink to="/settings/notifications" icon={<BellRing aria-hidden="true" />} label={m.settings.nav.notifications} />}
             <SideLink to="/settings/tokens" icon={<KeyRound aria-hidden="true" />} label={m.settings.nav.tokens} />
+            <SideLink to="/settings/mcp" icon={<Plug aria-hidden="true" />} label={m.settings.nav.mcp} />
             {admin && <SideLink to="/settings/audit" icon={<ScrollText aria-hidden="true" />} label={m.settings.nav.audit} />}
           </div>
           <div className="sidebar__group">
