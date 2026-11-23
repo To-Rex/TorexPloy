@@ -14,6 +14,7 @@ import { DockerUnavailableError } from '../docker/client.ts';
 import { AppError, isAppError } from '../lib/errors.ts';
 import { authMiddleware, csrfMiddleware, isHttps, requestOrigin, type Env } from './core.ts';
 import { registerAccountRoutes } from './routes/account.ts';
+import { AI_UPLOAD, registerAiRoutes } from './routes/ai.ts';
 import { registerApplicationRoutes } from './routes/applications.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerPasskeyRoutes } from './routes/passkeys.ts';
@@ -102,8 +103,10 @@ export function createHttpApp(ctx: Context): Hono<Env> {
     const length = Number(c.req.header('content-length') ?? 0);
     const rawUpload = (c.req.method === 'PUT' && OBJECT_UPLOAD.test(c.req.path)) || (c.req.method === 'POST' && SOURCE_UPLOAD.test(c.req.path));
     const consoleBody = c.req.method === 'POST' && DB_CONSOLE_BODY.test(c.req.path);
+    // A file attached to a TorexAi conversation: a raw body, bounded in its route.
+    const aiUpload = c.req.method === 'POST' && AI_UPLOAD.test(c.req.path);
     if (consoleBody && length > MAX_DB_CONSOLE_BYTES) throw new AppError('payload_too_large', 'Request body too large');
-    if (length > MAX_JSON_BYTES && !c.req.path.startsWith('/api/webhooks/') && !rawUpload && !consoleBody) {
+    if (length > MAX_JSON_BYTES && !c.req.path.startsWith('/api/webhooks/') && !rawUpload && !consoleBody && !aiUpload) {
       throw new AppError('payload_too_large', 'Request body too large');
     }
     c.header('Cache-Control', 'no-store');
@@ -133,6 +136,9 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   registerRegistryRoutes(app, ctx);
   registerGithubRoutes(app, ctx);
   registerGitProviderRoutes(app, ctx);
+  registerAiRoutes(app, ctx);
+  // TorexAi reaches the platform through this same application, as the person it acts for.
+  ctx.ai.api.attach(app);
 
   app.all('/api/*', () => {
     throw new AppError('not_found', 'No such endpoint', { params: { resource: 'endpoint' } });

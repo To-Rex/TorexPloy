@@ -6,7 +6,8 @@
  */
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router';
-import { Activity, CalendarClock, Container, Ellipsis, ExternalLink, FileCode2, FolderUp, GitBranch, GitPullRequest, Globe, LayoutDashboard, Pencil, Rocket, ScrollText, Server, SlidersHorizontal, SquareTerminal, Trash2, Variable } from 'lucide-react';
+import { Activity, CalendarClock, Container, Ellipsis, ExternalLink, FileCode2, FolderUp, GitBranch, GitPullRequest, Globe, LayoutDashboard, Pencil, Rocket, ScrollText, Server, SlidersHorizontal, Sparkles, SquareTerminal, Trash2, Variable } from 'lucide-react';
+import { useAiStatus } from '../ai/aiApi.ts';
 import { updateApplicationSchema, type ApplicationDto } from '@ploy/shared';
 import { Dialog, useConfirm } from '../../components/Dialog.tsx';
 import { AppMark } from '../../components/KindMark.tsx';
@@ -161,6 +162,7 @@ export function AppLayout() {
   const { m, t, plural } = useI18n();
   const confirm = useConfirm();
   const navigate = useNavigate();
+  const ai = useAiStatus();
   const app = useApp(appId);
   const data = app.data;
   const project = useProject(data?.projectId ?? '');
@@ -255,6 +257,11 @@ export function AppLayout() {
                   <MenuItem icon={<SquareTerminal />} onSelect={() => setTerminal(true)}>
                     {m.deploySettings.terminal}
                   </MenuItem>
+                  {ai.data?.ready === true && (
+                    <MenuItem icon={<Sparkles />} onSelect={() => void navigate(`/ai?app=${encodeURIComponent(data.id)}&prompt=${encodeURIComponent(m.ai.prompts.application)}`)}>
+                      {m.ai.askAi}
+                    </MenuItem>
+                  )}
                   <MenuSeparator />
                   <MenuItem icon={<Trash2 />} danger onSelect={() => void askDelete()}>
                     {m.app.delete}

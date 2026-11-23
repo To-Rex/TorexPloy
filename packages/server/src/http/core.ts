@@ -22,10 +22,22 @@ export interface Auth {
   /** The team the request acts within, with the caller's role in it. Null only for a user without teams. */
   teamId: string | null;
   role: TeamRole | null;
+  /** Set when TorexAi makes the request for this person: the conversation it acts in (recorded in the audit log). */
+  ai?: string;
+}
+
+/**
+ * How TorexAi calls the API in-process: the person it acts for, already
+ * resolved, and the address their own request came from. Only code inside the
+ * control plane can hand these to the application; a network request cannot.
+ */
+export interface InternalBindings {
+  internalAuth?: Auth;
+  internalIp?: string;
 }
 
 export interface Env {
-  Bindings: HttpBindings;
+  Bindings: HttpBindings & InternalBindings;
   Variables: {
     requestId: string;
     auth: Auth | null;
@@ -96,6 +108,13 @@ export function clearSessionCookie(c: Ctx): void {
 /** Resolve the caller from a session cookie or a bearer API token. Never throws. */
 export function authMiddleware(ctx: Context): MiddlewareHandler<Env> {
   return async (c, next) => {
+    const internal = c.env?.internalAuth;
+    if (internal !== undefined) {
+      c.set('ip', c.env.internalIp ?? '127.0.0.1');
+      c.set('auth', internal);
+      await next();
+      return;
+    }
     c.set('ip', clientIp(c));
     c.set('auth', null);
     const { stores } = ctx;
@@ -253,7 +272,7 @@ export function audit(
     targetId: target.id ?? null,
     targetName: target.name ?? null,
     ip: c.get('ip'),
-    metadata: auth?.tokenId === null || auth === null ? metadata : { ...metadata, viaToken: auth.tokenId },
+    metadata: { ...metadata, ...(auth?.tokenId == null ? {} : { viaToken: auth.tokenId }), ...(auth?.ai === undefined ? {} : { viaAi: auth.ai }) },
   });
 }
 

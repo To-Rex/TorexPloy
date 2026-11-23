@@ -43,6 +43,10 @@ const STATUS: Record<ErrorCode, number> = {
   bucket_not_empty: 409,
   database_unreachable: 502,
   database_error: 422,
+  ai_unavailable: 409,
+  ai_provider_error: 502,
+  ai_limit_reached: 429,
+  ai_busy: 409,
   internal_error: 500,
 };
 

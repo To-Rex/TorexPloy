@@ -528,7 +528,9 @@ export class Deployer {
     signal: AbortSignal,
   ): Promise<{ image: string; plan: DeployPlan }> {
     const { stores, config } = this.ctx;
-    if (app.sourceType === 'upload') await this.unpackSource(app, deployment, log, workDir);
+    // An archive pinned on the deployment is what gets built, whatever the application's source: an upload
+    // application's own archive, or a repository's sources as TorexAi edited them.
+    if (app.sourceType === 'upload' || deployment.upload !== null) await this.unpackSource(app, deployment, log, workDir);
     else await this.fetchSource(app, deployment, log, workDir, signal);
     throwIfAborted(signal);
 

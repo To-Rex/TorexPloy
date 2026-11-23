@@ -286,6 +286,27 @@ export const guide: GuideContent = {
           ],
         },
         {
+          id: "torex-ai",
+          icon: "sparkles",
+          title: "TorexAi",
+          summary: "Platforma va serverlarni oddiy tilda boshqaradigan yordamchi: tekshiradi, tushuntiradi va ruxsatingiz bilan bajaradi.",
+          to: "/ai",
+          blocks: [
+            {
+              type: "steps",
+              items: [
+                { title: "Bir marta sozlash", text: "Instansiya administratori [Sozlamalar → TorexAi](/settings/ai)da provayder qoʻshadi (Claude, ChatGPT, Grok, Deploy yoki OpenAI formatidagi istalgan API), API kalitni kiritadi, **Tekshirish**ni bosadi va foydalanuvchilarga ochiq modellarni belgilaydi." },
+                { title: "Yozing", text: "[TorexAi](/ai) sahifasida nima kerakligini oddiy soʻz bilan yozing: “api ilovasiga shop.example.uz domenini ula”, “oxirgi deploy nega yiqildi?”, “serverda disk nimaga toʻldi?”. Fayl yoki skrinshot biriktirish mumkin." },
+                { title: "Tasdiqlang", text: "Oʻqish amallari darhol bajariladi va javobda bir qatorga yigʻiladi. Biror narsani oʻzgartiradigan amal kartada koʻrsatiladi: nima qilinadi, qaysi buyruq yoki soʻrov bilan. **Ruxsat berish** yoki **Rad etish**ni bosasiz." },
+                { title: "Kerak boʻlsa qaytaring", text: "Bajarilgan oʻzgarish kartasida **Orqaga qaytarish** tugmasi chiqadi: sozlama avvalgi qiymatiga, deploy avvalgi versiyaga, fayl avvalgi matniga qaytadi." },
+              ],
+            },
+            { type: "list", items: ["TorexAi har doim **sizning rolingiz** bilan ishlaydi: siz qila olmaydigan narsani u ham qila olmaydi.", "Oʻchirish, xavfli shell buyruqlari va repozitoriyaga push **har doim** soʻraladi, hatto “oddiy oʻzgarishlarni soʻramaslik” yoqilgan boʻlsa ham.", "Ilova kodini tuzatish: TorexAi manbani ochadi, tahrirlaydi, diff koʻrsatadi va ruxsatingiz bilan qayta joylashtiradi. Oʻzgarish git’da ham qolishi uchun push qilishni soʻrang.", "Parol va tokenlar modelga yashirib beriladi; siz ularni amal kartasida toʻliq koʻrasiz.", "Hisobot, konfiguratsiya yoki skriptni fayl qilib beradi, rasm yaratadi (rasm modeli ulangan boʻlsa) va metrikalarni grafik qilib koʻrsatadi."] },
+            { type: "tip", tone: "work", title: "Server buyruqlari", text: "SSH serverda shell uchun jamoa **admin** roli kerak. Umumiy lokal serverda buyruqlarni faqat instansiya administratori bajara oladi." },
+            { type: "tip", tone: "info", title: "Maʼlumotlar qayerga ketadi", text: "Suhbat matni va asboblar natijasi siz tanlagan provayderga yuboriladi. Buni hisobga olib, qaysi provayderni ulashni administrator hal qiladi." },
+          ],
+        },
+        {
           id: "database-console",
           icon: "grid",
           title: "Maʼlumotlar bazasi konsoli",

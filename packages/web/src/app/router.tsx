@@ -41,6 +41,8 @@ export const router = createBrowserRouter([
       { path: 'schedules', lazy: async () => ({ Component: (await import('../pages/Schedules.tsx')).SchedulesPage }) },
       { path: 'docker', lazy: async () => ({ Component: (await import('../pages/Docker.tsx')).DockerPage }) },
       { path: 'proxy', lazy: async () => ({ Component: (await import('../pages/Proxy.tsx')).ProxyPage }) },
+      { path: 'ai', lazy: async () => ({ Component: (await import('../pages/ai/AiPage.tsx')).AiPage }) },
+      { path: 'ai/:chatId', lazy: async () => ({ Component: (await import('../pages/ai/AiPage.tsx')).AiPage }) },
       { path: 'guide', lazy: async () => ({ Component: (await import('../pages/Guide.tsx')).GuidePage }) },
       { path: 'guide/:section', lazy: async () => ({ Component: (await import('../pages/Guide.tsx')).GuidePage }) },
       {
@@ -102,6 +104,7 @@ export const router = createBrowserRouter([
           { path: 'notifications', lazy: async () => ({ Component: (await import('../pages/settings/Notifications.tsx')).NotificationsPage }) },
           { path: 'storage', lazy: async () => ({ Component: (await import('../pages/settings/Storage.tsx')).StoragePage }) },
           { path: 'registries', lazy: async () => ({ Component: (await import('../pages/settings/Registries.tsx')).RegistriesPage }) },
+          { path: 'ai', lazy: async () => ({ Component: (await import('../pages/settings/Ai.tsx')).AiSettingsPage }) },
           { path: 'platform', lazy: async () => ({ Component: (await import('../pages/settings/Platform.tsx')).PlatformPage }) },
           { path: 'audit', lazy: async () => ({ Component: (await import('../pages/settings/Audit.tsx')).AuditPage }) },
         ],

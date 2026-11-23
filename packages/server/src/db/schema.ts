@@ -1104,6 +1104,107 @@ CREATE INDEX idx_volume_backups_app ON volume_backups(application_id);
 `,
   },
   { version: 16, name: 'git-providers', sql: GIT_PROVIDERS_V16, rebuildsTables: true },
+  {
+    version: 17,
+    name: 'torex-ai',
+    sql: `
+-- A conversation with TorexAi. It belongs to one person and acts within one team (with that person's role in it).
+CREATE TABLE ai_chats (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  team_id       TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  title         TEXT NOT NULL DEFAULT '',
+  -- '<provider id>:<model>' the next reply is written by.
+  model         TEXT,
+  pinned        INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0,1)),
+  -- Ordinary changes run without asking in this conversation (dangerous ones always ask).
+  auto_approve  INTEGER NOT NULL DEFAULT 0 CHECK (auto_approve IN (0,1)),
+  -- Things the model is told with the person's next message (JSON array): an action they undid by hand.
+  notes         TEXT NOT NULL DEFAULT '[]',
+  input_tokens  INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+CREATE INDEX idx_ai_chats_owner ON ai_chats(user_id, team_id, updated_at DESC);
+
+-- The transcript, append-only. 'tool' rows carry the results of the calls in the assistant row before them;
+-- a 'summary' row replaces everything before it for the model (the conversation was condensed there).
+CREATE TABLE ai_messages (
+  id            TEXT PRIMARY KEY,
+  chat_id       TEXT NOT NULL REFERENCES ai_chats(id) ON DELETE CASCADE,
+  seq           INTEGER NOT NULL,
+  role          TEXT NOT NULL CHECK (role IN ('user','assistant','tool','summary')),
+  -- Provider-neutral blocks (JSON): text, attached files, tool calls, tool results.
+  blocks        TEXT NOT NULL,
+  -- An assistant turn exactly as its provider returned it, replayed unchanged to the same kind of provider.
+  raw           TEXT,
+  provider      TEXT,
+  model         TEXT,
+  stop          TEXT,
+  input_tokens  INTEGER,
+  output_tokens INTEGER,
+  cached_tokens INTEGER,
+  error         TEXT,
+  created_at    TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_ai_messages_seq ON ai_messages(chat_id, seq);
+
+-- One tool call of the assistant: what it asked to do, whether it was allowed, what came of it and how to take it back.
+CREATE TABLE ai_actions (
+  id          TEXT PRIMARY KEY,
+  chat_id     TEXT NOT NULL REFERENCES ai_chats(id) ON DELETE CASCADE,
+  message_id  TEXT NOT NULL REFERENCES ai_messages(id) ON DELETE CASCADE,
+  call_id     TEXT NOT NULL,
+  tool        TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  detail      TEXT NOT NULL DEFAULT '',
+  preview     TEXT,
+  input       TEXT NOT NULL,
+  risk        TEXT NOT NULL CHECK (risk IN ('safe','change','danger')),
+  status      TEXT NOT NULL CHECK (status IN ('pending','running','done','failed','rejected','cancelled')),
+  summary     TEXT,
+  -- What the model was given back.
+  output      TEXT,
+  -- What the person is shown instead, when it differs: the same answer with the secrets the model's copy hides.
+  display     TEXT,
+  -- How to take the action back (JSON), when it can be.
+  undo        TEXT,
+  undone_at   TEXT,
+  undo_error  TEXT,
+  created_at  TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE INDEX idx_ai_actions_chat ON ai_actions(chat_id, created_at);
+
+-- Files of a conversation, kept under ai/files/<chat>/<id>: what the person attached, what the assistant made for
+-- download, pictures it generated, and the earlier contents of files it overwrote (so the write can be undone).
+CREATE TABLE ai_files (
+  id         TEXT PRIMARY KEY,
+  chat_id    TEXT NOT NULL REFERENCES ai_chats(id) ON DELETE CASCADE,
+  action_id  TEXT,
+  kind       TEXT NOT NULL CHECK (kind IN ('upload','generated','image','snapshot')),
+  name       TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  size       INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_ai_files_chat ON ai_files(chat_id);
+
+-- Tokens used, per day, person and model: the daily limit is checked against it and the usage chart is drawn from it.
+CREATE TABLE ai_usage (
+  day           TEXT NOT NULL,
+  user_id       TEXT NOT NULL,
+  team_id       TEXT NOT NULL,
+  model         TEXT NOT NULL,
+  requests      INTEGER NOT NULL DEFAULT 0,
+  input_tokens  INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cached_tokens INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, user_id, team_id, model)
+);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

@@ -3,6 +3,7 @@
  */
 import type { Database } from '../db/database.ts';
 import type { Secrets } from '../lib/secrets.ts';
+import { AiStore } from './ai.ts';
 import { ApplicationStore, DeploymentStore, ProjectStore } from './apps.ts';
 import { ApiTokenStore, PasskeyStore, SessionStore, UserStore } from './identity.ts';
 import { BackupStore, CronStore, DomainStore, EnvStore, InstallationStore, LinkStore, MetricStore, ServiceStore, VolumeBackupStore, VolumeStore } from './resources.ts';
@@ -43,6 +44,7 @@ export interface Stores {
   registries: RegistryStore;
   storageKeys: StorageKeyStore;
   storageBuckets: StorageBucketStore;
+  ai: AiStore;
 }
 
 export function createStores(db: Database, secrets: Secrets): Stores {
@@ -75,9 +77,11 @@ export function createStores(db: Database, secrets: Secrets): Stores {
     registries: new RegistryStore(db, secrets),
     storageKeys: new StorageKeyStore(db, secrets),
     storageBuckets: new StorageBucketStore(db),
+    ai: new AiStore(db),
   };
 }
 
+export type * from './ai.ts';
 export type * from './apps.ts';
 export type * from './git.ts';
 export type * from './identity.ts';

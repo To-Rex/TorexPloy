@@ -41,6 +41,10 @@ export const ERROR_CODES = [
   'bucket_not_empty',
   'database_unreachable',
   'database_error',
+  'ai_unavailable',
+  'ai_provider_error',
+  'ai_limit_reached',
+  'ai_busy',
   'internal_error',
 ] as const;
 

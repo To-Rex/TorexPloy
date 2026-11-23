@@ -33,6 +33,7 @@ import {
   Search,
   Server,
   Shield,
+  Sparkles,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -171,6 +172,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
         <nav className="sidebar__scroll">
           <div className="sidebar__group">
             <div className="sidebar__label">{m.nav.groupHome}</div>
+            <SideLink to="/ai" icon={<Sparkles aria-hidden="true" />} label={m.nav.ai} />
             <SideLink to="/projects" icon={<FolderKanban aria-hidden="true" />} label={m.nav.projects} />
             <SideLink to="/deployments" icon={<Rocket aria-hidden="true" />} label={m.nav.deployments} />
             <SideLink to="/monitoring" icon={<Activity aria-hidden="true" />} label={m.nav.monitoring} />
@@ -181,6 +183,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
           <div className="sidebar__group">
             <div className="sidebar__label">{m.nav.groupSettings}</div>
             {user.isInstanceAdmin && <SideLink to="/settings/platform" icon={<Globe aria-hidden="true" />} label={m.settings.nav.platform} />}
+            {user.isInstanceAdmin && <SideLink to="/settings/ai" icon={<Sparkles aria-hidden="true" />} label={m.settings.nav.ai} />}
             <SideLink to="/servers" icon={<Server aria-hidden="true" />} label={m.nav.servers} />
             <SideLink to="/settings/profile" icon={<UserRound aria-hidden="true" />} label={m.settings.nav.profile} />
             <SideLink to="/settings/security" icon={<Shield aria-hidden="true" />} label={m.settings.nav.security} />

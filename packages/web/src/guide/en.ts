@@ -286,6 +286,27 @@ export const guide: GuideContent = {
           ],
         },
         {
+          id: "torex-ai",
+          icon: "sparkles",
+          title: "TorexAi",
+          summary: "The assistant that runs the platform and its servers in plain words: it looks, explains, and acts with your approval.",
+          to: "/ai",
+          blocks: [
+            {
+              type: "steps",
+              items: [
+                { title: "Set it up once", text: "The instance administrator adds a provider in [Settings → TorexAi](/settings/ai) (Claude, ChatGPT, Grok, Deploy or any API in the OpenAI format), enters the API key, presses **Check** and marks the models people may pick." },
+                { title: "Write", text: "On the [TorexAi](/ai) page say what you need in plain words: “attach shop.example.com to the api application”, “why did the last deploy fail?”, “what filled the disk on the server?”. A file or a screenshot can be attached." },
+                { title: "Approve", text: "Reading runs at once and folds into one line of the reply. Anything that changes something is shown as a card: what will happen, and with which command or request. You press **Approve** or **Decline**." },
+                { title: "Undo when needed", text: "A finished change keeps an **Undo** button on its card: a setting goes back to its earlier value, a deployment to the earlier version, a file to its earlier contents." },
+              ],
+            },
+            { type: "list", items: ["TorexAi always works with **your role**: what you may not do, it cannot do either.", "Deletions, dangerous shell commands and pushes to a repository **always** ask, even when “do not ask for ordinary changes” is on.", "Fixing an application's code: TorexAi opens the source, edits it, shows the diff and redeploys with your approval. Ask it to push as well so the change stays in git.", "Passwords and tokens reach the model hidden; you see them whole on the action card.", "It hands over a report, a config or a script as a file, makes pictures (when an image model is connected) and shows metrics as charts."] },
+            { type: "tip", tone: "work", title: "Commands on servers", text: "A shell on an SSH server needs the team **admin** role. On the shared local server only the instance administrator may run commands." },
+            { type: "tip", tone: "info", title: "Where the data goes", text: "The text of a conversation and the results of tools are sent to the provider you chose. The administrator decides which provider to connect with that in mind." },
+          ],
+        },
+        {
           id: "database-console",
           icon: "grid",
           title: "Database console",

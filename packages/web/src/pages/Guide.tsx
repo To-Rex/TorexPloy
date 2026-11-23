@@ -36,6 +36,7 @@ import {
   Variable,
   Wrench,
   type LucideIcon,
+  Sparkles,
 } from 'lucide-react';
 import { CopyButton } from '../components/Copy.tsx';
 import { Frame } from '../components/Frame.tsx';
@@ -72,6 +73,7 @@ const ICONS: Record<GuideIcon, LucideIcon> = {
   refresh: RefreshCw,
   wrench: Wrench,
   download: Download,
+  sparkles: Sparkles,
 };
 
 /** Everything a section says, for the search. */

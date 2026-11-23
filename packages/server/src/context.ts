@@ -6,6 +6,7 @@
  * (the deployer needs GitHub tokens; the GitHub webhook needs the deployer).
  */
 import type { PlatformEvent } from '@ploy/shared';
+import type { AiManager } from './ai/manager.ts';
 import type { ComposeEngine } from './compose/engine.ts';
 import type { Deployer } from './deploy/deployer.ts';
 import type { DbConsole } from './database/console.ts';
@@ -58,6 +59,8 @@ export interface Context {
   volumeBackups: VolumeBackups;
   /** The database console's connections. */
   dbConsole: DbConsole;
+  /** TorexAi: its settings and the conversations being answered. */
+  ai: AiManager;
   /** Fresh confirmations of a session's owner (GitHub or a passkey), which stand in for the password for a few minutes. */
   stepUps: StepUps;
   startedAt: number;

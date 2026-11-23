@@ -5,7 +5,8 @@
  */
 import { useState } from 'react';
 import { Link, Outlet, useNavigate, useOutletContext, useParams } from 'react-router';
-import { Activity, BookOpen, DatabaseBackup, Ellipsis, FolderOpen, Globe, KeyRound, LayoutDashboard, Pencil, ScrollText, Server, SlidersHorizontal, SquareTerminal, Table2, Trash2 } from 'lucide-react';
+import { Activity, BookOpen, DatabaseBackup, Ellipsis, FolderOpen, Globe, KeyRound, LayoutDashboard, Pencil, ScrollText, Server, SlidersHorizontal, Sparkles, SquareTerminal, Table2, Trash2 } from 'lucide-react';
+import { useAiStatus } from '../ai/aiApi.ts';
 import { hasDbConsole, updateServiceSchema, type ServiceDto } from '@ploy/shared';
 import { Dialog, useConfirm } from '../../components/Dialog.tsx';
 import { ServiceMark } from '../../components/KindMark.tsx';
@@ -86,6 +87,7 @@ export function ServiceLayout() {
   const { m, t } = useI18n();
   const confirm = useConfirm();
   const navigate = useNavigate();
+  const ai = useAiStatus();
   const service = useService(serviceId);
   const data = service.data;
   const project = useProject(data?.projectId ?? '');
@@ -146,6 +148,11 @@ export function ServiceLayout() {
                   {hasDbConsole(data.type) && (
                     <MenuItem icon={<Table2 />} onSelect={() => void navigate(`/services/${data.id}/database`)}>
                       {m.db.open}
+                    </MenuItem>
+                  )}
+                  {ai.data?.ready === true && (
+                    <MenuItem icon={<Sparkles />} onSelect={() => void navigate(`/ai?service=${encodeURIComponent(data.id)}&prompt=${encodeURIComponent(m.ai.prompts.service)}`)}>
+                      {m.ai.askAi}
                     </MenuItem>
                   )}
                   <MenuSeparator />

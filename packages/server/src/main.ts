@@ -3,6 +3,7 @@
  */
 import { serve, type ServerType } from '@hono/node-server';
 import type { Server } from 'node:http';
+import { AiManager } from './ai/manager.ts';
 import { detectBuilders } from './build/tools.ts';
 import { ComposeEngine } from './compose/engine.ts';
 import { DbConsole } from './database/console.ts';
@@ -72,6 +73,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   ctx.updates = new UpdateChecker(ctx);
   ctx.volumeBackups = new VolumeBackups(ctx);
   ctx.dbConsole = new DbConsole(ctx);
+  ctx.ai = new AiManager(ctx);
   return ctx;
 }
 
@@ -88,6 +90,7 @@ function schedule(ctx: Context): Scheduler {
   scheduler.every('retention', 60 * minute, () => ctx.maintenance.pruneRetention(), 5 * minute);
   scheduler.every('workspaces', 30 * minute, () => ctx.maintenance.pruneWorkspaces(), 10 * minute);
   scheduler.every('docker-prune', 24 * 60 * minute, () => ctx.maintenance.pruneDocker(), 60 * minute);
+  scheduler.every('ai-workspaces', 6 * 60 * minute, () => ctx.ai.prune(), 15 * minute);
   scheduler.every('wal-checkpoint', 30 * minute, () => ctx.stores.db.checkpoint());
   return scheduler;
 }
@@ -128,6 +131,7 @@ async function start(): Promise<void> {
   const scheduler = schedule(ctx);
   ctx.updates.start();
   ctx.dbConsole.start();
+  ctx.ai.start();
 
   let stopping = false;
   const shutdown = async (signal: string): Promise<void> => {
@@ -148,6 +152,7 @@ async function start(): Promise<void> {
     ctx.reconciler.stopAll();
     ctx.domains.stop();
     terminals.close();
+    ctx.ai.stop();
     await ctx.dbConsole.stop().catch(() => undefined);
     const closed = new Promise<void>((resolve) => server.close(() => resolve()));
     // Open dashboards hold SSE streams forever; close() alone would wait for them indefinitely.

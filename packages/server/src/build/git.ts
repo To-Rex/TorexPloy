@@ -34,7 +34,8 @@ export interface CommitInfo {
   message: string;
 }
 
-function gitEnv(request: CheckoutRequest, keyPath: string | null): Record<string, string> {
+/** The environment git runs in: no prompts, and the credentials for one origin (a token header) or one key file. */
+export function gitEnv(request: Pick<CheckoutRequest, 'httpAuth'>, keyPath: string | null): Record<string, string> {
   const env: Record<string, string> = {
     GIT_TERMINAL_PROMPT: '0',
     GIT_ASKPASS: 'echo',
@@ -58,7 +59,7 @@ function gitEnv(request: CheckoutRequest, keyPath: string | null): Record<string
 }
 
 /** Remove credentials and noise from git's progress output before it reaches a log. */
-function scrub(text: string): string {
+export function scrub(text: string): string {
   return text
     .replace(/(https?:\/\/)[^@\s/]+@/g, '$1***@')
     .replace(/x-access-token:[^@\s]+/g, 'x-access-token:***')

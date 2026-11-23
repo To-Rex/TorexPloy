@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router';
-import { Ban, Check, Download, FolderUp, History, LoaderCircle, Minus, X } from 'lucide-react';
+import { Ban, Check, Download, FolderUp, History, LoaderCircle, Minus, Sparkles, X } from 'lucide-react';
 import { isTerminalDeployment } from '@ploy/shared';
 import { DeploymentTimingFacts, deploymentTitle } from '../components/DeploymentItem.tsx';
 import { useConfirm } from '../components/Dialog.tsx';
@@ -16,8 +16,10 @@ import { useAction } from '../lib/mutate.ts';
 import { keys, useApp, useDeployment } from '../lib/queries.ts';
 import { NotFound } from '../app/RouteError.tsx';
 import { Reason } from '../components/Reason.tsx';
+import { useAiStatus } from './ai/aiApi.ts';
 
 export function DeploymentPage() {
+  const ai = useAiStatus();
   const { deploymentId = '' } = useParams();
   const { m, t, plural, formatDate, formatBytes } = useI18n();
   const confirm = useConfirm();
@@ -128,6 +130,14 @@ export function DeploymentPage() {
               <Reason kind="deploy" code={data.errorCode} message={data.errorMessage} />
             </p>
             {app.data?.activeDeployment !== null && app.data?.activeDeployment !== undefined && app.data.activeDeployment.id !== data.id && <p>{m.deployment.previousKeptServing}</p>}
+            {ai.data?.ready === true && (
+              <p>
+                <Link className="btn btn--sm" style={{ textDecoration: 'none' }} to={`/ai?deployment=${encodeURIComponent(data.id)}&app=${encodeURIComponent(data.applicationId)}&prompt=${encodeURIComponent(m.ai.prompts.deployment)}`}>
+                  <Sparkles aria-hidden="true" />
+                  {m.ai.analyze}
+                </Link>
+              </p>
+            )}
           </Callout>
         </div>
       )}

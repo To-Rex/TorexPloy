@@ -548,6 +548,49 @@ PostgreSQL, MySQL va MariaDB servislari uchun brauzerdagi boshqaruv (`database/`
 - **Test.** Toza qismlar (`splitSql`, eksport formatlari) har doim; protokol, tunnel (Docker attach dublyori bilan) va
   API esa `PLOY_TEST_POSTGRES` / `PLOY_TEST_MYSQL` (`user:parol@host:port`) berilganda haqiqiy serverlarda tekshiriladi.
 
+### 5.14 TorexAi
+
+Panelga oʻrnatilgan agent: model bilan suhbat, asboblar chaqiruvi, tasdiqlash va orqaga qaytarish (`packages/server/src/ai/`).
+
+- **Run.** Foydalanuvchi xabari *run* boshlaydi (`AiManager`): model soʻraladi, chaqirgan asboblari rejalashtiriladi,
+  kerak boʻlsa tasdiq kutiladi, bajariladi, natija modelga qaytadi; model boshqa asbob soʻramaguncha (koʻpi bilan 60 qadam).
+  Run brauzerda emas, control-plane’da yashaydi: tab yopilsa ham davom etadi, qayta ochilganda SSE oqimi
+  (`GET /api/ai/chats/:id/events`) avval joriy holatni (`snapshot`), keyin hodisalarni beradi. Restartda yarim qolgan
+  amallar `cancelled` qilinadi.
+- **Provayderlar.** Ikki format: Anthropic Messages API (rasmiy `@anthropic-ai/sdk`, `providers/anthropic.ts`) va OpenAI
+  chat-completions (`providers/openai.ts`: OpenAI, xAI, Deploy va mos kelgan har qanday endpoint). Transkript
+  provayderdan mustaqil shaklda saqlanadi (`ai_messages.blocks`); assistent javobining asl koʻrinishi (`raw`) faqat
+  oʻsha provayderga oʻzgarishsiz qaytariladi.
+- **Kesh va preserved thinking.** Tizim koʻrsatmasi va asboblar roʻyxati hamma uchun bir xil va oʻzgarmas, transkript
+  faqat oxiriga qoʻshiladi; oʻzgaruvchan narsa (sahifa, vaqt, rol) xabarning oʻzida ketadi. Claude’da ikki kesh nuqtasi
+  (tizim + oxirgi xabar), `fallbacks: "default"` va `thinking.block_binding.prefix_mismatch_behavior: "drop_block"`
+  yuboriladi; rad etilgan yoki kesilgan javobning asbob chaqiruvlari hech qachon bajarilmaydi.
+- **Platformaga kirish.** Bitta `api_call` asbobi panelning oʻz HTTP ilovasini jarayon ichida, foydalanuvchi nomidan
+  chaqiradi (`InternalApi`, `c.env.internalAuth`): rol har chaqiruvda qaytadan olinadi, validatsiya va audit oʻsha
+  marshrutning oʻziniki. `catalog.ts` ham hujjat (`api_docs` qidiradi), ham ruxsat roʻyxati: unda yoʻq marshrut
+  chaqirilmaydi. Kirish, akkaunt xavfsizligi, webhook’lar, oqimlar va `/api/ai/*` ataylab chiqarilgan; test har bir
+  marshrut katalogda yoki `EXCLUDED`da ekanini tekshiradi.
+- **Xavf darajasi.** `safe` (oʻqish) darhol; `change` tasdiq bilan (suhbatda “soʻramaslik” yoqilmagan boʻlsa);
+  `danger` har doim tasdiq bilan. API uchun: GET xavfsiz, DELETE xavfli, qolgani oʻzgarish (katalogda alohida
+  belgilanganlari bor; SQL matniga qarab). Shell uchun `risk.ts`: buyruq faqat har bir boʻlagi maʼlum oʻqish dasturi
+  boʻlsa va ichida boshqa buyruq yashirina olmasa xavfsiz; oʻchirish, toʻxtatish, tarmoqni kesish xavfli.
+- **Server.** SSH serverda buyruq panelning SSH seansi orqali; lokal serverda proxy image’dan vaqtinchalik imtiyozli
+  konteyner (`nsenter -t 1`, zaxira yoʻli `chroot /host`) orqali, chiqishi attach bilan olinadi va logga yozilmaydi.
+- **Kod.** `code` asbobi ilova manbasini suhbat uchun control-plane’da git ishchi nusxasiga oladi
+  (`<data>/ai/workspaces/<chat>/<app>`); model yozgan hech bir buyruq u yerda ishlamaydi, faqat panel oʻzi yigʻgan
+  argumentlar bilan `git`. Deploy: kuzatilayotgan fayllar zip qilinadi va oddiy quvur uni yuklangan arxiv kabi yigʻadi
+  (`deployment.upload`); push ilovaning git ruxsati yozishga yetsa ishlaydi.
+- **Orqaga qaytarish.** Har bir amal `ai_actions`da retsept bilan: API uchun katalog qoidasi (yaratilganini oʻchirish,
+  oldingi qiymatlarni qaytarish, teskari amal, avvalgi deploy’ga rollback), fayl uchun oldingi matn nusxasi. Retsept
+  soʻragan odamning hozirgi roli bilan bajariladi.
+- **Maxfiy qiymatlar.** API javobidagi parol, token va kalitlar modelga boradigan nusxada `[hidden]` bilan
+  almashtiriladi (`maskSecrets`), foydalanuvchiga esa toʻliq koʻrsatiladi (`ai_actions.display`). `reveal: true` har doim
+  tasdiq soʻraydi; `[hidden]`ni qiymat sifatida qaytarib yozish rad etiladi.
+- **Sozlamalar.** `settings` jadvalidagi `ai` yozuvi; kalitlar `ai` maqsadi bilan muhrlangan. Faqat instansiya
+  administratori oʻzgartiradi; `minRole` kim yozisha olishini, `dailyTokenLimit` kunlik sarfni cheklaydi (`ai_usage`).
+- **Test.** `ai/ai.test.ts`: skriptlangan model bilan toʻliq yoʻl (tasdiq, rad etish, toʻxtatish, rol chegarasi,
+  maxfiy qiymatlar, undo, kod ishchi nusxasi, fayllar, ixchamlash) va ikkala adapterning sim formati.
+
 ## 6. Xavfsizlik
 
 | Xavf | Chora |
