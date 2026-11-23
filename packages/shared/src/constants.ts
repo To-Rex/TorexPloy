@@ -9,7 +9,7 @@
 
 /**
  * Interface languages, in the order they are offered. Uzbek comes in three alphabets: the Latin one the interface
- * is written in (`uz`), the 2021 Latin alphabet (`uz-new`) and Cyrillic (`uz-cyrl`), both derived from it.
+ * is written in (`uz`), the new Latin alphabet of the 2026 law (`uz-new`: ö, ğ, ş, ç) and Cyrillic (`uz-cyrl`), both derived from it.
  */
 export const LOCALES = ['uz-new', 'uz', 'uz-cyrl', 'kaa', 'ru', 'en', 'ky', 'tg', 'kk', 'tk'] as const;
 export type Locale = (typeof LOCALES)[number];
@@ -28,7 +28,7 @@ export interface LocaleInfo {
 }
 
 export const LOCALE_INFO: Record<Locale, LocaleInfo> = {
-  'uz-new': { name: 'Ōzbekça', variant: 'yangi lotin', english: 'Uzbek (new Latin)', tag: 'uz-Latn', script: 'Latn' },
+  'uz-new': { name: 'Özbekça', variant: 'yangi lotin', english: 'Uzbek (new Latin)', tag: 'uz-Latn', script: 'Latn' },
   uz: { name: 'Oʻzbekcha', variant: 'lotin', english: 'Uzbek (Latin)', tag: 'uz-Latn', script: 'Latn' },
   'uz-cyrl': { name: 'Ўзбекча', variant: 'кирилл', english: 'Uzbek (Cyrillic)', tag: 'uz-Cyrl', script: 'Cyrl' },
   kaa: { name: 'Qaraqalpaqsha', variant: null, english: 'Karakalpak', tag: 'kaa', script: 'Latn' },

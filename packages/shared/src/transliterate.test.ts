@@ -1,5 +1,5 @@
 /**
- * Uzbek in Cyrillic and in the 2021 Latin alphabet, from the Latin the
+ * Uzbek in Cyrillic and in the new Latin alphabet (2026), from the Latin the
  * interface is written in: the letters, the spelling rules, loanwords, and
  * everything that must come through untouched.
  */
@@ -12,8 +12,17 @@ test('letters and digraphs', () => {
   assert.equal(cyr('Gʻalaba, shahar, choy, qishloq, xabar, hovli, joy'), 'Ғалаба, шаҳар, чой, қишлоқ, хабар, ҳовли, жой');
   assert.equal(cyr('Yangi yoʻl, yordam, yuklash, yer'), 'Янги йўл, ёрдам, юклаш, ер');
   assert.equal(cyr('OʻCHIRISH'), 'OʻCHIRISH', 'all capitals read as a name, left alone');
-  assert.equal(nl('Oʻzbekcha'), 'Ōzbekça');
-  assert.equal(nl('Gʻalaba, shahar, choy, oʻchirish, SHU'), 'Ḡalaba, şahar, çoy, ōçiriş, SHU');
+  assert.equal(nl('Oʻzbekcha'), 'Özbekça');
+  assert.equal(nl('Gʻalaba, shahar, choy, oʻchirish, SHU'), 'Ğalaba, şahar, çoy, öçiriş, SHU');
+  // Every way texts write the mark, in both cases: the letters of the 2026 law, precomposed.
+  assert.equal(nl("Oʻrin oʻrin O‘rin o'rin Gʻoya gʻoya G‘oya g'oya Shahar Choy"), 'Örin örin Örin örin Ğoya ğoya Ğoya ğoya Şahar Çoy');
+  // The tutuq belgisi (ʼ) stays a letter of its own, and s ʼ h never becomes ş.
+  assert.equal(nl('maʼlumot, taʼlim, sanʼat, Isʼhoq, mangu'), 'maʼlumot, taʼlim, sanʼat, Isʼhoq, mangu');
+  // An English word with an Uzbek ending keeps its letters (dashboard, not daşboard).
+  assert.equal(nl('Grafana dashboardlari, push-bildirishnoma'), 'Grafana dashboardlari, push-bildirişnoma');
+  assert.equal(cyr('dashboardlar'), 'дашбордлар');
+  assert.equal(nl('Oʻzbekcha').normalize('NFC'), nl('Oʻzbekcha'));
+  assert.doesNotMatch(nl('Oʻgʻil, toʻgʻri, bogʻ, shoʻx'), /[ōŌḡḠ]|[oOgG][ʻʼ‘']/);
 });
 
 test('e, ʼ and the separating mark', () => {

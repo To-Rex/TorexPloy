@@ -1,6 +1,6 @@
 /**
  * Guide content per language, loaded on demand so the dashboard bundle stays small. Uzbek in Cyrillic and in the
- * 2021 Latin alphabet is the Latin guide converted, prose only: ids, icons, routes and commands stay as they are.
+ * new Latin alphabet is the Latin guide converted, prose only: ids, icons, routes and commands stay as they are.
  */
 import type { Locale } from '@ploy/shared';
 import { toUzbekCyrillic, toUzbekNewLatin, transliterateTree } from '@ploy/shared/transliterate';

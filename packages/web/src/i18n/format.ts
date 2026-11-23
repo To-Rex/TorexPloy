@@ -54,7 +54,7 @@ const uz: FormatPack = {
 };
 
 /**
- * The 2021 Latin alphabet: the Latin pack with its letters converted
+ * The new Latin alphabet: the Latin pack with its letters converted
  * (yakşanba, keça). Written out rather than converted at load, so the first
  * page does not carry the transliteration engine; a test keeps it equal to
  * the converted Latin pack.

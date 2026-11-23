@@ -7,8 +7,9 @@
  *   start of a word or after a vowel, ʼ → ъ, h → ҳ, x → х, q → қ; Russian
  *   loanwords get their Russian spelling back (funksiya → функция,
  *   parol → пароль).
- * - New Latin (`toUzbekNewLatin`): the 2021 alphabet. oʻ → ō, gʻ → ḡ,
- *   sh → ş, ch → ç; nothing else changes.
+ * - New Latin (`toUzbekNewLatin`): the alphabet of the October 2026 law,
+ *   one sound, one letter. oʻ → ö, gʻ → ğ, sh → ş, ch → ç; nothing else
+ *   changes (ng and the ʼ mark stay).
  *
  * What is not Uzbek stays as is: placeholders (`{name}`), code in
  * backticks, addresses and paths, brand and product names, acronyms, and
@@ -81,6 +82,7 @@ const CYRILLIC_WORDS: Record<string, string> = {
   commit: 'коммит',
   config: 'конфиг',
   console: 'консоль',
+  dashboard: 'дашборд',
   deploy: 'деплой',
   endpoint: 'эндпоинт',
   host: 'хост',
@@ -278,7 +280,7 @@ function newLatinLetters(word: string): string {
     const lower = char.toLowerCase();
     const upper = isUpper(char);
     if ((lower === 'o' || lower === 'g') && next !== '' && TURNED.includes(next)) {
-      out += lower === 'o' ? (upper ? 'Ō' : 'ō') : upper ? 'Ḡ' : 'ḡ';
+      out += lower === 'o' ? (upper ? 'Ö' : 'ö') : upper ? 'Ğ' : 'ğ';
       index += 1;
       continue;
     }

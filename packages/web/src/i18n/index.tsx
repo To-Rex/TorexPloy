@@ -3,7 +3,7 @@
  *
  * Messages are plain typed objects (`m.app.deploy`), so every lookup is
  * checked at compile time and costs nothing at runtime. Uzbek (Latin) ships in
- * the main bundle; Uzbek in Cyrillic and in the 2021 Latin alphabet are made
+ * the main bundle; Uzbek in Cyrillic and in the new Latin alphabet are made
  * from it on first use; every other language loads on demand. Dates, relative
  * times and numbers use hand-written formats where browsers lack the data
  * (see format.ts) and `Intl` for Russian and English.

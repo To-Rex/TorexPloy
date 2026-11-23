@@ -47,6 +47,7 @@ import { usePageMeta } from '../components/PageMeta.tsx';
 import { Callout, EmptyState, Skeleton } from '../components/ui.tsx';
 import { loadGuide, type GuideBlock, type GuideContent, type GuideIcon, type GuideSection } from '../guide/index.ts';
 import { useI18n } from '../i18n/index.tsx';
+import { searchKey } from '../i18n/search.ts';
 
 const ICONS: Record<GuideIcon, LucideIcon> = {
   rocket: Rocket,
@@ -90,7 +91,7 @@ function textOf(section: GuideSection): string {
     else if (block.type === 'table') pieces.push(...block.head, ...block.rows.flat());
     else for (const item of block.items) pieces.push(item.q, item.a);
   }
-  return pieces.join('\n').toLowerCase();
+  return pieces.join('\n');
 }
 
 function Block({ block }: { block: GuideBlock }) {
@@ -266,12 +267,14 @@ export function GuidePage() {
     };
   }, [locale]);
 
-  const needle = query.trim().toLowerCase();
+  // Matched by search key, so "ozgartirish" finds "oʻzgartirish" and "özgartiriş" alike; keys are made once per guide.
+  const needle = searchKey(query.trim());
+  const keys = useMemo(() => new Map(content?.chapters.flatMap((chapter) => chapter.sections.map((section) => [section, searchKey(textOf(section))] as const))), [content]);
   const chapters = useMemo(() => {
     if (content === null) return [];
     if (needle.length === 0) return content.chapters;
-    return content.chapters.map((chapter) => ({ ...chapter, sections: chapter.sections.filter((section) => textOf(section).includes(needle)) })).filter((chapter) => chapter.sections.length > 0);
-  }, [content, needle]);
+    return content.chapters.map((chapter) => ({ ...chapter, sections: chapter.sections.filter((section) => keys.get(section)?.includes(needle) === true) })).filter((chapter) => chapter.sections.length > 0);
+  }, [content, keys, needle]);
   const sections = useMemo(() => chapters.flatMap((chapter) => chapter.sections), [chapters]);
   const total = content === null ? 0 : content.chapters.reduce((sum, chapter) => sum + chapter.sections.length, 0);
   const active = useActiveSection(content !== null);

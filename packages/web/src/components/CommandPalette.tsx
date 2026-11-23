@@ -8,6 +8,7 @@ import { BookOpen, Activity, BellRing, Boxes, CalendarClock, Container, FolderKa
 import { LOCALE_INFO, LOCALES, roleAtLeast } from '@ploy/shared';
 import { api } from '../lib/api.ts';
 import { LOCALE_NAMES, useI18n } from '../i18n/index.tsx';
+import { searchKey } from '../i18n/search.ts';
 import { useApplications, useProjects, useRole, useServers } from '../lib/queries.ts';
 import { useTheme } from '../lib/theme.tsx';
 
@@ -22,7 +23,6 @@ interface Item {
   searchOnly?: boolean;
 }
 
-const normalize = (value: string): string => value.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[ʻʼ'’`]/g, '');
 
 export function CommandPalette({ open, onClose, onNewProject }: { open: boolean; onClose: () => void; onNewProject: () => void }) {
   const { m, t, locale, setLocale } = useI18n();
@@ -105,9 +105,9 @@ export function CommandPalette({ open, onClose, onNewProject }: { open: boolean;
   }, [m, t, projects.data, apps.data, servers.data, resolved, locale, navigate, onClose, onNewProject, setLocale, setTheme, admin, developer]);
 
   const filtered = useMemo(() => {
-    const needle = normalize(query.trim());
+    const needle = searchKey(query.trim());
     if (needle.length === 0) return items.filter((item) => item.searchOnly !== true && (item.group !== m.palette.applications || items.length < 40));
-    return items.filter((item) => normalize(`${item.label} ${item.hint ?? ''}`).includes(needle)).slice(0, 50);
+    return items.filter((item) => searchKey(`${item.label} ${item.hint ?? ''}`).includes(needle)).slice(0, 50);
   }, [items, query, m]);
 
   useEffect(() => setActive(0), [query]);

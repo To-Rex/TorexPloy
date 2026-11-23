@@ -84,7 +84,13 @@ test('each translation is in its own alphabet', async () => {
     const cyrillicShare = all.filter((text) => /[Ѐ-ӿ]/.test(text)).length / all.length;
     assert.ok(cyrillicShare > 0.85, `${locale}: ${Math.round(cyrillicShare * 100)}% of the strings are Cyrillic`);
   }
-  assert.equal((await catalogue('uz-new')).meta.languageName, 'Ōzbekça');
+  assert.equal((await catalogue('uz-new')).meta.languageName, 'Özbekça');
+  assert.equal(LOCALE_INFO['uz-new'].name, 'Özbekça');
+  // The new alphabet's letters (ö, ğ) and no trace of the earlier draft's (ō, ḡ).
+  const newLatin = JSON.stringify(await catalogue('uz-new'));
+  assert.match(newLatin, /ö/);
+  assert.match(newLatin, /ğ/);
+  assert.doesNotMatch(newLatin, /[ōŌḡḠ]/);
   assert.equal((await catalogue('uz-cyrl')).meta.languageName, 'Ўзбекча');
   for (const locale of ['kaa', 'ky', 'tg', 'kk', 'tk'] as const) assert.equal((await catalogue(locale)).meta.languageName, LOCALE_INFO[locale].name, locale);
 });
