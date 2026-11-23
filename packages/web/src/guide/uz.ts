@@ -370,6 +370,39 @@ export const guide: GuideContent = {
           ],
         },
         {
+          id: "transfer",
+          icon: "download",
+          title: "Loyihani boshqa panelga koʻchirish",
+          summary: "Loyihani ilovalari, sozlamalari, maʼlumotlar bazalari, fayllari va kodi bilan bitta shifrlangan arxivga eksport qilib, boshqa TorexPloy panelga import qilish.",
+          to: "/transfers",
+          blocks: [
+            {
+              type: "steps",
+              items: [
+                { title: "Eksport", text: "Loyiha sahifasida **⋯ → Eksport qilish**. Nimalar kirishini tanlang: maʼlumotlar bazalari (dump), fayl omborlari, volumelar, ilovalar kodi va xohlasangiz tayyor imagelar. Sozlamalar, oʻzgaruvchilar, domenlar, cron vazifalar va kalitlar har doim kiradi." },
+                { title: "Parolni saqlang", text: "Arxiv AES-256 bilan shifrlanadi. Panel kuchli parol yaratadi (yoki oʻzingiznikini kiritasiz) va uni eksport sahifasida koʻrsatadi. Parolsiz arxivni hech kim ocha olmaydi." },
+                { title: "Arxivni olib oʻting", text: "Uch yoʻl bor: **.torexploy** faylni yuklab olish; **koʻchirish havolasi** (boshqa panel arxivni toʻgʻridan-toʻgʻri tortib oladi, parol havolaning # qismida); yoki **S3** manziliga nusxa." },
+                { title: "Import", text: "Yangi panelda [Koʻchirish → Import](/transfers/import): faylni yuklang, havolani qoʻying yoki S3 dan tanlang. Parol bilan oching." },
+                { title: "Rejani tasdiqlang", text: "Server, loyiha nomi va har bir ilovaning kod manbaini tanlang. Bu panelda band domen va portlar oldindan koʻrsatiladi. **Importni boshlash**ni bosing: arxiv tekshiriladi, servislar yaratilib maʼlumotlari tiklanadi, volumelar toʻldiriladi va ilovalar joylashtiriladi." },
+              ],
+            },
+            {
+              type: "table",
+              head: ["Ilova manbai", "Import qilingan joyda"],
+              rows: [
+                ["GitHub, oʻsha hisob ulangan", "Repozitoriyga avtomatik bogʻlanadi (repo nomi boʻyicha), push bilan deploy va preview ishlaydi."],
+                ["GitHub ulanmagan", "Arxivdagi koddan (ishlab turgan commit) ishga tushadi; keyin repozitoriyni ulash mumkin."],
+                ["GitLab, Bitbucket", "Shu turdagi ulanish boʻlsa, repozitoriyga bogʻlanadi; boʻlmasa arxivdagi koddan."],
+                ["Ochiq git manzil, SSH deploy kalit", "Manzil va deploy kalit oʻzi bilan keladi."],
+                ["Yuklangan kod (upload)", "Arxivdagi zip yuklangan kod sifatida tiklanadi."],
+                ["Tayyor image tanlansa", "Qayta yigʻmasdan, oʻsha image bilan darhol ishga tushadi."],
+              ],
+            },
+            { type: "list", items: ["Maʼlumotlar bazalari **bir xil foydalanuvchi va parollar** bilan yaratiladi, servis nomlari ham saqlanadi: ilovalardagi ulanish manzillari oʻzgarmaydi.", "Fayl omborlari bucketlari, fayllari va **oʻsha kirish kalitlari** bilan tiklanadi.", "Import toʻxtab qolsa (masalan, server uzilsa), **Qayta urinish** uni toʻxtagan joyidan davom ettiradi, hech narsa ikki marta yaratilmaydi.", "Terminaldan: `torex export SHOP --link` va boshqa panelda `torex import <havola>`.", "Koʻchirish faqat jamoa **administratorlari** uchun; token ishlatilsa, u toʻliq ruxsatli boʻlishi kerak."] },
+            { type: "tip", tone: "work", title: "DNS", text: "Import qilingandan keyin domenlarning DNS yozuvlarini yangi server IP manziliga yoʻnaltiring: HTTPS sertifikati oʻzi chiqariladi." },
+          ],
+        },
+        {
           id: "filestore",
           icon: "hard-drive",
           title: "Fayl ombori (S3)",

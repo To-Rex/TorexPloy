@@ -83,7 +83,8 @@ export function duration(ms: number | null | undefined): string {
 export function bytes(size: number): string {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  if (size < 1024 * 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  return `${(size / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 /** A spinner on stderr while something takes a moment; nothing at all when stderr is not a terminal. */
@@ -125,6 +126,36 @@ export async function ask(question: string, fallback = ''): Promise<string> {
   } finally {
     reader.close();
   }
+}
+
+/** Ask for something that must not show on the screen (a passphrase): nothing is echoed. */
+export async function secret(question: string): Promise<string> {
+  if (!interactive()) return '';
+  const input = process.stdin;
+  process.stderr.write(question);
+  input.setRawMode(true);
+  input.resume();
+  input.setEncoding('utf8');
+  return new Promise((resolve, reject) => {
+    let value = '';
+    const done = (result: string | null) => {
+      input.setRawMode(false);
+      input.pause();
+      input.off('data', onData);
+      process.stderr.write('\n');
+      if (result === null) reject(new CliError('Cancelled'));
+      else resolve(result);
+    };
+    const onData = (chunk: string) => {
+      for (const char of chunk) {
+        if (char === '\r' || char === '\n') return done(value);
+        if (char === '\u0003') return done(null);
+        if (char === '\u007f' || char === '\b') value = value.slice(0, -1);
+        else if (char >= ' ') value += char;
+      }
+    };
+    input.on('data', onData);
+  });
 }
 
 export async function confirm(question: string, fallback = false): Promise<boolean> {

@@ -86,6 +86,10 @@ export function applyEvent(client: QueryClient, event: PlatformEvent): void {
       invalidate(keys.appPart(event.applicationId, 'cron'));
       invalidate(keys.teamCron);
       break;
+    case 'transfer.updated':
+    case 'transfer.deleted':
+      invalidate(keys.transfers);
+      break;
   }
 }
 

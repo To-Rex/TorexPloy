@@ -4,7 +4,8 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Boxes, Clock, Database, FolderKanban, Plus, Search } from 'lucide-react';
+import { Boxes, Clock, Database, Download, FolderKanban, Plus, Search } from 'lucide-react';
+import { roleAtLeast } from '@ploy/shared';
 import { Frame } from '../../components/Frame.tsx';
 import { usePageMeta } from '../../components/PageMeta.tsx';
 import { useReasonText } from '../../components/Reason.tsx';
@@ -12,7 +13,7 @@ import { StatusMark } from '../../components/Status.tsx';
 import { RelativeTime } from '../../components/Time.tsx';
 import { Button, Callout, EmptyState, Input, Select, Skeleton } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
-import { useProjects, useServers } from '../../lib/queries.ts';
+import { useProjects, useRole, useServers } from '../../lib/queries.ts';
 import { projectColor } from '../../app/Shell.tsx';
 import { Onboarding } from '../Onboarding.tsx';
 import { NewProjectDialog } from './NewProjectDialog.tsx';
@@ -26,6 +27,8 @@ export function ProjectsPage() {
   const servers = useServers();
   const reason = useReasonText();
   const [creating, setCreating] = useState(false);
+  const role = useRole();
+  const admin = role !== null && roleAtLeast(role, 'admin');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('updated');
   const broken = (servers.data ?? []).filter((server) => server.status === 'error' || server.status === 'offline');
@@ -43,9 +46,17 @@ export function ProjectsPage() {
         title={m.projects.title}
         description={m.projects.subtitle}
         actions={
-          <Button variant="primary" icon={<Plus />} onClick={() => setCreating(true)}>
-            {m.projects.new}
-          </Button>
+          <>
+            {admin && (
+              <Link className="btn" to="/transfers/import" style={{ textDecoration: 'none' }}>
+                <Download width={16} height={16} aria-hidden="true" />
+                {m.transfers.importProject}
+              </Link>
+            )}
+            <Button variant="primary" icon={<Plus />} onClick={() => setCreating(true)}>
+              {m.projects.new}
+            </Button>
+          </>
         }
       >
         {broken.map((server) => (

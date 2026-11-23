@@ -606,6 +606,33 @@ export class DockerClient {
     }
   }
 
+  /** An image (with its layers) as the tar stream `docker save` writes. */
+  saveImage(name: string, signal?: AbortSignal): Promise<IncomingMessage> {
+    return this.stream('GET', `/images/${encodeURIComponent(name)}/get`, signal === undefined ? {} : { signal });
+  }
+
+  /**
+   * Load images from a `docker save` tar stream. The daemon reports failures inside a 200 response, so its
+   * progress records are read to the end. Returns the tags it loaded.
+   */
+  async loadImage(tar: Readable, signal?: AbortSignal): Promise<string[]> {
+    const response = await this.stream('POST', '/images/load', {
+      query: { quiet: true },
+      raw: tar,
+      contentType: 'application/x-tar',
+      timeoutMs: 6 * 3_600_000,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    const loaded: string[] = [];
+    const parser = response.pipe(new JsonLinesParser());
+    for await (const record of parser as AsyncIterable<{ stream?: string; error?: string; errorDetail?: { message?: string } }>) {
+      if (record.error !== undefined || record.errorDetail !== undefined) throw new DockerError(500, record.errorDetail?.message ?? record.error ?? 'Image load failed');
+      const match = /Loaded image(?: ID)?: (\S+)/.exec(record.stream ?? '');
+      if (match !== null) loaded.push(match[1]!);
+    }
+    return loaded;
+  }
+
   /** Add `repo:tag` to an existing image (pins a pulled image so later pulls cannot change a rollback target). */
   async tagImage(source: string, repo: string, tag: string): Promise<void> {
     await this.call('POST', `/images/${encodeURIComponent(source)}/tag`, { query: { repo, tag } });

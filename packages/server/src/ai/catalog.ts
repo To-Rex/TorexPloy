@@ -400,6 +400,7 @@ export const EXCLUDED: readonly { pattern: RegExp; why: string }[] = [
   { pattern: /^\w+ \/api\/github\/(manifest|install|setup|pending)|^DELETE \/api\/github(\/|$)/, why: 'connecting GitHub happens in the browser, on github.com' },
   { pattern: /^GET \/api\/git-providers\/:id\/webhook$/, why: 'a webhook secret' },
   { pattern: /^\w+ \/api\/(mcp|connect|cli)(\/|$)/, why: 'connecting outside apps and the command line: people decide that in the dashboard, not an assistant' },
+  { pattern: /^\w+ \/api\/transfers(\/|$)/, why: 'moving a project between panels carries every secret it has: people do it in the dashboard or with the command line' },
   { pattern: /^\*|^ALL /, why: 'catch-all handlers' },
 ];
 

@@ -370,6 +370,39 @@ export const guide: GuideContent = {
           ],
         },
         {
+          id: "transfer",
+          icon: "download",
+          title: "Moving a project to another panel",
+          summary: "Export a project with its applications, settings, databases, files and code into one encrypted archive, and import it into another TorexPloy panel.",
+          to: "/transfers",
+          blocks: [
+            {
+              type: "steps",
+              items: [
+                { title: "Export", text: "On the project’s page, **⋯ → Export**. Choose what goes in: databases (dumped), file stores, volumes, the applications’ code and, if you like, built images. Settings, variables, domains, cron jobs and keys always go in." },
+                { title: "Keep the passphrase", text: "The archive is encrypted with AES-256. The panel makes a strong passphrase (or you give your own) and shows it on the export’s page. Without it nobody can open the archive." },
+                { title: "Move the archive", text: "Three ways: download the **.torexploy** file; a **transfer link** (the other panel pulls the archive straight over, the passphrase rides after # in the link); or a copy in **S3**." },
+                { title: "Import", text: "On the new panel, [Transfers → Import](/transfers/import): upload the file, paste the link or pick it in S3. Open it with the passphrase." },
+                { title: "Confirm the plan", text: "Pick the server, the project’s name and where each application’s code comes from. Domains and ports already taken on this panel show up front. Press **Start import**: the archive is checked, services are made and get their data back, volumes are filled and the applications deployed." },
+              ],
+            },
+            {
+              type: "table",
+              head: ["Application source", "On the new panel"],
+              rows: [
+                ["GitHub, the same account connected", "Linked to its repository automatically (by repository name); push deploys and previews work."],
+                ["GitHub not connected", "Runs from the archived code (the commit that ran); connect the repository later."],
+                ["GitLab, Bitbucket", "Linked when a connection of that kind exists; otherwise the archived code."],
+                ["Public git URL, SSH deploy key", "The URL and the deploy key come along."],
+                ["Uploaded code", "The archived zip becomes its upload again."],
+                ["Built image chosen", "Starts right away with that image, no build."],
+              ],
+            },
+            { type: "list", items: ["Databases are made with **the same users and passwords**, and services keep their names: connection addresses in the applications do not change.", "File stores come back with their buckets, files and **the same access keys**.", "If an import stops half way (a server dropped out, say), **Try again** carries on where it stopped; nothing is made twice.", "From the terminal: `torex export SHOP --link`, then on the other panel `torex import <link>`.", "Moving projects is for team **administrators**; a token must have full access."] },
+            { type: "tip", tone: "work", title: "DNS", text: "After the import, point the domains’ DNS records at the new server’s IP: HTTPS certificates are issued by themselves." },
+          ],
+        },
+        {
           id: "filestore",
           icon: "hard-drive",
           title: "File store (S3)",

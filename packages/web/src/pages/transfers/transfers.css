@@ -1,0 +1,250 @@
+/*
+ * Moving projects: the steps of an export or import, its overall progress,
+ * the passphrase and transfer link boxes, and the import planner's rows.
+ */
+@layer components {
+  .transfer-progress {
+    display: grid;
+    gap: 8px;
+  }
+  .transfer-progress__line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: var(--text-sm);
+    color: var(--ink-2);
+  }
+
+  .transfer-steps {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+  .transfer-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .transfer-step:first-child {
+    border-top: 0;
+  }
+  .transfer-step__status,
+  .transfer-step__kind {
+    display: inline-flex;
+    flex: none;
+    margin-top: 2px;
+  }
+  .transfer-step__status svg,
+  .transfer-step__kind svg {
+    width: 16px;
+    height: 16px;
+  }
+  .transfer-step__kind {
+    color: var(--ink-3);
+  }
+  .transfer-step[data-status='pending'] .transfer-step__status {
+    color: var(--idle);
+  }
+  .transfer-step[data-status='running'] .transfer-step__status {
+    color: var(--work);
+  }
+  .transfer-step[data-status='done'] .transfer-step__status {
+    color: var(--ok);
+  }
+  .transfer-step[data-status='failed'] .transfer-step__status {
+    color: var(--bad);
+  }
+  .transfer-step[data-status='skipped'] .transfer-step__status {
+    color: var(--ink-3);
+  }
+  .transfer-step[data-status='pending'] .transfer-step__label,
+  .transfer-step[data-status='skipped'] .transfer-step__label {
+    color: var(--ink-3);
+  }
+  .transfer-step__body {
+    display: grid;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+  .transfer-step__line {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    min-width: 0;
+  }
+  .transfer-step__label {
+    font-weight: 520;
+    color: var(--ink);
+  }
+  .transfer-step__name {
+    color: var(--ink-2);
+    overflow-wrap: anywhere;
+  }
+  .transfer-step__amount {
+    font-size: var(--text-sm);
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .transfer-step__note {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--ink-2);
+  }
+  .transfer-step[data-status='failed'] .transfer-step__note {
+    color: var(--bad-ink);
+  }
+
+  .transfer-notes {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 12px 14px 12px 32px;
+    border-radius: var(--r-md);
+    background: var(--work-soft);
+    color: var(--work-ink);
+    font-size: var(--text-sm);
+  }
+  .transfer-notes[data-tone='bad'] {
+    background: var(--bad-soft);
+    color: var(--bad-ink);
+  }
+
+  /* The passphrase and the transfer link: shown big enough to read aloud, with copy beside them. */
+  .transfer-secret {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--surface-sunken);
+  }
+  .transfer-secret code {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-md);
+    letter-spacing: 0.02em;
+    overflow-wrap: anywhere;
+  }
+  .transfer-secret--link code {
+    font-size: var(--text-sm);
+    letter-spacing: 0;
+  }
+
+  /* Side by side when both fit; one card alone takes the whole row. */
+  .transfer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+    gap: 16px;
+  }
+
+  /* One application or service in the import planner. */
+  .plan-row {
+    display: grid;
+    gap: 10px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--line);
+  }
+  .plan-row:first-child {
+    border-top: 0;
+  }
+  .plan-row__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+  .plan-row__title {
+    font-weight: 560;
+    color: var(--ink);
+  }
+  .plan-row__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: var(--text-sm);
+    color: var(--ink-3);
+  }
+  .plan-row .segmented {
+    justify-self: start;
+    flex-wrap: wrap;
+    height: auto;
+  }
+  .plan-row__domains {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .import-sources {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  @media (max-width: 760px) {
+    .import-sources {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .import-source {
+    display: grid;
+    gap: 6px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    text-align: left;
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
+  .import-source svg {
+    width: 20px;
+    height: 20px;
+    color: var(--ink);
+  }
+  .import-source strong {
+    color: var(--ink);
+    font-size: var(--text-md);
+  }
+  .import-source:hover {
+    border-color: var(--line-strong, var(--ink-3));
+  }
+  .import-source[aria-pressed='true'] {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 1px var(--ink);
+  }
+
+  .file-drop {
+    display: grid;
+    place-items: center;
+    gap: 8px;
+    padding: 28px 16px;
+    border: 1.5px dashed var(--line);
+    border-radius: var(--r-lg);
+    background: var(--surface-sunken);
+    color: var(--ink-2);
+    text-align: center;
+  }
+  .file-drop[data-over='true'] {
+    border-color: var(--ink);
+    background: var(--surface-hover);
+  }
+  .file-drop svg {
+    width: 26px;
+    height: 26px;
+    color: var(--ink-3);
+  }
+}

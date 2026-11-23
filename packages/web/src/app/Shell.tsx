@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Activity, ArrowUpCircle, BellRing, BookOpen, CalendarClock, Check, ChevronRight, ChevronsUpDown, CloudUpload, Container, FolderKanban, GitBranch, Globe, KeyRound, LogOut, Menu as MenuIcon, Network, Package, PanelLeft, Plug, Plus, Rocket, ScrollText, Search, Server, Shield, Sparkles, UserRound, Users } from 'lucide-react';
+import { Activity, ArrowLeftRight, ArrowUpCircle, BellRing, BookOpen, CalendarClock, Check, ChevronRight, ChevronsUpDown, CloudUpload, Container, FolderKanban, GitBranch, Globe, KeyRound, LogOut, Menu as MenuIcon, Network, Package, PanelLeft, Plug, Plus, Rocket, ScrollText, Search, Server, Shield, Sparkles, UserRound, Users } from 'lucide-react';
 import { LOCALES, THEMES, roleAtLeast, type BootstrapDto } from '@ploy/shared';
 import { CommandPalette, usePaletteShortcut } from '../components/CommandPalette.tsx';
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/Menu.tsx';
@@ -148,6 +148,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
             <SideLink to="/deployments" icon={<Rocket aria-hidden="true" />} label={m.nav.deployments} />
             <SideLink to="/monitoring" icon={<Activity aria-hidden="true" />} label={m.nav.monitoring} />
             <SideLink to="/schedules" icon={<CalendarClock aria-hidden="true" />} label={m.nav.schedules} />
+            {admin && <SideLink to="/transfers" icon={<ArrowLeftRight aria-hidden="true" />} label={m.nav.transfers} />}
             {admin && <SideLink to="/docker" icon={<Container aria-hidden="true" />} label={m.nav.docker} />}
             {admin && <SideLink to="/proxy" icon={<Network aria-hidden="true" />} label={m.nav.proxy} />}
           </div>

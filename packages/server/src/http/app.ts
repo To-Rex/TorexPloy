@@ -15,6 +15,7 @@ import { AppError, isAppError } from '../lib/errors.ts';
 import { authMiddleware, csrfMiddleware, tokenReachMiddleware, isHttps, requestOrigin, type Env } from './core.ts';
 import { registerAccountRoutes } from './routes/account.ts';
 import { AI_UPLOAD, registerAiRoutes } from './routes/ai.ts';
+import { registerTransferRoutes } from './routes/transfers.ts';
 import { registerMcpRoutes } from './routes/mcp.ts';
 import { registerCliRoutes } from '../mcp/cli.ts';
 import { registerMcpEndpoint } from '../mcp/http.ts';
@@ -49,6 +50,8 @@ const MAX_DB_CONSOLE_BYTES = 32 * 1024 * 1024;
 const OBJECT_UPLOAD = /^\/api\/services\/[^/]+\/storage\/buckets\/[^/]+\/objects\//;
 /** Source archives of upload applications: raw zip bodies, bounded by `LIMITS.uploadMax` in their route. */
 const SOURCE_UPLOAD = /^\/api\/applications\/[^/]+\/upload$/;
+/** A project archive being imported: a raw body of any size, bounded by the disk in its route. */
+const TRANSFER_UPLOAD = /^\/api\/transfers\/import\/upload$/;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -106,7 +109,7 @@ export function createHttpApp(ctx: Context): Hono<Env> {
 
   app.use('/api/*', async (c, next) => {
     const length = Number(c.req.header('content-length') ?? 0);
-    const rawUpload = (c.req.method === 'PUT' && OBJECT_UPLOAD.test(c.req.path)) || (c.req.method === 'POST' && SOURCE_UPLOAD.test(c.req.path));
+    const rawUpload = (c.req.method === 'PUT' && OBJECT_UPLOAD.test(c.req.path)) || (c.req.method === 'POST' && (SOURCE_UPLOAD.test(c.req.path) || TRANSFER_UPLOAD.test(c.req.path)));
     const consoleBody = c.req.method === 'POST' && DB_CONSOLE_BODY.test(c.req.path);
     // A file attached to a TorexAi conversation: a raw body, bounded in its route.
     const aiUpload = c.req.method === 'POST' && AI_UPLOAD.test(c.req.path);
@@ -144,6 +147,7 @@ export function createHttpApp(ctx: Context): Hono<Env> {
   registerGitProviderRoutes(app, ctx);
   registerAiRoutes(app, ctx);
   registerMcpRoutes(app, ctx);
+  registerTransferRoutes(app, ctx);
   registerCliRoutes(app, ctx, ctx.mcp.cli);
   registerOAuthRoutes(app, ctx, ctx.mcp.oauth);
   // TorexAi reaches the platform through this same application, as the person it acts for.

@@ -321,7 +321,12 @@ export class StorageManager {
 
   // -------------------------------------------------------------------- keys
 
-  async createKey(service: ServiceRecord, input: { name: string; buckets: string[] | null; permission: StoragePermission }, managedBy: 'user' | 'backups' = 'user'): Promise<StorageKeyRecord> {
+  /** A new access key; an import passes the key it had, so the applications using it keep working. */
+  async createKey(
+    service: ServiceRecord,
+    input: { name: string; buckets: string[] | null; permission: StoragePermission; accessKeyId?: string; secretAccessKey?: string },
+    managedBy: 'user' | 'backups' = 'user',
+  ): Promise<StorageKeyRecord> {
     const { stores } = this.ctx;
     if (stores.storageKeys.listForService(service.id).length >= LIMITS.storageKeysMax) {
       throw new AppError('conflict', `A file store may have at most ${LIMITS.storageKeysMax} access keys`, { params: { reason: 'limit', maximum: LIMITS.storageKeysMax } });
@@ -330,8 +335,8 @@ export class StorageManager {
     const record = stores.storageKeys.create({
       serviceId: service.id,
       name: input.name,
-      accessKeyId: `ploy${randomId(16)}`,
-      secretAccessKey: generateToken(30).replace(/[-_]/g, 'x'),
+      accessKeyId: input.accessKeyId ?? `ploy${randomId(16)}`,
+      secretAccessKey: input.secretAccessKey ?? generateToken(30).replace(/[-_]/g, 'x'),
       buckets: input.buckets,
       permission: input.permission,
       managedBy,

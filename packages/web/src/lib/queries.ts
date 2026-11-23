@@ -65,6 +65,8 @@ import type {
   VolumeBackupDto,
   VolumeDto,
   HostMetricPoint as HostPoint,
+  TransferDto,
+  TransferKind,
 } from '@ploy/shared';
 import { api, qs } from './api.ts';
 
@@ -103,6 +105,10 @@ export const keys = {
   teamDeployments: ['team-deployments'] as const,
   teamCron: ['team-cron'] as const,
   updates: ['updates'] as const,
+  transfers: ['transfers'] as const,
+  transfer: (id: string) => ['transfers', id] as const,
+  /** Kept apart from `transfers`: an analysis is costly, so progress events do not refetch it. */
+  transferAnalysis: (id: string, serverId: string | null) => ['transfer-analysis', id, serverId] as const,
 };
 
 export const useBootstrap = () => useQuery({ queryKey: keys.bootstrap, queryFn: () => api.get<BootstrapDto>('/api/bootstrap'), staleTime: 60_000 });
@@ -343,3 +349,8 @@ export const useAudit = () =>
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
+
+export const useTransfers = (filter: { kind?: TransferKind; projectId?: string } = {}) =>
+  useQuery({ queryKey: [...keys.transfers, 'list', filter], queryFn: () => api.get<TransferDto[]>(`/api/transfers${qs(filter)}`) });
+
+export const useTransfer = (id: string) => useQuery({ queryKey: keys.transfer(id), queryFn: () => api.get<TransferDto>(`/api/transfers/${id}`), retry: false });

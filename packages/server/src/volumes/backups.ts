@@ -42,6 +42,41 @@ const SAFETY_COPIES_KEPT = 3;
 /** Where the helper container sees the volume. */
 const MOUNT = '/volume';
 
+/**
+ * Run `work` with a throwaway helper container that sees `source` (a named volume, or a host directory) at
+ * /volume: the proxy image every server has, no network, removed whatever happens. Exports and imports of
+ * projects use it for any volume (an application's, a service's, a compose stack's).
+ */
+export async function withVolumeHelper<T>(
+  ctx: Context,
+  docker: DockerClient,
+  options: { source: string; mode: 'ro' | 'rw'; name: string; labels?: Record<string, string> },
+  work: (helper: string) => Promise<T>,
+): Promise<T> {
+  const image = ctx.config.proxyImage;
+  if ((await docker.inspectImage(image)) === null) await docker.pullImage(image);
+  const name = `${options.name}-${randomId(6).toLowerCase()}`;
+  const id = await docker.createContainer(name, {
+    Image: image,
+    Entrypoint: ['sleep'],
+    Cmd: ['86400'],
+    User: '0:0',
+    WorkingDir: '/',
+    NetworkDisabled: true,
+    Labels: { [LABEL_MANAGED]: 'true', [LABEL_ROLE]: 'volume-helper', ...options.labels },
+    HostConfig: { Binds: [`${options.source}:${MOUNT}:${options.mode}`], NetworkMode: 'none', AutoRemove: false },
+  });
+  try {
+    await docker.startContainer(id);
+    return await work(id);
+  } finally {
+    await docker.removeContainer(id, { force: true }).catch((error: unknown) => ctx.logger.warn('Could not remove a volume helper', { container: name, error: errorMessage(error) }));
+  }
+}
+
+/** Where a helper container sees the volume. */
+export const HELPER_MOUNT = MOUNT;
+
 export class VolumeBackups {
   private readonly ctx: Context;
   /** Volumes with a restore under way (a backup is tracked by its row). */
@@ -136,26 +171,8 @@ export class VolumeBackups {
    * A throwaway container from the proxy image with the volume mounted at /volume: no network, nothing else
    * mounted, removed whatever happens.
    */
-  private async withHelper<T>(docker: DockerClient, app: ApplicationRecord, volume: VolumeRecord, mode: 'ro' | 'rw', work: (helper: string) => Promise<T>): Promise<T> {
-    const image = this.ctx.config.proxyImage;
-    if ((await docker.inspectImage(image)) === null) await docker.pullImage(image);
-    const name = `ploy-volume-${idPart(volume.id, 10)}-${randomId(6).toLowerCase()}`;
-    const id = await docker.createContainer(name, {
-      Image: image,
-      Entrypoint: ['sleep'],
-      Cmd: ['86400'],
-      User: '0:0',
-      WorkingDir: '/',
-      NetworkDisabled: true,
-      Labels: { [LABEL_MANAGED]: 'true', [LABEL_ROLE]: 'volume-helper', [LABEL_APP]: app.id },
-      HostConfig: { Binds: [`${volume.dockerVolume}:${MOUNT}:${mode}`], NetworkMode: 'none', AutoRemove: false },
-    });
-    try {
-      await docker.startContainer(id);
-      return await work(id);
-    } finally {
-      await docker.removeContainer(id, { force: true }).catch((error: unknown) => this.ctx.logger.warn('Could not remove a volume helper', { container: name, error: errorMessage(error) }));
-    }
+  private withHelper<T>(docker: DockerClient, app: ApplicationRecord, volume: VolumeRecord, mode: 'ro' | 'rw', work: (helper: string) => Promise<T>): Promise<T> {
+    return withVolumeHelper(this.ctx, docker, { source: volume.dockerVolume, mode, name: `ploy-volume-${idPart(volume.id, 10)}`, labels: { [LABEL_APP]: app.id } }, work);
   }
 
   /** Freeze the application's running containers for the copy, and note them on the backup in case of a restart. */

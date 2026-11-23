@@ -7,6 +7,7 @@
  * for longer than one refetch.
  */
 import type { AppStatus, DeploymentStatus, ServerStatus, ServiceStatus } from './constants.ts';
+import type { TransferKind, TransferStatus } from './transfer.ts';
 
 export type PlatformEvent =
   | { type: 'deployment.updated'; id: string; applicationId: string; projectId: string; status: DeploymentStatus }
@@ -23,7 +24,10 @@ export type PlatformEvent =
   | { type: 'project.deleted'; id: string }
   | { type: 'backup.updated'; id: string; serviceId: string }
   | { type: 'volume-backup.updated'; id: string; volumeId: string; applicationId: string }
-  | { type: 'cron.updated'; id: string; applicationId: string };
+  | { type: 'cron.updated'; id: string; applicationId: string }
+  /** An export or import moved on (a step, its progress, its status). */
+  | { type: 'transfer.updated'; id: string; kind: TransferKind; status: TransferStatus }
+  | { type: 'transfer.deleted'; id: string };
 
 export type PlatformEventType = PlatformEvent['type'];
 

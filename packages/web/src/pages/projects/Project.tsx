@@ -6,9 +6,9 @@
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { Boxes, ChevronDown, Database, Ellipsis, FolderArchive, Globe, Layers, LayoutGrid, Link2, Pencil, Play, Plus, Rocket, Search, Square, Trash2, Variable, X } from 'lucide-react';
+import { Boxes, ChevronDown, Database, Ellipsis, FolderArchive, Globe, Layers, LayoutGrid, Link2, PackageOpen, Pencil, Play, Plus, Rocket, Search, Square, Trash2, Variable, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { updateProjectSchema, type ApplicationDto, type ServiceDto } from '@ploy/shared';
+import { roleAtLeast, updateProjectSchema, type ApplicationDto, type ServiceDto } from '@ploy/shared';
 import { useConfirm, Dialog } from '../../components/Dialog.tsx';
 import { EnvEditor } from '../../components/EnvEditor.tsx';
 import { Frame } from '../../components/Frame.tsx';
@@ -22,7 +22,8 @@ import { Badge, Button, Field, Input, Segmented, Skeleton, Textarea } from '../.
 import { useI18n } from '../../i18n/index.tsx';
 import { api } from '../../lib/api.ts';
 import { useAction } from '../../lib/mutate.ts';
-import { keys, useProject, useProjectVariables, useTemplates } from '../../lib/queries.ts';
+import { keys, useProject, useProjectVariables, useRole, useTemplates } from '../../lib/queries.ts';
+import { ExportDialog } from '../transfers/ExportDialog.tsx';
 import { validate } from '../../lib/validate.ts';
 import { NotFound } from '../../app/RouteError.tsx';
 import { projectColor } from '../../app/Shell.tsx';
@@ -148,6 +149,9 @@ export function ProjectPage() {
     { id: 'template', icon: <LayoutGrid />, title: m.create.template, hint: m.create.templateHint, run: () => setTemplates(true) },
   ];
   const [editing, setEditing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const role = useRole();
+  const admin = role !== null && roleAtLeast(role, 'admin');
   const [draft, setDraft] = useState({ name: '', description: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const data = project.data;
@@ -269,6 +273,14 @@ export function ProjectPage() {
               >
                 {m.project.edit}
               </MenuItem>
+              {admin && (
+                <MenuItem icon={<PackageOpen />} onSelect={() => setExporting(true)}>
+                  <span className="menu__rich">
+                    <span>{m.transfers.exportProject}</span>
+                    <small>{m.transfers.exportProjectHint}</small>
+                  </span>
+                </MenuItem>
+              )}
               <MenuSeparator />
               <MenuItem
                 icon={<Trash2 />}
@@ -378,6 +390,7 @@ export function ProjectPage() {
       <TemplatesDialog projectId={projectId} open={templates} onClose={() => setTemplates(false)} />
       <NewComposeDialog projectId={projectId} open={newCompose} onClose={() => setNewCompose(false)} />
       <NewStorageDialog projectId={projectId} open={newStorage} onClose={() => setNewStorage(false)} />
+      {data !== undefined && <ExportDialog open={exporting} onClose={() => setExporting(false)} projectId={projectId} projectName={data.project.name} />}
       <Dialog open={variablesOpen} onClose={() => setVariablesOpen(false)} wide title={m.project.variables} description={m.project.variablesHint}>
         {variables.data === undefined ? <Skeleton height={120} /> : <EnvEditor variables={variables.data.variables} text={variables.data.text} onSave={(list, text) => saveVariables.mutateAsync({ variables: list, text })} saving={saveVariables.isPending} />}
       </Dialog>

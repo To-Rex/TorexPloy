@@ -1314,6 +1314,51 @@ CREATE INDEX idx_oauth_grants_user ON oauth_grants(user_id);
 CREATE INDEX idx_oauth_grants_team ON oauth_grants(team_id);
 `,
   },
+  {
+    version: 20,
+    name: 'project-transfers',
+    sql: `
+-- Projects moving between panels: exports (an encrypted archive made here) and imports (one unpacked here).
+-- The archive itself is a file under <dataDir>/transfers; this row is its story. The project is not a foreign key:
+-- an export outlives the project it was made from, and an import names the project only once it has made it.
+CREATE TABLE transfers (
+  id                TEXT PRIMARY KEY,
+  team_id           TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  kind              TEXT NOT NULL CHECK (kind IN ('export','import')),
+  status            TEXT NOT NULL,
+  source            TEXT NOT NULL,
+  project_id        TEXT,
+  project_name      TEXT,
+  file_name         TEXT NOT NULL,
+  size_bytes        INTEGER,
+  received_bytes    INTEGER NOT NULL DEFAULT 0,
+  expected_bytes    INTEGER,
+  include           TEXT,
+  -- Sealed: an export's passphrase (shown again to administrators, carried by its transfer link); an import's once
+  -- it opened the archive (the work that follows reads it again).
+  passphrase_sealed TEXT,
+  plan              TEXT,
+  steps             TEXT NOT NULL DEFAULT '[]',
+  percent           REAL NOT NULL DEFAULT 0,
+  warnings          TEXT NOT NULL DEFAULT '[]',
+  error             TEXT,
+  -- An import's progress in ids (what it made, which entries it put back), so a retry carries on where it stopped.
+  state             TEXT,
+  -- The transfer link other panels pull an export through: only its hash is kept.
+  share_hash        TEXT UNIQUE,
+  share_expires_at  TEXT,
+  share_downloads   INTEGER NOT NULL DEFAULT 0,
+  share_last_at     TEXT,
+  s3                TEXT,
+  created_by        TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TEXT NOT NULL,
+  started_at        TEXT,
+  finished_at       TEXT,
+  expires_at        TEXT
+);
+CREATE INDEX idx_transfers_team ON transfers(team_id, created_at);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

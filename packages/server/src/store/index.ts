@@ -16,6 +16,7 @@ import { SkillStore } from './skills.ts';
 import { OAuthStore } from './oauth.ts';
 import { StorageBucketStore, StorageKeyStore } from './storage.ts';
 import { AuditStore, SettingsStore, TeamStore } from './teams.ts';
+import { TransferStore } from './transfers.ts';
 
 export interface Stores {
   db: Database;
@@ -49,6 +50,7 @@ export interface Stores {
   ai: AiStore;
   skills: SkillStore;
   oauth: OAuthStore;
+  transfers: TransferStore;
 }
 
 export function createStores(db: Database, secrets: Secrets): Stores {
@@ -84,6 +86,7 @@ export function createStores(db: Database, secrets: Secrets): Stores {
     ai: new AiStore(db),
     skills: new SkillStore(db),
     oauth: new OAuthStore(db),
+    transfers: new TransferStore(db),
   };
 }
 
@@ -100,3 +103,4 @@ export type * from './skills.ts';
 export type * from './oauth.ts';
 export type * from './storage.ts';
 export type * from './teams.ts';
+export type * from './transfers.ts';

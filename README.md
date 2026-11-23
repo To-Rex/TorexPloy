@@ -208,6 +208,16 @@ Yon paneldagi **TorexAi** sahifasi: platforma va serverlarni oddiy tilda boshqar
 - **Agent nimaga ega.** TorexAi’ning asboblari (platforma xaritasi, API, loglar, deployni kutish, server va konteyner buyruqlari, fayllar, kod, undo, skillar), skillar MCP promptlari sifatida, platforma xaritasi va loglar resurs sifatida.
 - **Ruxsat va xavfsizlik.** Har bir ulanish token: shaxs, jamoa va ruxsat darajasi (`read` faqat oʻqiydi, `write` oʻzgartiradi lekin oʻchirmaydi, `full` rol ruxsat bergan hamma narsa). Bu daraja REST API’da ham amal qiladi. Oʻchirish, maʼlumotni yoʻqotish yoki sirni koʻrsatish kabi qadam avval nima boʻlishini aytadi va foydalanuvchining aniq “ha”sini kutadi (mijoz oʻz oynasini koʻrsata olsa, oʻsha yerda soʻraladi). OAuth: PKCE S256, refresh token aylanishi, `iss`, ilova roʻyxatdan oʻtishi (DCR) yoki oʻz tavsifi manzili (CIMD, faqat ochiq manzillardan, tizimga kirgan odam koʻrganda olinadi). Ulangan ilovalar, ular qilgan har bir qadam (undo bilan) va ulanishni uzish shu sahifada; audit jurnalida `viaMcp` belgisi.
 
+## Loyihani boshqa panelga koʻchirish
+
+**Koʻchirish** sahifasi (`/transfers`) va loyiha menyusidagi **Eksport qilish**: loyiha butunligicha boshqa TorexPloy panelga oʻtadi.
+
+- **Eksport.** Loyiha bitta `.torexploy` arxivga yigʻiladi: ilovalar va ularning sozlamalari, oʻzgaruvchilar (`.env` matni bilan), domenlar, volumelar, cron vazifalar, bogʻlanishlar, deploy kalitlari; maʼlumotlar bazalari (PostgreSQL, MySQL, MariaDB, MongoDB dump bilan, qolganlari fayllari bilan), fayl omborlari (bucketlar, fayllar, kirish kalitlari), ilovalar kodi (ishlab turgan commit yoki yuklangan arxiv) va xohlasa tayyor imagelar. Arxiv AES-256-GCM bilan shifrlanadi (scrypt, 1 MiB boʻlaklar, har boʻlak autentifikatsiyalangan): parolni panel yaratadi yoki oʻzingiz berasiz.
+- **Olib oʻtish.** Faylni yuklab olish (uzilsa davom etadi), **koʻchirish havolasi** (boshqa panel arxivni toʻgʻridan-toʻgʻri tortib oladi, parol havolaning `#` qismida, 24 soat yoki bekor qilinguncha ishlaydi) yoki S3 manziliga nusxa.
+- **Import.** Arxiv yuklanadi (fayl, havola yoki S3), parol bilan ochiladi va reja koʻrsatiladi: qaysi server, loyiha nomi, har bir ilova kodi qayerdan (bir xil GitHub hisobi ulangan boʻlsa repozitoriyga bogʻlanadi, boʻlmasa arxivdagi koddan, tayyor image boʻlsa yigʻmasdan), band domen va portlar. Import avval butun arxivni tekshiradi, keyin servislarni oʻsha parollar va nomlar bilan yaratib maʼlumotini tiklaydi, volumelarni toʻldiradi va ilovalarni joylashtiradi. Uzilib qolsa, **Qayta urinish** toʻxtagan joyidan davom etadi.
+- **Terminal.** `torex export SHOP --link`, boshqa panelda `torex import <havola>` (yoki `torex import shop.torexploy`), `torex transfers`.
+- **Huquq.** Faqat jamoa administratorlari; token ishlatilsa toʻliq ruxsatli boʻlishi kerak. TorexAi va MCP agentlariga bu endpointlar yopiq. Eksport arxivlari 7 kun saqlanadi.
+
 ## Xavfsizlik
 
 - Parollar scrypt bilan, sessiya tokenlari faqat SHA-256 koʻrinishida saqlanadi. Cookie’lar `httpOnly`, `SameSite=Lax`, HTTPS’da `Secure`.

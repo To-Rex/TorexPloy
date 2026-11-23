@@ -33,9 +33,12 @@ export const VALUE_FLAGS = new Set([
   'team',
   'use',
   'file',
+  'passphrase',
+  'output',
+  's3',
 ]);
 
-const SHORT: Record<string, string> = { f: 'follow', h: 'help', v: 'version', y: 'yes', n: 'tail', a: 'app', d: 'data', q: 'query', p: 'profile' };
+const SHORT: Record<string, string> = { f: 'follow', h: 'help', v: 'version', y: 'yes', n: 'tail', a: 'app', d: 'data', q: 'query', p: 'profile', o: 'output' };
 
 export function parseArgs(argv: readonly string[]): Parsed {
   const words: string[] = [];

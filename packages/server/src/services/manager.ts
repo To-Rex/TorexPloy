@@ -44,7 +44,11 @@ export class ServiceManager {
     if (this.ctx.stores.domains.listForService(service.id).length > 0) void this.ctx.proxy.requestSync(service.serverId).catch(() => undefined);
   }
 
-  create(project: ProjectRecord, input: CreateServiceInput): ServiceRecord {
+  /**
+   * Record a service and provision it in the background. An import keeps the slug it had (applications reach it by
+   * that name) and provisions it itself, after its files are in place.
+   */
+  create(project: ProjectRecord, input: CreateServiceInput, options: { slug?: string; provision?: boolean } = {}): ServiceRecord {
     const { stores } = this.ctx;
     const entry = catalogEntry(input.type);
     const version = input.version ?? entry.defaultVersion;
@@ -72,7 +76,7 @@ export class ServiceManager {
       }
       if (stores.services.isPublicPortTaken(input.serverId, input.publicPort, id)) throw new AppError('conflict', 'Another service already uses this public port', { params: { reason: 'port_taken' } });
     }
-    const slug = stores.projects.uniqueResourceSlug(project.id, input.name, input.type);
+    const slug = stores.projects.uniqueResourceSlug(project.id, options.slug ?? input.name, input.type);
     const created = stores.services.create({
       id,
       projectId: project.id,
@@ -89,7 +93,7 @@ export class ServiceManager {
       memoryLimitMb: input.memoryLimitMb ?? entry.memoryMb,
     });
     const service = input.publicPort === undefined ? created : stores.services.update(id, { publicPort: input.publicPort });
-    void this.provision(service.id);
+    if (options.provision !== false) void this.provision(service.id);
     return service;
   }
 
@@ -253,6 +257,37 @@ export class ServiceManager {
     return record;
   }
 
+  /**
+   * Stream the engine's dump into a file (gzipped where the engine does not compress itself) and return its size.
+   * Backups and exports both come through here.
+   */
+  async dumpToFile(service: ServiceRecord, path: string, signal?: AbortSignal): Promise<number> {
+    const spec = catalogEntry(service.type).backup;
+    if (spec === null) throw new AppError('bad_request', `${catalogEntry(service.type).label} does not support backups`);
+    const docker = await this.ctx.connections.docker(service.serverId);
+    const { execId, output } = await docker.execStream(service.containerName, spec.dump(service.credentials), undefined, signal);
+    let stderr = '';
+    const stdoutOnly = new Transform({
+      readableObjectMode: false,
+      writableObjectMode: true,
+      transform(chunk: { stream: string; data: Buffer }, _encoding, callback) {
+        if (chunk.stream === 'stderr') {
+          if (stderr.length < 4_000) stderr += chunk.data.toString('utf8');
+          callback();
+          return;
+        }
+        callback(null, chunk.data);
+      },
+    });
+    const sink = createWriteStream(path, { mode: 0o600 });
+    const options = signal === undefined ? {} : { signal };
+    if (spec.gzip) await pipeline(output, stdoutOnly, createGzip({ level: 6 }), sink, options);
+    else await pipeline(output, stdoutOnly, sink, options);
+    const exitCode = await docker.execExitCode(execId);
+    if (exitCode !== 0) throw new AppError('bad_request', `Backup command failed (exit ${exitCode}): ${stderr.trim().slice(0, 500)}`);
+    return (await stat(path)).size;
+  }
+
   private async runBackup(service: ServiceRecord, record: BackupRecord): Promise<void> {
     const { stores } = this.ctx;
     const spec = catalogEntry(service.type).backup!;
@@ -261,25 +296,7 @@ export class ServiceManager {
     const path = join(dir, fileName);
     try {
       await mkdir(dir, { recursive: true, mode: 0o700 });
-      const docker = await this.ctx.connections.docker(service.serverId);
-      const { execId, output } = await docker.execStream(service.containerName, spec.dump(service.credentials));
-      let stderr = '';
-      const stdoutOnly = new Transform({
-        readableObjectMode: false,
-        writableObjectMode: true,
-        transform(chunk: { stream: string; data: Buffer }, _encoding, callback) {
-          if (chunk.stream === 'stderr') {
-            if (stderr.length < 4_000) stderr += chunk.data.toString('utf8');
-            callback();
-            return;
-          }
-          callback(null, chunk.data);
-        },
-      });
-      await pipeline(output, stdoutOnly, ...(spec.gzip ? [createGzip({ level: 6 })] : []), createWriteStream(path, { mode: 0o600 }));
-      const exitCode = await docker.execExitCode(execId);
-      if (exitCode !== 0) throw new AppError('bad_request', `Backup command failed (exit ${exitCode}): ${stderr.trim().slice(0, 500)}`);
-      const { size } = await stat(path);
+      const size = await this.dumpToFile(service, path);
       stores.backups.finish(record.id, { status: 'succeeded', filePath: fileName, sizeBytes: size });
       await this.uploadBackup(service, record.id, path, size, fileName);
       await this.pruneBackups(service);
@@ -356,12 +373,18 @@ export class ServiceManager {
     if (backup.status !== 'succeeded') throw new AppError('bad_request', 'This backup cannot be restored');
     const source = await this.openBackup(service, backup);
     if (source === null || source.size === null) throw new AppError('bad_request', 'The backup file is no longer available on the server or in S3');
+    await this.restoreStream(service, source.stream as AsyncIterable<Buffer>, source.size);
+  }
+
+  /** Hand a dump of `size` bytes to the container and run the engine's restore command on it (restores and imports). */
+  async restoreStream(service: ServiceRecord, stream: AsyncIterable<Buffer>, size: number): Promise<void> {
+    const spec = catalogEntry(service.type).backup;
+    if (spec === null || spec.restore === null) throw new AppError('bad_request', 'This service type does not support restore');
     const docker = await this.ctx.connections.docker(service.serverId);
-    const size = source.size;
     const name = `ploy-restore.${spec.extension}${spec.gzip ? '.gz' : ''}`;
-    const archive = tarSingleFile(name, size, source.stream as AsyncIterable<Buffer>);
+    const archive = tarSingleFile(name, size, stream);
     const { Readable } = await import('node:stream');
-    await docker.putArchive(service.containerName, '/tmp', Readable.from(archive));
+    await docker.putArchive(service.containerName, '/tmp', Readable.from(archive), { timeoutMs: 6 * 3_600_000 });
     const result = await docker.exec(service.containerName, spec.restore(service.credentials, `/tmp/${name}`), { timeoutMs: 6 * 3_600_000 });
     await docker.exec(service.containerName, ['rm', '-f', `/tmp/${name}`]).catch(() => undefined);
     if (result.exitCode !== 0) {

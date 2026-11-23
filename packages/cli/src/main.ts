@@ -15,6 +15,7 @@ import { aiCommand } from './commands/ai.ts';
 import { deployCommand, deploymentsCommand, lifecycleCommand, logsCommand, rollbackCommand, upCommand } from './commands/deploy.ts';
 import { appsCommand, infoCommand, linkCommand, openCommand, projectsCommand, serversCommand, servicesCommand, statusCommand, unlinkCommand } from './commands/platform.ts';
 import { domainsCommand, envCommand } from './commands/settings.ts';
+import { exportCommand, importCommand, transfersCommand } from './commands/transfer.ts';
 import { apiCommand, completionCommand, mcpCommand } from './commands/tools.ts';
 import { c, CliError, out, setColour } from './ui.ts';
 
@@ -49,6 +50,9 @@ const COMMANDS: Record<string, Entry> = {
   open: { group: 'Applications', usage: 'open [APP] [--dashboard]', summary: 'Open the site (or its page in the dashboard)', run: openCommand },
   env: { group: 'Applications', usage: 'env [APP] [--reveal] | env set K=V… | env unset K… | env pull [FILE] | env push [FILE]  [--app APP] [--deploy]', summary: 'Environment variables', run: envCommand },
   domains: { group: 'Applications', usage: 'domains [APP] | domains add HOST [--port N] | domains remove HOST  [--app APP]', summary: 'Domains', run: domainsCommand },
+  export: { group: 'Moving projects', usage: 'export [PROJECT] [-o FILE] [--link] [--images] [--no-data|--no-source] [--s3 DEST] [--no-download]', summary: 'Pack a project into an encrypted archive (data and code included)', run: exportCommand },
+  import: { group: 'Moving projects', usage: 'import FILE|LINK [--server S] [--name N] [--no-data] [--no-deploy] [--yes]', summary: 'Bring a project from another panel onto this one', run: importCommand },
+  transfers: { group: 'Moving projects', usage: 'transfers', summary: 'Exports and imports of the team', run: transfersCommand },
   ai: { group: 'TorexAi and MCP', usage: 'ai [MESSAGE] [--chat ID] [--model REF]', summary: 'Ask TorexAi; without a message, a conversation', run: aiCommand },
   mcp: { group: 'TorexAi and MCP', usage: 'mcp | mcp setup [claude-code|claude-desktop|cursor|vscode|windsurf|codex]', summary: 'Be an MCP server on stdio, or print how to connect a client', run: mcpCommand },
   api: { group: 'Other', usage: 'api METHOD PATH [--data JSON|@FILE] [--query k=v&…]', summary: 'Call the API and print the answer', run: apiCommand },

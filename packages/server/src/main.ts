@@ -31,6 +31,7 @@ import { ConnectionManager } from './servers/connections.ts';
 import { ServerManager } from './servers/manager.ts';
 import { ServiceManager } from './services/manager.ts';
 import { StorageManager } from './storage/manager.ts';
+import { TransferManager } from './transfer/manager.ts';
 import { createStores } from './store/index.ts';
 import { TerminalGateway } from './terminal/gateway.ts';
 import { UpdateChecker } from './updates/checker.ts';
@@ -76,6 +77,7 @@ export async function createContext(overrides: Parameters<typeof loadConfig>[1] 
   ctx.dbConsole = new DbConsole(ctx);
   ctx.ai = new AiManager(ctx);
   ctx.mcp = new McpManager(ctx);
+  ctx.transfers = new TransferManager(ctx);
   return ctx;
 }
 
@@ -95,6 +97,7 @@ function schedule(ctx: Context): Scheduler {
   scheduler.every('ai-workspaces', 6 * 60 * minute, () => ctx.ai.prune(), 15 * minute);
   scheduler.every('ai-skills', 3 * 60 * minute, () => ctx.ai.skills.syncDue(), 2 * minute);
   scheduler.every('oauth-prune', 60 * minute, () => ctx.mcp.oauth.prune(), 20 * minute);
+  scheduler.every('transfers-prune', 60 * minute, () => ctx.transfers.prune(), 10 * minute);
   scheduler.every('wal-checkpoint', 30 * minute, () => ctx.stores.db.checkpoint());
   return scheduler;
 }
@@ -108,6 +111,7 @@ async function start(): Promise<void> {
   ctx.cron.initialize();
   stores.backups.failInterrupted();
   await ctx.volumeBackups.recover();
+  await ctx.transfers.recover();
 
   const app = createHttpApp(ctx);
   const server: ServerType = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {

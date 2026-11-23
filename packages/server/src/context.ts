@@ -30,6 +30,7 @@ import type { ConnectionManager } from './servers/connections.ts';
 import type { ServerManager } from './servers/manager.ts';
 import type { ServiceManager } from './services/manager.ts';
 import type { StorageManager } from './storage/manager.ts';
+import type { TransferManager } from './transfer/manager.ts';
 import type { Stores } from './store/index.ts';
 import type { UpdateChecker } from './updates/checker.ts';
 import type { VolumeBackups } from './volumes/backups.ts';
@@ -64,6 +65,8 @@ export interface Context {
   ai: AiManager;
   /** The MCP server outside agents connect to, OAuth for them, and the command line's sign-ins. */
   mcp: McpManager;
+  /** Projects moving between panels: exports, imports, transfer links. */
+  transfers: TransferManager;
   /** Fresh confirmations of a session's owner (GitHub or a passkey), which stand in for the password for a few minutes. */
   stepUps: StepUps;
   startedAt: number;
