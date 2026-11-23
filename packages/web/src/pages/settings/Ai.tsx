@@ -6,11 +6,13 @@
  * It is set up here once; after that everyone uses it with their own role.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Check, CircleAlert, ExternalLink, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { Outlet } from 'react-router';
+import { Check, CircleAlert, ExternalLink, GraduationCap, Plug, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { AI_EFFORTS, AI_PROVIDER_KINDS, AI_PROVIDER_PRESETS, aiModelRef, TEAM_ROLES, type AiEffort, type AiProviderKind, type AiSettingsDto, type AiSettingsInput, type TeamRole } from '@ploy/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, SaveFooter } from '../../components/Frame.tsx';
 import { Menu, MenuItem } from '../../components/Menu.tsx';
+import { RouteTabs } from '../../components/Tabs.tsx';
 import { useToast } from '../../components/Toast.tsx';
 import { Button, Callout, Field, Input, Segmented, Select, Skeleton, Switch, Textarea } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
@@ -182,6 +184,25 @@ function Usage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** TorexAi's two settings pages: the models it runs on, and the skills it works with. */
+export function AiSettingsLayout() {
+  const { m } = useI18n();
+  return (
+    <>
+      <div className="tai-settings-tabs">
+        <RouteTabs
+          label="TorexAi"
+          items={[
+            { to: '/settings/ai', label: m.ai.skills.tabs.providers, icon: <Plug aria-hidden="true" /> },
+            { to: '/settings/ai/skills', label: m.ai.skills.tabs.skills, icon: <GraduationCap aria-hidden="true" /> },
+          ]}
+        />
+      </div>
+      <Outlet />
+    </>
   );
 }
 

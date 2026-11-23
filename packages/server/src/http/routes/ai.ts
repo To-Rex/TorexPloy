@@ -19,6 +19,11 @@ import {
   aiProviderTestSchema,
   aiSendMessageSchema,
   aiSettingsSchema,
+  aiSkillCatalogQuerySchema,
+  aiSkillCustomSchema,
+  aiSkillInstallSchema,
+  aiSkillPatchSchema,
+  aiSkillSourceSchema,
   aiUpdateChatSchema,
   aiUsageQuerySchema,
   type AiChatDto,
@@ -62,6 +67,8 @@ export function registerAiRoutes(app: Hono<Env>, ctx: Context): void {
     ai.settings.update(input);
     // Never the keys themselves: which fields changed, and how many providers there are now.
     audit(ctx, c, 'ai.settings_updated', { type: 'settings', teamId: null }, { fields: Object.keys(input), providers: ai.settings.get().providers.length });
+    // A TorexAi that was just set up (or allowed to install skills) reads its skill sources now rather than at the next daily round.
+    void ai.skills.syncDue();
     return c.json(ai.settings.dto());
   });
 
@@ -75,6 +82,113 @@ export function registerAiRoutes(app: Hono<Env>, ctx: Context): void {
   app.get('/api/ai/usage', (c) => {
     requireInstanceAdmin(c);
     return c.json(ai.usage(query(c, aiUsageQuerySchema).days));
+  });
+
+  // ----------------------------------------------------------------- skills
+  // Skills are the instance's, like the providers: the instance administrator
+  // installs, removes and writes them, and decides which repositories TorexAi
+  // may take skills from by itself.
+
+  const skills = ai.skills;
+  const syncLimiter = new RateLimiter(10, 10);
+
+  const installedSkill = (c: Ctx) => {
+    const record = stores.skills.get(c.req.param('name')!);
+    if (record === undefined) throw notFound('Skill');
+    return record;
+  };
+
+  app.get('/api/ai/skills', (c) => {
+    requireInstanceAdmin(c);
+    void skills.syncDue();
+    return c.json(skills.overview());
+  });
+
+  app.get('/api/ai/skills/catalog', (c) => {
+    requireInstanceAdmin(c);
+    return c.json(skills.browse(query(c, aiSkillCatalogQuerySchema).query));
+  });
+
+  /** One skill with its playbook: `?ref=` is an installed name, `builtin:<name>` or `<owner>/<repo>:<name>`. */
+  app.get('/api/ai/skills/detail', (c) => {
+    requireInstanceAdmin(c);
+    const entry = skills.resolve(c.req.query('ref') ?? '');
+    if (entry === undefined) throw notFound('Skill');
+    return c.json(skills.detail(entry));
+  });
+
+  /** Install a skill from the library or a registry, or update an installed registry skill to the text the registry holds now. */
+  app.post('/api/ai/skills/install', async (c) => {
+    const auth = requireInstanceAdmin(c);
+    const { ref } = await body(c, aiSkillInstallSchema);
+    let entry = skills.resolve(ref);
+    const installed = entry === undefined ? undefined : stores.skills.get(entry.name);
+    // An installed registry skill is updated from where it came from.
+    if (installed !== undefined && installed.source === 'registry' && installed.origin !== null && !ref.includes(':')) entry = skills.resolve(`${installed.origin.split(':')[0]}:${installed.name}`) ?? entry;
+    if (entry === undefined) throw notFound('Skill');
+    if (entry.source === 'custom') throw new AppError('conflict', 'A skill of this instance is already installed');
+    if (installed !== undefined && installed.source !== entry.source) throw new AppError('conflict', `A skill called ${entry.name} is already installed from elsewhere; remove it first`);
+    const record = skills.install(entry, { auto: false, userId: auth.user.id });
+    audit(ctx, c, 'ai.skill_installed', { type: 'ai_skill', id: record.name, name: record.name, teamId: null }, { source: entry.source, origin: entry.origin, flags: entry.flags, update: installed !== undefined });
+    return c.json(skills.dto(skills.resolve(record.name)!, record), installed === undefined ? 201 : 200);
+  });
+
+  /** Write a skill of this instance's own, or rewrite one. */
+  app.post('/api/ai/skills/custom', async (c) => {
+    const auth = requireInstanceAdmin(c);
+    const input = await body(c, aiSkillCustomSchema);
+    const existed = stores.skills.get(input.name) !== undefined;
+    const record = skills.saveCustom(input, auth.user.id);
+    audit(ctx, c, 'ai.skill_saved', { type: 'ai_skill', id: record.name, name: record.name, teamId: null }, { flags: record.flags, update: existed });
+    return c.json(skills.detail(skills.resolve(record.name)!), existed ? 200 : 201);
+  });
+
+  /** Switch a skill on or off. A skill that is off is never loaded, and TorexAi cannot install it again by itself. */
+  app.patch('/api/ai/skills/installed/:name', async (c) => {
+    requireInstanceAdmin(c);
+    const record = installedSkill(c);
+    const { enabled } = await body(c, aiSkillPatchSchema);
+    skills.setEnabled(record.name, enabled);
+    audit(ctx, c, enabled ? 'ai.skill_enabled' : 'ai.skill_disabled', { type: 'ai_skill', id: record.name, name: record.name, teamId: null });
+    return c.json(skills.dto(skills.resolve(record.name)!));
+  });
+
+  app.delete('/api/ai/skills/installed/:name', (c) => {
+    requireInstanceAdmin(c);
+    const record = installedSkill(c);
+    skills.remove(record.name);
+    audit(ctx, c, 'ai.skill_removed', { type: 'ai_skill', id: record.name, name: record.name, teamId: null }, { source: record.source, auto: record.auto });
+    return c.json({ ok: true });
+  });
+
+  app.post('/api/ai/skills/sources', async (c) => {
+    requireInstanceAdmin(c);
+    limit(syncLimiter, c, 'ai-skill-sync');
+    const input = await body(c, aiSkillSourceSchema);
+    const source = skills.addSource(input.repo, input.ref ?? null);
+    audit(ctx, c, 'ai.skill_source_added', { type: 'ai_skill_source', id: source.id, name: source.repo, teamId: null }, { ref: source.ref });
+    return c.json(skills.sourceDto(source), 201);
+  });
+
+  app.delete('/api/ai/skills/sources/:id', (c) => {
+    requireInstanceAdmin(c);
+    const source = stores.skills.source(c.req.param('id'));
+    if (source === undefined) throw notFound('Source');
+    skills.removeSource(source.id);
+    audit(ctx, c, 'ai.skill_source_removed', { type: 'ai_skill_source', id: source.id, name: source.repo, teamId: null });
+    return c.json({ ok: true });
+  });
+
+  /** Read a repository again now; the answer is the source as it stands afterwards. */
+  app.post('/api/ai/skills/sources/:id/sync', async (c) => {
+    requireInstanceAdmin(c);
+    limit(syncLimiter, c, 'ai-skill-sync');
+    const source = stores.skills.source(c.req.param('id'));
+    if (source === undefined) throw notFound('Source');
+    await skills.sync(source.id);
+    const after = stores.skills.source(source.id);
+    if (after === undefined) throw notFound('Source');
+    return c.json(skills.sourceDto(after));
   });
 
   // ------------------------------------------------------------------ chats

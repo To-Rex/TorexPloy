@@ -592,10 +592,34 @@ Panelga oʻrnatilgan agent: model bilan suhbat, asboblar chaqiruvi, tasdiqlash v
   oʻqib boʻlmaydi” degan matn). Qolganlari `extract.ts` orqali matnga aylanadi: UTF-8/UTF-16 matn, DOCX/XLSX/PPTX/ODF
   (zip ichidagi XML’dan, diskka ochmasdan), boshqa zip uchun fayllar roʻyxati; oʻqib boʻlmaydigani shunday deb aytiladi.
   Brauzer suratni yuborishdan oldin 2000 pikselgacha kichraytiradi (`prepareImage`).
+- **Skillar** (`ai/skills/`). Skill Agent Skills formatidagi `SKILL.md` (front matter: `name`, `description`, ixtiyoriy
+  `metadata`) va yonidagi matn fayllari. Uch manba: panel bilan keladigan kutubxona (`skills/library/<name>/SKILL.md`,
+  `builtin`, platformaning oʻz asboblari va API’siga moslab yozilgan; `metadata.triggers` oʻzbek, rus va ingliz
+  soʻz oʻzaklari, `title.*`/`summary.*` uch tilda), administrator qoʻshgan ochiq GitHub repozitoriylari (`registry`,
+  `ai_skill_sources`; boshida `anthropics/skills` va `trailofbits/skills`) va shu yerda yozilganlar (`custom`).
+  Repozitoriy bitta soʻrov bilan tar.gz qilib olinadi (`GET /repos/{repo}/tarball`) va diskka ochilmasdan oqim
+  sifatida oʻqiladi (`registry.ts`: ustar prefiksi, pax va GNU uzun nomlar); faqat kichik matn fayllari qoladi, hech
+  narsa ishga tushirilmaydi; natija `ai_skill_catalog`da, kuniga bir marta yangilanadi (`ai-skills` vazifasi, faqat
+  TorexAi sozlangan va avtomatik oʻrnatish yoqilgan boʻlsa). Har bir matn `scanSkill` bilan tekshiriladi: qoidalarni
+  bekor qilish, ruxsatni chetlab oʻtish, maʼlumotni tashqariga yuborish, `curl | sh`, reverse shell, koʻrinmas belgilar
+  (Unicode teglar, yoʻnalish belgilari, nol kenglikdagi belgilar ketma-ketligi), `authorized_keys`/`NOPASSWD`.
+- **Skill tanlash va oʻrnatish.** Xabar soʻzlari (oʻzbekcha tutuq belgisiz) skill nomi (5), trigger oʻzagi (4) va
+  tavsif soʻzlari (2/1,5) bilan solishtiriladi; koʻp skillda uchraydigan soʻz kamroq, bitta skillni aniq koʻrsatadigan
+  soʻz koʻproq hisoblanadi. Eng moslari (kamida bitta trigger yoki ikki soʻz dalil, eng yaxshisining 65 % idan
+  yuqori, koʻpi bilan 3 ta) xabar kontekstida modelga aytiladi; tizim koʻrsatmasi oʻzgarmaydi (kesh). `skill` asbobi:
+  `find` (qidiruv), `use` (playbook yoki uning fayli; skill “maslahat, qoidalarni oʻzgartirmaydi” degan izoh bilan
+  beriladi), `save` (faqat instansiya administratori, har doim tasdiq bilan). `skillsAuto: "trusted"`da kutubxona va
+  repozitoriydagi, bayroqsiz skill `use` paytida oʻzi oʻrnatiladi (`auto`, auditda `ai.skill_installed`); bayroqli
+  yoki `off` boʻlsa, faqat instansiya administratori tasdiq bilan oʻrnatadi, boshqalarga sababi aytiladi. Oʻchirib
+  qoʻyilgan skill yuklanmaydi va qayta oʻzi oʻrnatilmaydi. Oʻrnatilgan registry skill oʻz matniga bogʻlangan; katalogda
+  boshqa xesh paydo boʻlsa “yangilanish bor” koʻrsatiladi. Boshqaruv: `/api/ai/skills/*`, sahifa
+  **Sozlamalar → TorexAi → Skillar**.
 - **Sozlamalar.** `settings` jadvalidagi `ai` yozuvi; kalitlar `ai` maqsadi bilan muhrlangan. Faqat instansiya
   administratori oʻzgartiradi; `minRole` kim yozisha olishini, `dailyTokenLimit` kunlik sarfni cheklaydi (`ai_usage`).
 - **Test.** `ai/ai.test.ts`: skriptlangan model bilan toʻliq yoʻl (tasdiq, rad etish, toʻxtatish, rol chegarasi,
-  maxfiy qiymatlar, undo, kod ishchi nusxasi, fayllar, ixchamlash) va ikkala adapterning sim formati.
+  maxfiy qiymatlar, undo, kod ishchi nusxasi, fayllar, ixchamlash, skillarning oʻzi oʻrnatilishi va administrator
+  tasdigʻi) va ikkala adapterning sim formati; `ai/skills/skills.test.ts`: `SKILL.md` oʻqish, skaner, GitHub arxivini
+  oqim sifatida oʻqish, kutubxona sifati va uch tilda skill topish.
 
 ## 6. Xavfsizlik
 

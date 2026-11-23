@@ -43,6 +43,7 @@ import { dockerHostShell, sweepShells, type HostShell } from './host.ts';
 import { InternalApi, type Actor } from './internal.ts';
 import { buildPrompt, contextBlock, SUMMARY_REQUEST, systemPrompt, type AttachmentReader, type StoredRaw } from './prompt.ts';
 import { AiSettings, type StoredProvider } from './settings.ts';
+import { SkillManager } from './skills/manager.ts';
 import { AiFileStorage } from './storage.ts';
 import { findTool, runUndo, toolFailure, toolSpecs, type ToolEnv } from './tools.ts';
 import { ProviderError, type AiBlock, type AiUsage, type ChatProvider, type ChatResult, type ToolCall } from './types.ts';
@@ -114,6 +115,7 @@ export class AiManager {
   readonly api: InternalApi;
   readonly storage: AiFileStorage;
   readonly workspaces: CodeWorkspaces;
+  readonly skills: SkillManager;
   private readonly ctx: Context;
   private host: HostShell;
   private readonly runs = new Map<string, Run>();
@@ -125,6 +127,7 @@ export class AiManager {
     this.api = new InternalApi(ctx);
     this.storage = new AiFileStorage(ctx.config.dataDir, ctx.stores.ai);
     this.workspaces = new CodeWorkspaces(ctx);
+    this.skills = new SkillManager(ctx);
     this.host = dockerHostShell(ctx);
   }
 
@@ -308,7 +311,7 @@ export class AiManager {
   // ------------------------------------------------------------ conversation
 
   private toolEnv(actor: Actor, chat: AiChatRecord): ToolEnv {
-    return { ctx: this.ctx, actor, chat, api: this.api, settings: this.settings, host: this.host, workspaces: this.workspaces, storage: this.storage, store: this.ctx.stores.ai };
+    return { ctx: this.ctx, actor, chat, api: this.api, settings: this.settings, host: this.host, workspaces: this.workspaces, storage: this.storage, store: this.ctx.stores.ai, skills: this.skills };
   }
 
   private place(actor: Actor, context: AiContextInput | undefined): string | null {
@@ -350,7 +353,18 @@ export class AiManager {
     const timezone = this.ctx.stores.settings.timezone();
     const now = `${new Intl.DateTimeFormat('en-CA', { timeZone: timezone, dateStyle: 'short', timeStyle: 'short', hour12: false }).format(new Date()).replace(',', '')}, ${timezone}`;
     const blocks: AiBlock[] = [
-      { type: 'context', text: contextBlock({ role: auth.role, instanceAdmin: auth.user.isInstanceAdmin, now, place: this.place(actor, input.context), notes: ai.takeNotes(chat.id) }) },
+      {
+        type: 'context',
+        text: contextBlock({
+          role: auth.role,
+          instanceAdmin: auth.user.isInstanceAdmin,
+          now,
+          place: this.place(actor, input.context),
+          notes: ai.takeNotes(chat.id),
+          // The playbooks that fit what was asked, found before the model reads a word of it.
+          skills: this.skills.suggest(input.text).map((match) => ({ name: match.installed === undefined ? match.entry.ref : match.entry.name, description: match.entry.description, installed: match.installed !== undefined })),
+        }),
+      },
       ...attached.map((file): AiBlock => ({ type: 'file', fileId: file.id })),
       // A message may be files alone: a screenshot that needs no words.
       ...(input.text.length > 0 ? [{ type: 'text', text: input.text } satisfies AiBlock] : []),

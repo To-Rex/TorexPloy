@@ -104,7 +104,14 @@ export const router = createBrowserRouter([
           { path: 'notifications', lazy: async () => ({ Component: (await import('../pages/settings/Notifications.tsx')).NotificationsPage }) },
           { path: 'storage', lazy: async () => ({ Component: (await import('../pages/settings/Storage.tsx')).StoragePage }) },
           { path: 'registries', lazy: async () => ({ Component: (await import('../pages/settings/Registries.tsx')).RegistriesPage }) },
-          { path: 'ai', lazy: async () => ({ Component: (await import('../pages/settings/Ai.tsx')).AiSettingsPage }) },
+          {
+            path: 'ai',
+            lazy: async () => ({ Component: (await import('../pages/settings/Ai.tsx')).AiSettingsLayout }),
+            children: [
+              { index: true, lazy: async () => ({ Component: (await import('../pages/settings/Ai.tsx')).AiSettingsPage }) },
+              { path: 'skills', lazy: async () => ({ Component: (await import('../pages/settings/AiSkills.tsx')).AiSkillsPage }) },
+            ],
+          },
           { path: 'platform', lazy: async () => ({ Component: (await import('../pages/settings/Platform.tsx')).PlatformPage }) },
           { path: 'audit', lazy: async () => ({ Component: (await import('../pages/settings/Audit.tsx')).AuditPage }) },
         ],

@@ -18,6 +18,10 @@ import type {
   AiRunState,
   AiSettingsDto,
   AiSettingsInput,
+  AiSkillDetailDto,
+  AiSkillDto,
+  AiSkillsDto,
+  AiSkillSourceDto,
   AiStatusDto,
   AiToolName,
   AiUsageDto,
@@ -32,6 +36,9 @@ export const aiKeys = {
   chats: (query: string) => ['ai', 'chats', query] as const,
   allChats: ['ai', 'chats'] as const,
   chat: (id: string) => ['ai', 'chat', id] as const,
+  skills: ['ai', 'skills'] as const,
+  skillCatalog: (query: string) => ['ai', 'skills', 'catalog', query] as const,
+  skill: (ref: string) => ['ai', 'skills', 'detail', ref] as const,
 };
 
 export const useAiStatus = () => useQuery({ queryKey: aiKeys.status, queryFn: () => api.get<AiStatusDto>('/api/ai'), staleTime: 30_000 });
@@ -41,6 +48,20 @@ export const useAiChats = (query: string, enabled: boolean) =>
   useQuery({ queryKey: aiKeys.chats(query), queryFn: () => api.get<AiChatDto[]>(`/api/ai/chats${qs({ query })}`), enabled, placeholderData: (previous) => previous });
 
 export const saveAiSettings = (input: AiSettingsInput) => api.put<AiSettingsDto>('/api/ai/settings', input);
+
+/** Skills: what is installed and where skills come from; asked again every few seconds while a repository is being read. */
+export const useAiSkills = () =>
+  useQuery({ queryKey: aiKeys.skills, queryFn: () => api.get<AiSkillsDto>('/api/ai/skills'), refetchInterval: (query) => (query.state.data?.sources.some((source) => source.syncing) === true ? 2_000 : false) });
+export const useAiSkillCatalog = (query: string) => useQuery({ queryKey: aiKeys.skillCatalog(query), queryFn: () => api.get<AiSkillDto[]>(`/api/ai/skills/catalog${qs({ query })}`), placeholderData: (previous) => previous });
+export const fetchAiSkill = (ref: string) => api.get<AiSkillDetailDto>(`/api/ai/skills/detail${qs({ ref })}`);
+export const useAiSkill = (ref: string | null) => useQuery({ queryKey: aiKeys.skill(ref ?? ''), queryFn: () => fetchAiSkill(ref!), enabled: ref !== null });
+export const installAiSkill = (ref: string) => api.post<AiSkillDto>('/api/ai/skills/install', { ref });
+export const setAiSkillEnabled = (name: string, enabled: boolean) => api.patch<AiSkillDto>(`/api/ai/skills/installed/${encodeURIComponent(name)}`, { enabled });
+export const removeAiSkill = (name: string) => api.delete<{ ok: boolean }>(`/api/ai/skills/installed/${encodeURIComponent(name)}`);
+export const saveAiSkill = (input: { name: string; description: string; body: string }) => api.post<AiSkillDetailDto>('/api/ai/skills/custom', input);
+export const addAiSkillSource = (repo: string) => api.post<AiSkillSourceDto>('/api/ai/skills/sources', { repo });
+export const removeAiSkillSource = (id: string) => api.delete<{ ok: boolean }>(`/api/ai/skills/sources/${id}`);
+export const syncAiSkillSource = (id: string) => api.post<AiSkillSourceDto>(`/api/ai/skills/sources/${id}/sync`);
 export const testAiProvider = (input: { id?: string; kind: AiProviderKind; baseUrl: string; apiKey?: string }) => api.post<AiProviderTestDto>('/api/ai/settings/test', input);
 export const createAiChat = (model?: string) => api.post<AiChatDto>('/api/ai/chats', model === undefined ? {} : { model });
 export const updateAiChat = (id: string, patch: { title?: string; pinned?: boolean; autoApprove?: boolean; model?: string }) => api.patch<AiChatDto>(`/api/ai/chats/${id}`, patch);

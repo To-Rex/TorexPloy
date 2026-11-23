@@ -91,6 +91,7 @@ function schedule(ctx: Context): Scheduler {
   scheduler.every('workspaces', 30 * minute, () => ctx.maintenance.pruneWorkspaces(), 10 * minute);
   scheduler.every('docker-prune', 24 * 60 * minute, () => ctx.maintenance.pruneDocker(), 60 * minute);
   scheduler.every('ai-workspaces', 6 * 60 * minute, () => ctx.ai.prune(), 15 * minute);
+  scheduler.every('ai-skills', 3 * 60 * minute, () => ctx.ai.skills.syncDue(), 2 * minute);
   scheduler.every('wal-checkpoint', 30 * minute, () => ctx.stores.db.checkpoint());
   return scheduler;
 }

@@ -1205,6 +1205,62 @@ CREATE TABLE ai_usage (
 );
 `,
   },
+  {
+    version: 18,
+    name: 'torex-ai-skills',
+    sql: `
+-- Skills TorexAi can load: playbooks in the Agent Skills format. A built-in skill keeps only its state here (its text
+-- ships with the panel); a registry or custom skill is kept whole, pinned to the text that was installed.
+CREATE TABLE ai_skills (
+  name         TEXT PRIMARY KEY,
+  description  TEXT NOT NULL,
+  body         TEXT NOT NULL,
+  -- Reference files that came with it: JSON object, path to text.
+  files        TEXT NOT NULL DEFAULT '{}',
+  metadata     TEXT NOT NULL DEFAULT '{}',
+  source       TEXT NOT NULL CHECK (source IN ('builtin','registry','custom')),
+  -- 'owner/repo:path/in/repo' for a registry skill.
+  origin       TEXT,
+  hash         TEXT NOT NULL,
+  flags        TEXT NOT NULL DEFAULT '[]',
+  enabled      INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+  -- Installed by TorexAi itself while answering someone (1), or by a person (0).
+  auto         INTEGER NOT NULL DEFAULT 0 CHECK (auto IN (0,1)),
+  installed_by TEXT,
+  uses         INTEGER NOT NULL DEFAULT 0,
+  last_used_at TEXT,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+
+-- Public GitHub repositories of skills the instance administrator trusts.
+CREATE TABLE ai_skill_sources (
+  id         TEXT PRIMARY KEY,
+  repo       TEXT NOT NULL UNIQUE,
+  ref        TEXT,
+  commit_sha TEXT,
+  synced_at  TEXT,
+  error      TEXT,
+  created_at TEXT NOT NULL
+);
+INSERT INTO ai_skill_sources (id, repo, created_at) VALUES ('aik_anthropic', 'anthropics/skills', datetime('now'));
+INSERT INTO ai_skill_sources (id, repo, created_at) VALUES ('aik_trailofbits', 'trailofbits/skills', datetime('now'));
+
+-- What those repositories hold, as last read: searched when TorexAi looks for a skill.
+CREATE TABLE ai_skill_catalog (
+  source_id   TEXT NOT NULL REFERENCES ai_skill_sources(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  description TEXT NOT NULL,
+  path        TEXT NOT NULL,
+  body        TEXT NOT NULL,
+  files       TEXT NOT NULL DEFAULT '{}',
+  metadata    TEXT NOT NULL DEFAULT '{}',
+  hash        TEXT NOT NULL,
+  flags       TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (source_id, name)
+);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

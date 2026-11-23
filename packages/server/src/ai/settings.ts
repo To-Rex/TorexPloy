@@ -11,6 +11,7 @@ import {
   aiModelRef,
   parseAiModelRef,
   type AiEffort,
+  type AiSkillAuto,
   type AiModelDto,
   type AiProviderDto,
   type AiProviderKind,
@@ -48,6 +49,7 @@ export interface StoredAiSettings {
   dailyTokenLimit: number | null;
   instructions: string;
   compactAt: number;
+  skillsAuto: AiSkillAuto;
 }
 
 const KEY = 'ai';
@@ -63,6 +65,8 @@ export const DEFAULT_AI_SETTINGS: StoredAiSettings = {
   instructions: '',
   // Long before any current model's window fills: a smaller transcript is cheaper on every later step.
   compactAt: 120_000,
+  // Skills from the built-in library and the administrator's registries are installed as they are needed.
+  skillsAuto: 'trusted',
 };
 
 /** The address a provider is reached at: what was typed, or the kind's own. */
@@ -144,6 +148,7 @@ export class AiSettings {
       dailyTokenLimit: settings.dailyTokenLimit,
       instructions: settings.instructions,
       compactAt: settings.compactAt,
+      skillsAuto: settings.skillsAuto,
     };
   }
 
@@ -232,6 +237,7 @@ export class AiSettings {
       dailyTokenLimit: input.dailyTokenLimit !== undefined ? input.dailyTokenLimit : before.dailyTokenLimit,
       instructions: input.instructions ?? before.instructions,
       compactAt: input.compactAt ?? before.compactAt,
+      skillsAuto: input.skillsAuto ?? before.skillsAuto,
     };
     // References to a provider or model that is gone fall back to something that exists.
     const refs = new Set(next.providers.flatMap((provider) => provider.models.map((model) => aiModelRef(provider.id, model))));

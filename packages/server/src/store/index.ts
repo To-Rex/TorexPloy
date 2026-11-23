@@ -12,6 +12,7 @@ import { NotificationStore } from './notifications.ts';
 import { RegistryStore } from './registries.ts';
 import { S3DestinationStore } from './s3.ts';
 import { ServerStore } from './servers.ts';
+import { SkillStore } from './skills.ts';
 import { StorageBucketStore, StorageKeyStore } from './storage.ts';
 import { AuditStore, SettingsStore, TeamStore } from './teams.ts';
 
@@ -45,6 +46,7 @@ export interface Stores {
   storageKeys: StorageKeyStore;
   storageBuckets: StorageBucketStore;
   ai: AiStore;
+  skills: SkillStore;
 }
 
 export function createStores(db: Database, secrets: Secrets): Stores {
@@ -78,6 +80,7 @@ export function createStores(db: Database, secrets: Secrets): Stores {
     storageKeys: new StorageKeyStore(db, secrets),
     storageBuckets: new StorageBucketStore(db),
     ai: new AiStore(db),
+    skills: new SkillStore(db),
   };
 }
 
@@ -90,5 +93,6 @@ export type * from './registries.ts';
 export type * from './s3.ts';
 export type * from './resources.ts';
 export type * from './servers.ts';
+export type * from './skills.ts';
 export type * from './storage.ts';
 export type * from './teams.ts';

@@ -1807,3 +1807,250 @@
     }
   }
 }
+
+/*
+ * Skills, in the settings. Each skill is a row that reads like a sentence:
+ * what it is for, where it came from, and the one switch that matters.
+ */
+@layer components {
+  .tai-settings-tabs {
+    min-width: 0;
+  }
+  .tai-skills {
+    display: grid;
+    border-top: 1px solid var(--line);
+  }
+  .tai-skills--boxed {
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+  }
+  .tai-skill,
+  .tai-source {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    min-width: 0;
+  }
+  .tai-skill + .tai-skill {
+    border-top: 1px solid var(--line);
+  }
+  .tai-skill[data-off] .tai-skill__main {
+    opacity: 0.55;
+  }
+  .tai-skill__icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin-top: 1px;
+    border-radius: var(--r-md);
+    background: var(--lapis-soft);
+    color: var(--lapis-ink);
+  }
+  .tai-skill__icon[data-source='registry'] {
+    background: var(--muted);
+    color: var(--ink);
+  }
+  .tai-skill__icon[data-source='custom'] {
+    background: var(--ok-soft);
+    color: var(--ok-ink);
+  }
+  .tai-skill__icon svg {
+    width: 16px;
+    height: 16px;
+  }
+  .tai-skill__main {
+    display: grid;
+    flex: 1;
+    gap: 3px;
+    min-width: 0;
+  }
+  .tai-skill__title {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-self: start;
+    gap: 2px 8px;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  a.tai-skill__title {
+    align-items: center;
+    text-decoration: none;
+  }
+  .tai-skill__title strong {
+    font-size: var(--text-md);
+    font-weight: 600;
+  }
+  .tai-skill__title:hover strong {
+    color: var(--link);
+  }
+  .tai-skill__title code {
+    color: var(--ink-3);
+    font-size: 11.5px;
+  }
+  .tai-skill__title svg {
+    color: var(--ink-3);
+  }
+  .tai-skill__summary {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .tai-skill__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    margin-top: 2px;
+    color: var(--ink-3);
+    font-size: var(--text-xs);
+  }
+  .tai-skill__meta svg {
+    width: 13px;
+    height: 13px;
+  }
+  .tai-skill__meta code {
+    font-size: 11px;
+  }
+  .tai-skill__side {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+  }
+  .tai-skill__flags {
+    display: grid;
+    gap: 4px;
+    margin: 6px 0 0;
+    padding-left: 18px;
+    list-style: disc;
+  }
+  .tai-skill__body {
+    max-height: min(56vh, 560px);
+    padding: 14px 16px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--surface-sunken);
+  }
+  .tai-skill__stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .tai-skill__stats > div {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+  }
+  .tai-skill__stats strong {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .tai-skill__stats span {
+    color: var(--ink-3);
+    font-size: var(--text-xs);
+  }
+  .tai-skill__search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .tai-skill__search-input {
+    position: relative;
+    flex: 1 1 260px;
+    min-width: 0;
+  }
+  .tai-skill__search-input > svg {
+    position: absolute;
+    top: 50%;
+    left: 10px;
+    width: 15px;
+    height: 15px;
+    color: var(--ink-3);
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+  .tai-skill__search-input input {
+    padding-left: 32px;
+  }
+  .tai-skill__suggested {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-sm);
+  }
+  .tai-skill__suggested button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--r-full);
+    background: none;
+    color: var(--ink-2);
+    font: inherit;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .tai-skill__suggested button:hover {
+    border-style: solid;
+    color: var(--ink);
+  }
+  .tai-skill__suggested svg {
+    width: 12px;
+    height: 12px;
+  }
+  .tai-sources {
+    display: grid;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+  }
+  .tai-source + .tai-source {
+    border-top: 1px solid var(--line);
+  }
+  .tai-source__error {
+    margin: 4px 0 0;
+    color: var(--bad-ink);
+    font-size: var(--text-xs);
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 860px) {
+    .tai-skill__stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 520px) {
+    .tai-skill,
+    .tai-source {
+      flex-wrap: wrap;
+      padding: 12px;
+    }
+    .tai-skill__side {
+      width: 100%;
+      justify-content: flex-end;
+    }
+  }
+}

@@ -9,28 +9,7 @@
  * one.
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import {
-  BookOpen,
-  Check,
-  ChevronRight,
-  CircleAlert,
-  Code2,
-  FileDown,
-  FilePen,
-  FileSearch,
-  FileText,
-  FolderOpen,
-  Hourglass,
-  ImageIcon,
-  LoaderCircle,
-  Map as MapIcon,
-  Plug,
-  ScrollText,
-  ShieldAlert,
-  SquareTerminal,
-  Undo2,
-  X,
-} from 'lucide-react';
+import { BookOpen, Check, ChevronRight, CircleAlert, Code2, FileDown, FilePen, FileSearch, FileText, FolderOpen, GraduationCap, Hourglass, ImageIcon, LoaderCircle, Map as MapIcon, Plug, ScrollText, ShieldAlert, SquareTerminal, Undo2, X } from 'lucide-react';
 import type { AiActionDto, AiToolName } from '@ploy/shared';
 import { useConfirm } from '../../components/Dialog.tsx';
 import { useToast } from '../../components/Toast.tsx';
@@ -57,6 +36,7 @@ const TOOL_ICON: Record<AiToolName, ReactNode> = {
   generate_image: <ImageIcon />,
   read_output: <FileText />,
   undo: <Undo2 />,
+  skill: <GraduationCap />,
 };
 
 function StatusDot({ action }: { action: AiActionDto }) {

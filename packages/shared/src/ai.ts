@@ -136,12 +136,137 @@ export const AI_TOOLS = [
   'generate_image',
   'read_output',
   'undo',
+  'skill',
 ] as const;
 export type AiToolName = (typeof AI_TOOLS)[number];
 
 /** What taking an action back does: shown to the person in their own language. */
 export const AI_UNDO_KINDS = ['delete', 'restore', 'opposite', 'rollback', 'file_restore', 'file_remove'] as const;
 export type AiUndoKind = (typeof AI_UNDO_KINDS)[number];
+
+// ---------------------------------------------------------------------------
+// Skills
+// ---------------------------------------------------------------------------
+
+/**
+ * A skill is a playbook: how someone who knows a job well goes about it
+ * (auditing a server, finding an intruder, tuning a database). It follows the
+ * Agent Skills format (a `SKILL.md` with a name and a description, and
+ * perhaps reference files beside it), so skills written elsewhere can be
+ * used here.
+ *
+ * - `builtin`: shipped with TorexPloy and written for it;
+ * - `registry`: taken from a public GitHub repository the administrator trusts;
+ * - `custom`: written on this instance.
+ */
+export const AI_SKILL_SOURCES = ['builtin', 'registry', 'custom'] as const;
+export type AiSkillSource = (typeof AI_SKILL_SOURCES)[number];
+
+/**
+ * Whether TorexAi may install a skill it found by itself: `trusted` allows it
+ * for the built-in library and for the administrator's registries (when the
+ * skill's text raises no flag); `off` leaves every installation to the
+ * instance administrator.
+ */
+export const AI_SKILL_AUTO = ['trusted', 'off'] as const;
+export type AiSkillAuto = (typeof AI_SKILL_AUTO)[number];
+
+/** `lowercase-with-hyphens`, at most 64 characters: the name rule of the Agent Skills specification. */
+export const SKILL_NAME_RE = /^[a-z0-9](?:[a-z0-9]|-(?!-)){0,62}[a-z0-9]$|^[a-z0-9]$/;
+/** A public GitHub repository, `owner/repo`. */
+export const SKILL_REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+
+/** `owner/repo` out of what may be pasted for it: a GitHub address, with or without `.git` or a path inside the repository. */
+export function skillRepo(value: string): string {
+  const trimmed = value.trim().replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '').replace(/^git@github\.com:/i, '');
+  const [owner = '', repo = ''] = trimmed.split(/[/?#]/);
+  return `${owner}/${repo.replace(/\.git$/i, '')}`.replace(/^\/$/, '');
+}
+
+/** Why a skill's text is not trusted as it is: what a reviewer should look at before it is installed. */
+export const AI_SKILL_FLAGS = ['override', 'no_approval', 'exfiltration', 'remote_code', 'reverse_shell', 'hidden_text', 'access_keys'] as const;
+export type AiSkillFlag = (typeof AI_SKILL_FLAGS)[number];
+
+export const AI_SKILL_LIMITS = {
+  bodyMax: 80_000,
+  descriptionMax: 1_024,
+  /** Reference files kept with one skill, and their total size. */
+  filesMax: 40,
+  filesBytesMax: 600_000,
+  fileMax: 200_000,
+  installedMax: 300,
+  sourcesMax: 12,
+} as const;
+
+/** Repositories of skills that are well known; the first two are trusted from the start. */
+export const AI_SKILL_SUGGESTED_SOURCES: readonly { repo: string; about: string; initial: boolean }[] = [
+  { repo: 'anthropics/skills', about: "Anthropic's own collection", initial: true },
+  { repo: 'trailofbits/skills', about: 'Security review and auditing, by Trail of Bits', initial: true },
+  { repo: 'obra/superpowers', about: 'Development method: debugging, planning, testing', initial: false },
+  { repo: 'vercel-labs/agent-skills', about: 'Front-end and web application practice', initial: false },
+];
+
+export interface AiSkillDto {
+  /** How it is addressed: its name once installed, `builtin:<name>` or `<owner>/<repo>:<name>` in the catalog. */
+  ref: string;
+  name: string;
+  description: string;
+  /** A title and a one-line summary per language, for skills that carry them. */
+  titles: Record<string, string>;
+  summaries: Record<string, string>;
+  source: AiSkillSource;
+  /** Where it came from: `owner/repo` (and the path in it) for a registry skill. */
+  origin: string | null;
+  installed: boolean;
+  enabled: boolean;
+  /** It was installed by TorexAi itself, not by a person. */
+  auto: boolean;
+  flags: AiSkillFlag[];
+  /** Reference files that come with it. */
+  files: string[];
+  bytes: number;
+  uses: number;
+  lastUsedAt: string | null;
+  installedAt: string | null;
+  /** The registry now holds a different text than the one installed. */
+  updateAvailable: boolean;
+}
+
+export interface AiSkillDetailDto extends AiSkillDto {
+  body: string;
+}
+
+export interface AiSkillSourceDto {
+  id: string;
+  repo: string;
+  ref: string | null;
+  skills: number;
+  commit: string | null;
+  syncedAt: string | null;
+  error: string | null;
+  syncing: boolean;
+}
+
+export interface AiSkillsDto {
+  auto: AiSkillAuto;
+  sources: AiSkillSourceDto[];
+  installed: AiSkillDto[];
+  /** How many skills the built-in library and the registries offer in all. */
+  available: number;
+}
+
+export const aiSkillInstallSchema = z.object({ ref: z.string().trim().min(1).max(260) });
+export const aiSkillPatchSchema = z.object({ enabled: z.boolean() });
+export const aiSkillCustomSchema = z.object({
+  name: z.string().trim().regex(SKILL_NAME_RE),
+  description: z.string().trim().min(10).max(AI_SKILL_LIMITS.descriptionMax),
+  body: z.string().trim().min(20).max(AI_SKILL_LIMITS.bodyMax),
+});
+export const aiSkillSourceSchema = z.object({
+  repo: z.string().trim().max(300).transform(skillRepo).pipe(z.string().regex(SKILL_REPO_RE)),
+  ref: z.string().trim().max(120).regex(/^[A-Za-z0-9._\/-]+$/).optional(),
+});
+export const aiSkillCatalogQuerySchema = z.object({ query: z.string().trim().max(160).optional() });
 
 export const AI_FILE_KINDS = ['upload', 'generated', 'image', 'snapshot'] as const;
 export type AiFileKind = (typeof AI_FILE_KINDS)[number];
@@ -201,6 +326,8 @@ export interface AiSettingsDto {
   instructions: string;
   /** The conversation is condensed into a summary once a request grows beyond this many input tokens. */
   compactAt: number;
+  /** Whether TorexAi may install skills it finds by itself. */
+  skillsAuto: AiSkillAuto;
 }
 
 export interface AiModelDto {
@@ -412,6 +539,7 @@ export const aiSettingsSchema = z.object({
   dailyTokenLimit: z.number().int().min(1_000).max(1_000_000_000).nullable().optional(),
   instructions: z.string().max(AI_LIMITS.instructionsMax).optional(),
   compactAt: z.number().int().min(8_000).max(900_000).optional(),
+  skillsAuto: z.enum(AI_SKILL_AUTO).optional(),
 });
 export type AiSettingsInput = z.infer<typeof aiSettingsSchema>;
 
