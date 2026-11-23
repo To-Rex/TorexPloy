@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Kod, git tarixi, Docker image va serverdagi fayllardan parol, API kalit va tokenlarni qidiradi. Sirlarning oʻzini koʻrsatmaydi, faqat joyini aytadi."
   summary.ru: "Ищет пароли, API-ключи и токены в коде, истории git, образах Docker и файлах сервера. Сами секреты не показывает, только место."
   summary.en: "Looks for passwords, API keys and tokens in code, git history, Docker images and server files. Shows where they are, never the secrets themselves."
+  title.kaa: "Sırlardıń sırtqa shıǵıp ketiwin tekseriw"
+  summary.kaa: "Kod, git tariyxı, Docker obrazı hám serverdegi fayllardan parol, API gilt hám tokenlerdi izleydi. Sırlardıń ózin kórsetpeydi, tek ornın aytadı."
+  title.ky: "Сырлардын агып чыгышын текшерүү"
+  summary.ky: "Коддон, git тарыхынан, Docker образынан жана сервердеги файлдардан сырсөздөрдү, API ачкычтарын жана токендерди издейт. Сырлардын өзүн көрсөтпөйт, жайгашкан жерин гана айтат."
+  title.tg: "Санҷиши ифшои сирҳо"
+  summary.tg: "Паролҳо, калидҳои API ва токенҳоро дар код, таърихи git, образи Docker ва файлҳои сервер ҷустуҷӯ мекунад. Худи сирҳоро нишон намедиҳад, танҳо ҷойи онҳоро мегӯяд."
+  title.kk: "Құпиялардың жылыстауын тексеру"
+  summary.kk: "Кодтан, git тарихынан, Docker образынан және сервердегі файлдардан құпиясөздерді, API кілттері мен токендерді іздейді. Құпиялардың өзін көрсетпейді, тек орнын айтады."
+  title.tk: "Gizlin maglumatlaryň syzmagyny barlamak"
+  summary.tk: "Kodda, git taryhynda, Docker obrazynda we serwerdäki faýllarda parollary, API açarlaryny we tokenleri gözleýär. Gizlin maglumatlaryň özüni görkezmeýär, diňe ýerini aýdýar."
 ---
 
 # Secrets leak scan

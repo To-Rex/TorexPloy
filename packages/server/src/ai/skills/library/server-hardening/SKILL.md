@@ -9,6 +9,16 @@ metadata:
   summary.uz: "SSH’ni kalitga oʻtkazadi, firewall va fail2ban qoʻyadi, avtomatik yangilanishni yoqadi. Har bir qadam tasdiq bilan, serverdan uzilib qolmaslik choralari bilan."
   summary.ru: "Переводит SSH на ключи, ставит файрвол и fail2ban, включает автообновления. Каждый шаг с подтверждением и защитой от потери доступа."
   summary.en: "Moves SSH to keys, sets up a firewall and fail2ban, turns on automatic updates. Every step approved, with guards against lockout."
+  title.kaa: "Serverdi qorǵaw"
+  summary.kaa: "SSH kiriwin giltke ótkeredi, firewall hám fail2ban ornatadı, avtomat jańalanıwdı qosadı. Hár bir qádem tastıyıqlanadı, serverden ajıralıp qalmaw ushın ilajlar kóriledi."
+  title.ky: "Серверди коргоо"
+  summary.ky: "SSH кирүүсүн ачкычка өткөрөт, брандмауэр жана fail2ban орнотот, автоматтык жаңылоону күйгүзөт. Ар бир кадам ырастоо менен, серверден ажырап калбоо чаралары менен."
+  title.tg: "Ҳифзи сервер"
+  summary.tg: "SSH-ро ба калидҳо мегузаронад, файрвол ва fail2ban насб мекунад, навсозии худкорро фаъол мекунад. Ҳар қадам бо тасдиқ ва бо чораҳо барои он ки дастрасӣ ба сервер аз даст наравад."
+  title.kk: "Серверді қорғау"
+  summary.kk: "SSH кіруін кілтке көшіреді, брандмауэр мен fail2ban орнатады, автоматты жаңартуды қосады. Әр қадам растаумен және серверден ажырап қалмау шараларымен орындалады."
+  title.tk: "Serweri goramak"
+  summary.tk: "SSH girişini açara geçirýär, firewall we fail2ban ornaşdyrýar, awtomatik täzelenmeleri ýakýar. Her ädim tassyklama bilen we serwerden kesilip galmazlyk çäreleri bilen."
 ---
 
 # Server hardening

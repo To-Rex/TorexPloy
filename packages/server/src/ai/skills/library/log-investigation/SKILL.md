@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Ilova, deploy, proksi, baza va tizim loglarini vaqt boʻyicha solishtirib, nima boʻlganini va nega boʻlganini voqealar ketma-ketligi bilan tushuntiradi."
   summary.ru: "Сопоставляет логи приложения, деплоя, прокси, базы и системы по времени и объясняет, что случилось и почему, с хронологией."
   summary.en: "Correlates app, deploy, proxy, database and system logs by time and explains what happened and why, as a timeline."
+  title.kaa: "Loglardı analiz qılıw"
+  summary.kaa: "Qosımsha, ornalastırıw, proksi, maǵlıwmatlar bazası hám sistema logların waqıt boyınsha salıstırıp, ne bolǵanın hám nege bolǵanın waqıyalar izbe-izligi menen túsindiredi."
+  title.ky: "Логдорду талдоо"
+  summary.ky: "Колдонмонун, жайгаштыруунун, проксинин, маалымат базасынын жана системанын логдорун убакыт боюнча салыштырып, эмне болгонун жана эмне үчүн болгонун окуялардын ырааттуулугу менен түшүндүрөт."
+  title.tg: "Таҳлили логҳо"
+  summary.tg: "Логҳои барнома, ҷойгиркунӣ, прокси, пойгоҳи додаҳо ва системаро аз рӯи вақт муқоиса карда, бо пайдарпайии ҳодисаҳо шарҳ медиҳад, ки чӣ рӯй дод ва чаро."
+  title.kk: "Логтарды талдау"
+  summary.kk: "Қолданба, орналастыру, прокси, дерекқор және жүйе логтарын уақыт бойынша салыстырып, не болғанын және неге болғанын оқиғалар тізбегімен түсіндіреді."
+  title.tk: "Loglary seljermek"
+  summary.tk: "Programma, ýerleşdiriş, proksi, maglumatlar bazasy we ulgam loglaryny wagt boýunça deňeşdirip, näme bolandygyny we näme üçin bolandygyny wakalaryň yzygiderliligi bilen düşündirýär."
 ---
 
 # Log investigation

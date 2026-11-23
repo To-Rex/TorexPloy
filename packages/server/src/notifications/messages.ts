@@ -3,6 +3,8 @@
  * read on a phone lock screen, the details are one tap away in the panel.
  */
 import type { Locale } from '@ploy/shared';
+import { toUzbekCyrillic, toUzbekNewLatin, transliterateTree } from '@ploy/shared/transliterate';
+import { TRANSLATED } from './languages.ts';
 
 export interface MessageTexts {
   deploySucceeded: string;
@@ -21,7 +23,7 @@ export interface MessageTexts {
   reasons: Record<string, string>;
 }
 
-export const MESSAGES: Record<Locale, MessageTexts> = {
+const WRITTEN: Record<'uz' | 'ru' | 'en', MessageTexts> = {
   uz: {
     deploySucceeded: '✅ {app}: yangi versiya ishga tushdi',
     deployFailed: '❌ {app}: joylashtirish muvaffaqiyatsiz tugadi',
@@ -114,3 +116,11 @@ export const MESSAGES: Record<Locale, MessageTexts> = {
 export function fill(template: string, params: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (match, key: string) => params[key] ?? match);
 }
+
+/** Every interface language: Uzbek in its other two alphabets is the Latin converted; the rest are translations. */
+export const MESSAGES: Record<Locale, MessageTexts> = {
+  ...WRITTEN,
+  'uz-new': transliterateTree(WRITTEN.uz, toUzbekNewLatin),
+  'uz-cyrl': transliterateTree(WRITTEN.uz, toUzbekCyrillic),
+  ...TRANSLATED,
+};

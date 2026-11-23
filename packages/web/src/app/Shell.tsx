@@ -7,9 +7,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Activity, ArrowLeftRight, ArrowUpCircle, BellRing, BookOpen, CalendarClock, Check, ChevronRight, ChevronsUpDown, CloudUpload, Container, FolderKanban, GitBranch, Globe, KeyRound, LogOut, Menu as MenuIcon, Network, Package, PanelLeft, Plug, Plus, Rocket, ScrollText, Search, Server, Shield, Sparkles, UserRound, Users } from 'lucide-react';
-import { LOCALES, THEMES, roleAtLeast, type BootstrapDto } from '@ploy/shared';
+import { Activity, ArrowLeftRight, ArrowUpCircle, BellRing, BookOpen, CalendarClock, Check, ChevronRight, ChevronsUpDown, CloudUpload, Container, FolderKanban, GitBranch, Globe, KeyRound, Languages, LogOut, Menu as MenuIcon, Network, Package, PanelLeft, Plug, Plus, Rocket, ScrollText, Search, Server, Shield, Sparkles, UserRound, Users } from 'lucide-react';
+import { THEMES, roleAtLeast, type BootstrapDto } from '@ploy/shared';
 import { CommandPalette, usePaletteShortcut } from '../components/CommandPalette.tsx';
+import { LanguageDialog } from '../components/LanguagePicker.tsx';
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/Menu.tsx';
 import { useCrumbsValue } from '../components/PageMeta.tsx';
 import { Avatar, BrandMark, Button, Kbd, Segmented } from '../components/ui.tsx';
@@ -63,6 +64,7 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
   const [palette, setPalette] = useState(false);
   const [newProject, setNewProject] = useState(false);
   const [updates, setUpdates] = useState(false);
+  const [languages, setLanguages] = useState(false);
   const user = bootstrap.user!;
   const team = bootstrap.teams.find((candidate) => candidate.id === bootstrap.currentTeamId) ?? bootstrap.teams[0];
   const admin = team !== undefined && roleAtLeast(team.role, 'admin');
@@ -214,19 +216,12 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
                 options={THEMES.map((value) => ({ value, label: m.theme[value] }))}
               />
             </div>
-            <MenuLabel>{m.nav.language}</MenuLabel>
-            {LOCALES.map((value) => (
-              <MenuItem
-                key={value}
-                icon={value === locale ? <Check /> : <span style={{ width: 15 }} />}
-                onSelect={() => {
-                  void setLocale(value);
-                  persist({ locale: value });
-                }}
-              >
-                {LOCALE_NAMES[value]}
-              </MenuItem>
-            ))}
+            <MenuItem icon={<Languages />} onSelect={() => setLanguages(true)}>
+              <span className="menu__rich">
+                <span>{m.nav.language}</span>
+                <small>{LOCALE_NAMES[locale]}</small>
+              </span>
+            </MenuItem>
             <MenuSeparator />
             <MenuItem icon={<LogOut />} onSelect={() => void signOut()}>
               {m.nav.signOut}
@@ -289,6 +284,14 @@ export function Shell({ bootstrap }: { bootstrap: BootstrapDto }) {
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} onNewProject={() => setNewProject(true)} />
       <NewProjectDialog open={newProject} onClose={() => setNewProject(false)} />
+      <LanguageDialog
+        open={languages}
+        onClose={() => setLanguages(false)}
+        onPick={(value) => {
+          void setLocale(value);
+          persist({ locale: value });
+        }}
+      />
       {seesUpdates && <UpdateDialog open={updates} onClose={() => setUpdates(false)} />}
     </div>
   );

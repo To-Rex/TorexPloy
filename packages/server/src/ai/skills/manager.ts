@@ -368,7 +368,7 @@ export class SkillManager {
     const titles: Record<string, string> = {};
     const summaries: Record<string, string> = {};
     for (const [key, value] of Object.entries(entry.metadata)) {
-      const language = /^(title|summary)[._-]([a-z]{2})$/.exec(key);
+      const language = /^(title|summary)[._-]([a-z]{2,3})$/.exec(key);
       if (language !== null) (language[1] === 'title' ? titles : summaries)[language[2]!] = value;
     }
     const installed = record !== undefined && record.name === entry.name;

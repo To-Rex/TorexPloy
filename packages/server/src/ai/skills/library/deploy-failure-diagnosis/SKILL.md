@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Deploy nega oʻtmaganini yoki ilova nega ishga tushmayotganini topadi: build xatosi, oʻzgaruvchi, port, health check, xotira. Sababni tuzatib qayta deploy qiladi."
   summary.ru: "Находит, почему деплой не прошёл или приложение не стартует: ошибка сборки, переменные, порт, health check, память. Исправляет причину и деплоит снова."
   summary.en: "Finds why a deploy failed or an app will not start: build error, variables, port, health check, memory. Fixes the cause and deploys again."
+  title.kaa: "Ornalastırıw qáteligin anıqlaw"
+  summary.kaa: "Ornalastırıw nege ótpegenin yamasa qosımsha nege iske túspey atırǵanın tabadı: jıynaw qáteligi, ózgeriwshi, port, health check, yad. Sebebin dúzetip, qayta ornalastıradı."
+  title.ky: "Жайгаштыруу катасын аныктоо"
+  summary.ky: "Жайгаштыруу эмне үчүн өтпөй калганын же колдонмо эмне үчүн иштебей жатканын табат: куруу катасы, өзгөрмө, порт, ден соолук текшерүүсү, эс тутум. Себебин оңдоп, кайра жайгаштырат."
+  title.tg: "Ташхиси хатои ҷойгиркунӣ"
+  summary.tg: "Меёбад, ки чаро ҷойгиркунӣ нагузашт ё чаро барнома оғоз намешавад: хатои сохтан, тағйирёбанда, порт, санҷиши саломатӣ, хотира. Сабабро ислоҳ карда, аз нав ҷойгир мекунад."
+  title.kk: "Орналастыру қатесін анықтау"
+  summary.kk: "Орналастырудың неге өтпегенін немесе қолданбаның неге іске қосылмай тұрғанын табады: құрастыру қатесі, айнымалылар, порт, жұмысқа қабілеттілік тексерісі, жад. Себебін түзетіп, қайта орналастырады."
+  title.tk: "Ýerleşdiriş ýalňyşlygyny anyklamak"
+  summary.tk: "Ýerleşdirişiň näme üçin şowsuz bolandygyny ýa-da programmany näme üçin işledip bolmaýandygyny tapýar: gurnama ýalňyşlygy, üýtgeýän, port, saglyk barlagy, ýat. Sebäbini düzedip, gaýtadan ýerleşdirýär."
 ---
 
 # Deploy failure diagnosis

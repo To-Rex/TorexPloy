@@ -2,7 +2,7 @@
  * Notification channels. The destination (bot token, webhook URL, signing
  * secret) is sealed at rest like every other credential.
  */
-import type { Locale, NotificationConfigInput, NotificationEvent, NotificationKind } from '@ploy/shared';
+import { localeOr, type Locale, type NotificationConfigInput, type NotificationEvent, type NotificationKind } from '@ploy/shared';
 import type { Database } from '../db/database.ts';
 import { newId, nowIso } from '../lib/ids.ts';
 import type { Secrets } from '../lib/secrets.ts';
@@ -48,7 +48,7 @@ export class NotificationStore {
       name: str(row.name),
       kind: str(row.kind) as NotificationKind,
       config: this.secrets.openJson<NotificationConfigInput>(str(row.config), 'notification'),
-      locale: str(row.locale) as Locale,
+      locale: localeOr(row.locale),
       events: json<NotificationEvent[]>(row.events, []),
       enabled: bool(row.enabled),
       lastStatus: strOrNull(row.last_status) as NotificationChannelRecord['lastStatus'],

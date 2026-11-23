@@ -1359,6 +1359,37 @@ CREATE TABLE transfers (
 CREATE INDEX idx_transfers_team ON transfers(team_id, created_at);
 `,
   },
+  {
+    version: 21,
+    name: 'interface-languages',
+    rebuildsTables: true,
+    sql: `
+-- Ten interface languages instead of three. The list is checked by the API (and read leniently), so it can grow
+-- without rebuilding this table again; this rebuild only drops the old CHECK on users.locale.
+CREATE TABLE users_v21 (
+  id                TEXT PRIMARY KEY,
+  email             TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  name              TEXT NOT NULL,
+  password_hash     TEXT,
+  avatar_url        TEXT,
+  locale            TEXT NOT NULL DEFAULT 'uz',
+  theme             TEXT NOT NULL DEFAULT 'system' CHECK (theme IN ('light','dark','system')),
+  is_instance_admin INTEGER NOT NULL DEFAULT 0 CHECK (is_instance_admin IN (0,1)),
+  totp_secret       TEXT,
+  totp_enabled      INTEGER NOT NULL DEFAULT 0 CHECK (totp_enabled IN (0,1)),
+  totp_last_counter INTEGER,
+  recovery_codes    TEXT NOT NULL DEFAULT '[]',
+  current_team_id   TEXT REFERENCES teams(id) ON DELETE SET NULL,
+  last_login_at     TEXT,
+  created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL
+);
+INSERT INTO users_v21 (id, email, name, password_hash, avatar_url, locale, theme, is_instance_admin, totp_secret, totp_enabled, totp_last_counter, recovery_codes, current_team_id, last_login_at, created_at, updated_at)
+  SELECT id, email, name, password_hash, avatar_url, locale, theme, is_instance_admin, totp_secret, totp_enabled, totp_last_counter, recovery_codes, current_team_id, last_login_at, created_at, updated_at FROM users;
+DROP TABLE users;
+ALTER TABLE users_v21 RENAME TO users;
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

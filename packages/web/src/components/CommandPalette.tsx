@@ -5,7 +5,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { BookOpen, Activity, BellRing, Boxes, CalendarClock, Container, FolderKanban, Languages, Moon, Network, Package, Plus, Rocket, ScrollText, Search, Server, Settings, SquareTerminal, Variable } from 'lucide-react';
-import { LOCALES, roleAtLeast, type Locale } from '@ploy/shared';
+import { LOCALE_INFO, LOCALES, roleAtLeast } from '@ploy/shared';
+import { api } from '../lib/api.ts';
 import { LOCALE_NAMES, useI18n } from '../i18n/index.tsx';
 import { useApplications, useProjects, useRole, useServers } from '../lib/queries.ts';
 import { useTheme } from '../lib/theme.tsx';
@@ -55,7 +56,6 @@ export function CommandPalette({ open, onClose, onNewProject }: { open: boolean;
       onClose();
       void navigate(path);
     };
-    const nextLocale = LOCALES[(LOCALES.indexOf(locale) + 1) % LOCALES.length] as Locale;
     const list: Item[] = [
       { id: 'p-projects', group: m.palette.pages, label: m.nav.projects, icon: <FolderKanban />, run: go('/projects') },
       { id: 'p-deployments', group: m.palette.pages, label: m.nav.deployments, icon: <Rocket />, run: go('/deployments') },
@@ -86,7 +86,20 @@ export function CommandPalette({ open, onClose, onNewProject }: { open: boolean;
       ...(servers.data ?? []).map((server) => ({ id: server.id, group: m.palette.servers, label: server.name, hint: server.host ?? server.publicIp ?? undefined, icon: <Server />, run: go(`/servers/${server.id}`) })),
       { id: 'c-new-project', group: m.palette.commands, label: m.projects.new, icon: <Plus />, run: () => { onClose(); onNewProject(); } },
       { id: 'c-theme', group: m.palette.commands, label: m.palette.toggleTheme, hint: resolved === 'dark' ? m.theme.light : m.theme.dark, icon: <Moon />, run: () => { setTheme(resolved === 'dark' ? 'light' : 'dark'); onClose(); } },
-      { id: 'c-language', group: m.palette.commands, label: t(m.palette.language, { language: LOCALE_NAMES[nextLocale] }), icon: <Languages />, run: () => { void setLocale(nextLocale); onClose(); } },
+      // Every language is one search away ("qazaq", "Қазақ", "tojik"…); its own name is what people type.
+      ...LOCALES.filter((other) => other !== locale).map((other) => ({
+        id: `c-language-${other}`,
+        group: m.palette.commands,
+        label: t(m.palette.language, { language: LOCALE_NAMES[other] }),
+        hint: LOCALE_INFO[other].english,
+        icon: <Languages />,
+        run: () => {
+          void setLocale(other);
+          void api.patch('/api/me', { locale: other }).catch(() => undefined);
+          onClose();
+        },
+        searchOnly: true,
+      })),
     ];
     return list;
   }, [m, t, projects.data, apps.data, servers.data, resolved, locale, navigate, onClose, onNewProject, setLocale, setTheme, admin, developer]);

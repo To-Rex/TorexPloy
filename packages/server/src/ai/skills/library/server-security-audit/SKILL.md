@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Serverni oʻzgartirmasdan tekshiradi: SSH, firewall, ochiq portlar, yangilanishlar, Docker. Topilganlarni xavf darajasi boʻyicha beradi."
   summary.ru: "Проверяет сервер, ничего не меняя: SSH, файрвол, открытые порты, обновления, Docker. Находки по степени риска."
   summary.en: "Checks a server without changing it: SSH, firewall, open ports, updates, Docker. Findings ranked by risk."
+  title.kaa: "Server qáwipsizligi auditi"
+  summary.kaa: "Serverdi ózgertpey tekseredi: SSH, firewall, ashıq portlar, jańalanıwlar, Docker. Tabılǵanlardı qáwip dárejesi boyınsha beredi."
+  title.ky: "Сервердин коопсуздук аудити"
+  summary.ky: "Серверди өзгөртпөстөн текшерет: SSH, брандмауэр, ачык порттор, жаңылоолор, Docker. Табылгандарды коркунуч деңгээли боюнча берет."
+  title.tg: "Аудити амнияти сервер"
+  summary.tg: "Серверро бе тағйир додан месанҷад: SSH, файрвол, портҳои кушода, навсозиҳо, Docker. Бозёфтҳоро аз рӯи сатҳи хатар пешниҳод мекунад."
+  title.kk: "Сервер қауіпсіздігінің аудиті"
+  summary.kk: "Серверді өзгертпей тексереді: SSH, брандмауэр, ашық порттар, жаңартулар, Docker. Табылғандарды қауіп деңгейі бойынша береді."
+  title.tk: "Serwer howpsuzlygynyň auditi"
+  summary.tk: "Serweri üýtgetmezden barlaýar: SSH, firewall, açyk portlar, täzelenmeler, Docker. Tapylanlary howp derejesi boýunça berýär."
 ---
 
 # Server security audit

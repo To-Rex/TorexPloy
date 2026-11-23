@@ -549,8 +549,13 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
+    align-items: center;
     gap: 8px;
     margin-top: 28px;
+  }
+  .auth__language .select,
+  .auth__language select {
+    min-width: 200px;
   }
   .auth__mobile-brand {
     display: none;

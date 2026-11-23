@@ -5,6 +5,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router';
 import { RefreshCw } from 'lucide-react';
+import { isLocale } from '@ploy/shared';
 import { BrandMark, Button } from '../components/ui.tsx';
 import { useI18n } from '../i18n/index.tsx';
 import { errorText } from '../lib/errors.ts';
@@ -44,7 +45,7 @@ function useProfilePreferences(locale: string | undefined, theme: string | undef
   useEffect(() => {
     if (applied.current || locale === undefined || theme === undefined) return;
     applied.current = true;
-    if (locale !== current && (locale === 'uz' || locale === 'ru' || locale === 'en')) void setLocale(locale);
+    if (locale !== current && isLocale(locale)) void setLocale(locale);
     if (theme !== currentTheme && (theme === 'light' || theme === 'dark' || theme === 'system')) setTheme(theme);
   }, [locale, theme, current, currentTheme, setLocale, setTheme]);
 }

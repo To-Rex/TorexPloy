@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Har bir ilovaga health check, xotira chegarasi va Telegram/Slack/Discord ogohlantirishlarini sozlaydi, shunda muammoni foydalanuvchilardan oldin bilasiz."
   summary.ru: "Настраивает health check для каждого приложения, лимиты памяти и оповещения в Telegram/Slack/Discord, чтобы узнавать о сбоях раньше пользователей."
   summary.en: "Sets up health checks, memory limits and Telegram/Slack/Discord alerts so problems are known before users report them."
+  title.kaa: "Baqlaw hám eskertiwler"
+  summary.kaa: "Hár bir qosımshaǵa health check, yad shegi hám Telegram/Slack/Discord eskertiwlerin sazlaydı, sonda mashqalanı paydalanıwshılardan aldın bilesiz."
+  title.ky: "Көзөмөл жана эскертүүлөр"
+  summary.ky: "Ар бир колдонмого ден соолук текшерүүсүн, эс тутум чегин жана Telegram/Slack/Discord эскертүүлөрүн жөндөйт, ошентип көйгөй тууралуу колдонуучулардан мурун билесиз."
+  title.tg: "Назорат ва ҳушдорҳо"
+  summary.tg: "Барои ҳар барнома санҷиши саломатӣ, ҳадди хотира ва ҳушдорҳои Telegram/Slack/Discord-ро танзим мекунад, то ки мушкилотро пеш аз корбарон донед."
+  title.kk: "Бақылау және ескертулер"
+  summary.kk: "Әр қолданбаға жұмысқа қабілеттілік тексерісін, жад шегін және Telegram/Slack/Discord ескертулерін баптайды, сонда мәселені пайдаланушылардан бұрын білесіз."
+  title.tk: "Gözegçilik we duýduryşlar"
+  summary.tk: "Her programma üçin saglyk barlagyny, ýat çägini we Telegram/Slack/Discord duýduryşlaryny sazlaýar, şeýlelikde meseläni ulanyjylardan öň bilersiňiz."
 ---
 
 # Uptime and health monitoring

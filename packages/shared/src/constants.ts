@@ -7,9 +7,61 @@
  * propagates everywhere it matters.
  */
 
-export const LOCALES = ['uz', 'ru', 'en'] as const;
+/**
+ * Interface languages, in the order they are offered. Uzbek comes in three alphabets: the Latin one the interface
+ * is written in (`uz`), the 2021 Latin alphabet (`uz-new`) and Cyrillic (`uz-cyrl`), both derived from it.
+ */
+export const LOCALES = ['uz-new', 'uz', 'uz-cyrl', 'kaa', 'ru', 'en', 'ky', 'tg', 'kk', 'tk'] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = 'uz';
+
+export interface LocaleInfo {
+  /** The language as its speakers write it. */
+  name: string;
+  /** Which alphabet, where a language is offered in more than one. */
+  variant: string | null;
+  /** The language's English name: search, and a hint for anyone who reads neither alphabet. */
+  english: string;
+  /** BCP 47 tag: `<html lang>`, spell checking, screen readers, Intl where it knows the language. */
+  tag: string;
+  script: 'Latn' | 'Cyrl';
+}
+
+export const LOCALE_INFO: Record<Locale, LocaleInfo> = {
+  'uz-new': { name: 'Ōzbekça', variant: 'yangi lotin', english: 'Uzbek (new Latin)', tag: 'uz-Latn', script: 'Latn' },
+  uz: { name: 'Oʻzbekcha', variant: 'lotin', english: 'Uzbek (Latin)', tag: 'uz-Latn', script: 'Latn' },
+  'uz-cyrl': { name: 'Ўзбекча', variant: 'кирилл', english: 'Uzbek (Cyrillic)', tag: 'uz-Cyrl', script: 'Cyrl' },
+  kaa: { name: 'Qaraqalpaqsha', variant: null, english: 'Karakalpak', tag: 'kaa', script: 'Latn' },
+  ru: { name: 'Русский', variant: null, english: 'Russian', tag: 'ru', script: 'Cyrl' },
+  en: { name: 'English', variant: null, english: 'English', tag: 'en', script: 'Latn' },
+  ky: { name: 'Кыргызча', variant: null, english: 'Kyrgyz', tag: 'ky', script: 'Cyrl' },
+  tg: { name: 'Тоҷикӣ', variant: null, english: 'Tajik', tag: 'tg', script: 'Cyrl' },
+  kk: { name: 'Қазақша', variant: null, english: 'Kazakh', tag: 'kk', script: 'Cyrl' },
+  tk: { name: 'Türkmençe', variant: null, english: 'Turkmen', tag: 'tk', script: 'Latn' },
+};
+
+export function isLocale(value: unknown): value is Locale {
+  return typeof value === 'string' && (LOCALES as readonly string[]).includes(value);
+}
+
+/** A stored or requested language this build may not know (an older or newer panel wrote it): the default then. */
+export function localeOr(value: unknown, fallback: Locale = DEFAULT_LOCALE): Locale {
+  return isLocale(value) ? value : fallback;
+}
+
+/**
+ * The language a browser asks for, when the interface has it. `uz-Cyrl` means Uzbek in Cyrillic; English is never
+ * chosen for someone (many people here run English systems without wanting an English panel).
+ */
+export function localeFromBrowser(languages: readonly string[]): Locale {
+  for (const raw of languages) {
+    const tag = raw.toLowerCase();
+    if (tag.startsWith('uz')) return tag.includes('cyrl') ? 'uz-cyrl' : 'uz';
+    const base = tag.split('-')[0];
+    if (base === 'ru' || base === 'kaa' || base === 'ky' || base === 'tg' || base === 'kk' || base === 'tk') return base;
+  }
+  return DEFAULT_LOCALE;
+}
 
 export const THEMES = ['light', 'dark', 'system'] as const;
 export type Theme = (typeof THEMES)[number];

@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Soʻrovlar toshqini, parol terish va botlarni aniqlaydi, hujumchi manzillarni haqiqiy mijozlarga zarar bermasdan bloklaydi."
   summary.ru: "Определяет флуд запросов, перебор паролей и ботов, блокирует адреса атакующих, не задевая настоящих посетителей."
   summary.en: "Identifies request floods, password guessing and bots, and blocks the attackers' addresses without hurting real visitors."
+  title.kaa: "Hújimge juwap"
+  summary.kaa: "Sorawlar tasqının, parol tańlawdı hám botlardı anıqlaydı, hújimshi mánzillerdi haqıyqıy klientlerge ziyan keltirmey bloklaydı."
+  title.ky: "Чабуулга жооп берүү"
+  summary.ky: "Сурамдардын ташкынын, сырсөз тандоону жана боттарды аныктап, чабуулчу даректерди чыныгы кардарларга зыян келтирбестен бөгөттөйт."
+  title.tg: "Вокуниш ба ҳамла"
+  summary.tg: "Селаи дархостҳо, интихоби паролҳо ва ботҳоро муайян мекунад ва нишониҳои ҳамлагаронро бе зарар ба мизоҷони воқеӣ манъ мекунад."
+  title.kk: "Шабуылға жауап"
+  summary.kk: "Сұраныстар тасқынын, құпиясөз теруді және боттарды анықтайды, шабуылдаушы мекенжайларды нақты клиенттерге зиян келтірмей бұғаттайды."
+  title.tk: "Hüjüme jogap"
+  summary.tk: "Soraglaryň joşgunyny, parollary çaklamagy we botlary anyklaýar, hüjümçi salgylary hakyky müşderilere zyýan ýetirmezden petikleýär."
 ---
 
 # Attack response

@@ -2,37 +2,48 @@
  * Internationalization runtime.
  *
  * Messages are plain typed objects (`m.app.deploy`), so every lookup is
- * checked at compile time and costs nothing at runtime. Uzbek ships in the
- * main bundle; Russian and English load on demand. Dates, numbers, relative
- * times and plurals all go through `Intl` with the active locale.
+ * checked at compile time and costs nothing at runtime. Uzbek (Latin) ships in
+ * the main bundle; Uzbek in Cyrillic and in the 2021 Latin alphabet are made
+ * from it on first use; every other language loads on demand. Dates, relative
+ * times and numbers use hand-written formats where browsers lack the data
+ * (see format.ts) and `Intl` for Russian and English.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Locale } from '@ploy/shared';
+import { isLocale, LOCALE_INFO, LOCALES, localeFromBrowser, type Locale } from '@ploy/shared';
 import { uz, type Messages, type Plural } from './uz.ts';
-import { formatUzDate, formatUzNumber, formatUzRelative, zonedParts } from './uzFormat.ts';
+import { formatGroupedNumber, formatPack, formatPackDate, formatPackRelative, zonedParts } from './format.ts';
 
 const LOADERS: Record<Locale, () => Promise<Messages>> = {
   uz: async () => uz,
+  'uz-new': async () => (await import('./variants.ts')).uzNewLatin(),
+  'uz-cyrl': async () => (await import('./variants.ts')).uzCyrillic(),
+  kaa: async () => (await import('./kaa.ts')).kaa,
   ru: async () => (await import('./ru.ts')).ru,
   en: async () => (await import('./en.ts')).en,
+  ky: async () => (await import('./ky.ts')).ky,
+  tg: async () => (await import('./tg.ts')).tg,
+  kk: async () => (await import('./kk.ts')).kk,
+  tk: async () => (await import('./tk.ts')).tk,
 };
 
-/** BCP 47 tags for Intl. Uzbek is written in Latin script. */
-export const LOCALE_TAGS: Record<Locale, string> = { uz: 'uz-Latn-UZ', ru: 'ru-RU', en: 'en-GB' };
-export const LOCALE_NAMES: Record<Locale, string> = { uz: 'Oʻzbekcha', ru: 'Русский', en: 'English' };
+/** BCP 47 tags for `<html lang>` and Intl. */
+export const LOCALE_TAGS = Object.fromEntries(LOCALES.map((locale) => [locale, LOCALE_INFO[locale].tag])) as Record<Locale, string>;
+/** Each language as its speakers write it, with the alphabet where Uzbek offers three. */
+export const LOCALE_NAMES = Object.fromEntries(
+  LOCALES.map((locale) => [locale, LOCALE_INFO[locale].variant === null ? LOCALE_INFO[locale].name : `${LOCALE_INFO[locale].name} (${LOCALE_INFO[locale].variant})`]),
+) as Record<Locale, string>;
 
 const STORAGE_KEY = 'ploy.locale';
 
 export function storedLocale(): Locale {
   try {
     const value = localStorage.getItem(STORAGE_KEY);
-    if (value === 'uz' || value === 'ru' || value === 'en') return value;
+    if (isLocale(value)) return value;
   } catch {
     // storage unavailable
   }
-  // Uzbek is the primary language; Russian is offered first only to Russian-language browsers.
-  // English is an explicit choice (many Uzbek users run English-language systems).
-  return navigator.language.toLowerCase().startsWith('ru') ? 'ru' : 'uz';
+  // Uzbek is the primary language; a browser asking for one of the others gets it. English is an explicit choice.
+  return localeFromBrowser(navigator.languages?.length ? navigator.languages : [navigator.language]);
 }
 
 export type Params = Record<string, string | number>;
@@ -90,17 +101,18 @@ export function I18nProvider({ initial, children }: { initial: Locale; children:
   }, []);
 
   useEffect(() => {
-    document.documentElement.lang = locale;
+    document.documentElement.lang = LOCALE_TAGS[locale];
   }, [locale]);
 
   const value = useMemo<I18n>(() => {
     const tag = LOCALE_TAGS[locale];
-    // Browsers lack Uzbek CLDR data, so Uzbek uses hand-written formatters (see uzFormat.ts).
-    const isUz = locale === 'uz';
-    const pluralRules = new Intl.PluralRules(isUz ? 'en' : tag);
-    const relative = new Intl.RelativeTimeFormat(tag, { numeric: 'auto', style: 'long' });
-    const number = (value: number, options?: Intl.NumberFormatOptions) => (isUz ? formatUzNumber(value, options) : new Intl.NumberFormat(tag, options).format(value));
-    const relativeFormat = (value: number, unit: Intl.RelativeTimeFormatUnit) => (isUz ? formatUzRelative(value, unit) : relative.format(value, unit));
+    // Hand-written formats where browsers lack the data (see format.ts); Intl for Russian and English.
+    const pack = formatPack(locale);
+    // Nouns after numbers stay singular in the Turkic languages and Tajik: one/other covers every catalogue.
+    const pluralRules = new Intl.PluralRules(pack === null ? tag : 'en');
+    const relative = pack === null ? new Intl.RelativeTimeFormat(tag, { numeric: 'auto', style: 'long' }) : null;
+    const number = (value: number, options?: Intl.NumberFormatOptions) => (pack !== null ? formatGroupedNumber(value, options) : new Intl.NumberFormat(tag, options).format(value));
+    const relativeFormat = (value: number, unit: Intl.RelativeTimeFormatUnit) => (pack !== null ? formatPackRelative(pack, value, unit) : relative!.format(value, unit));
     const units: [Intl.RelativeTimeFormatUnit, number][] = [
       ['year', 365 * 24 * 3600],
       ['month', 30 * 24 * 3600],
@@ -123,7 +135,7 @@ export function I18nProvider({ initial, children }: { initial: Locale; children:
       },
       formatDate: (input, options = { dateStyle: 'medium', timeStyle: 'short' }) => {
         const zoned = { timeZone: timezone, ...options };
-        return isUz ? formatUzDate(new Date(input), zoned) : new Intl.DateTimeFormat(tag, zoned).format(new Date(input));
+        return pack !== null ? formatPackDate(pack, new Date(input), zoned) : new Intl.DateTimeFormat(tag, zoned).format(new Date(input));
       },
       timezone,
       setTimezone,

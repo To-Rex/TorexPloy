@@ -643,6 +643,17 @@ Loyiha butunligicha bir paneldan boshqasiga (`packages/server/src/transfer/`).
 - **Boshqaruv** (`manager.ts`, `http/routes/transfers.ts`). Navbat (bir vaqtda 2 ta), progress (qadamlar, foiz, sekundiga bir necha marta), `transfer.updated` hodisalari, disk joyi tekshiruvi, 7 kunlik saqlash va tozalash. Koʻchirish havolasi: 32 baytli token (faqat xeshi saqlanadi), 24 soat, `GET /api/transfers/pull/:token` Range bilan; parol havolaning `#` qismida, soʻrovda hech qachon yuborilmaydi. Hammasi `admin` roli va `full` token bilan; TorexAi va MCP uchun `EXCLUDED`.
 - **Test.** `transfer/archive.test.ts`: aylanma yozish/oʻqish, boʻlak chegaralari, notoʻgʻri parol, shikast, kesilish, tahrirlangan sarlavha; `transfer/transfer.test.ts`: Docker dubli bilan ikki panel oʻrtasida toʻliq koʻchirish (Postgres dump, Redis fayllari, volume, upload kodi, oʻzgaruvchilar, domen, cron, link), fayl va havola orqali, rollar va token yetib borishi.
 
+### 5.17 Interfeys tillari
+
+Oʻnta til (`packages/shared/src/constants.ts`: `LOCALES`, `LOCALE_INFO` — oʻz yozuvidagi nomi, alifbo, BCP 47 teg, inglizcha nomi).
+
+- **Manba.** `web/src/i18n/uz.ts` (oʻzbek lotin) turni belgilaydi (`Messages`); `ru`, `en`, `kaa`, `ky`, `tg`, `kk`, `tk` — qoʻlda/tarjimon yozgan kataloglar, talab boʻlganda yuklanadi. Oʻzbek kirill (`uz-cyrl`) va 2021 yilgi lotin (`uz-new`) `variants.ts`da lotin katalogdan bir marta hosil qilinadi.
+- **Transliteratsiya** (`shared/src/transliterate.ts`, alohida kirish nuqtasi `@ploy/shared/transliterate`: brauzerda faqat kirill, yangi lotin, qoʻllanma yoki skillar sahifasi ochilganda yuklanadi, birinchi sahifaga kirmaydi; yangi lotin sana formati qoʻlda yozilgan, test uni oʻgirilgan lotin formatiga tengligini tekshiradi). Kirill: oʻ/gʻ/sh/ch/ya/yo/yu/ye, e → э (soʻz boshida va unlidan keyin, и dan keyin emas), ʼ → ъ (sʼh ajratgichi tashlanadi), -tsiya/-ksiya → -ция/-кция, yumshoq belgili va ц li oʻzlashmalar lugʻati. Yangi lotin: oʻ → ō, gʻ → ḡ, sh → ş, ch → ç. Oʻzgarmaydi: `{oʻrin}`lar, kod (lekin backtickdagi oʻzbekcha interfeys yorligʻi tarjima qilinadi), havola manzillari, URL/fayl/yoʻl/e-pochta/flag/snake_case, brend va qisqartmalar (`KEEP`); IT soʻzlari kirillda rus IT yozuvida (`CYRILLIC_WORDS`: deploy → деплой). Qoʻshimchali soʻzlar (`Docker’ga`, `webhooklar`) ildiz + qoʻshimcha sifatida ajratiladi.
+- **Format** (`web/src/i18n/format.ts`). Intl’da maʼlumoti yoʻq yoki brauzerlarda turlicha boʻlgan tillar uchun qoʻlda yozilgan paketlar: oy va hafta kunlari, sana tartibi, nisbiy vaqt (oʻtgan/kelasi, chiqish kelishigi bilan), son (boʻsh joy bilan guruhlash, vergul). Rus va ingliz — Intl.
+- **Qoʻllanma** `guide/<til>.ts`; kirill va yangi lotin qoʻllanmasi lotindan, faqat matn maydonlari (`id`, `icon`, `type`, `tone`, `to` va kod bloklari oʻzgarmaydi).
+- **Server.** Migratsiya 21: `users.locale` dagi CHECK olib tashlandi (tilni API tekshiradi, notanish qiymat standart tilga oʻqiladi — `localeOr`). Bildirishnomalar `notifications/messages.ts` (uz/ru/en) + `languages.ts` (beshta tarjima) + transliteratsiya. Skill metadatasida `title.<til>`/`summary.<til>` (2–3 harfli kod).
+- **Test.** `web/src/i18n/catalogs.test.ts`: har til uz bilan bir xil kalitlar, `{oʻrin}`, havola, kod va qalin belgilash; har tarjima oʻz alifbosida; qoʻllanmalar tuzilishi va identifikatorlari bir xil; har til uchun sana/nisbiy vaqt/son. `shared/src/transliterate.test.ts`, `server/src/notifications/languages.test.ts` (10 tilda bildirishnoma, profil tilini saqlash, migratsiya).
+
 ## 6. Xavfsizlik
 
 | Xavf | Chora |

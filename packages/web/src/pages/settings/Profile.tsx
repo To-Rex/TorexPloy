@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { LOCALES, THEMES, updateProfileSchema, type Locale, type Theme, type UserDto } from '@ploy/shared';
+import { THEMES, updateProfileSchema, type Locale, type Theme, type UserDto } from '@ploy/shared';
 import { Button, ButtonLink, Callout, Field, GithubMark, Input, Segmented, Skeleton } from '../../components/ui.tsx';
-import { LOCALE_NAMES, useI18n } from '../../i18n/index.tsx';
+import { useI18n } from '../../i18n/index.tsx';
+import { LanguageGrid } from '../../components/LanguagePicker.tsx';
 import { api } from '../../lib/api.ts';
 import { useAction } from '../../lib/mutate.ts';
 import { keys, useMe } from '../../lib/queries.ts';
@@ -66,14 +67,12 @@ export function ProfilePage() {
       </SettingsSection>
       <SettingsSection title={m.profile.language} hint={m.profile.languageHint}>
         <div>
-          <Segmented
-            label={m.profile.language}
+          <LanguageGrid
             value={locale}
             onChange={(value) => {
               void setLocale(value);
               save.mutate({ locale: value });
             }}
-            options={LOCALES.map((value) => ({ value, label: LOCALE_NAMES[value] }))}
           />
         </div>
       </SettingsSection>

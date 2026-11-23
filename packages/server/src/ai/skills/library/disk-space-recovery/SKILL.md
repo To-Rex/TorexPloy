@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Diskni nima egallaganini topadi (image, build kesh, eski deploylar, loglar, backup) va faqat qayta tiklanadiganini oʻchiradi, maʼlumotlarga tegmaydi."
   summary.ru: "Находит, что занимает диск (образы, кэш сборки, старые деплои, логи, бэкапы), и удаляет только то, что можно пересоздать, не трогая данные."
   summary.en: "Finds what fills the disk (images, build cache, old deploys, logs, backups) and removes only what can be rebuilt, never data."
+  title.kaa: "Disktegi orındı bosatıw"
+  summary.kaa: "Diskti ne iyelegenin tabadı (obrazlar, jıynaw keshi, eski ornalastırıwlar, loglar, rezerv nusqalar) hám tek qayta tiklenetuǵının óshiredi, maǵlıwmatlarǵa tiymeydi."
+  title.ky: "Дисктеги орунду бошотуу"
+  summary.ky: "Дискти эмне ээлегенин табат (образдар, куруу кэши, эски жайгаштыруулар, логдор, камдык көчүрмөлөр) жана кайра түзүлө ала тургандарын гана өчүрөт, маалыматтарга тийбейт."
+  title.tg: "Озод кардани ҷойи диск"
+  summary.tg: "Меёбад, ки дискро чӣ ишғол кардааст (образҳо, кэши сохтан, ҷойгиркуниҳои кӯҳна, логҳо, нусхаҳои эҳтиётӣ) ва танҳо он чиро, ки аз нав барқарор кардан мумкин аст, нест мекунад; ба маълумот даст намерасонад."
+  title.kk: "Дискідегі орынды босату"
+  summary.kk: "Дискіні не алып жатқанын табады (образдар, құрастыру кэші, ескі орналастырулар, логтар, сақтық көшірмелер) және тек қайта жасауға болатынын жояды, деректерге тиіспейді."
+  title.tk: "Diskde ýer boşatmak"
+  summary.tk: "Diskde ýeri nämäniň eýeleýändigini tapýar (obrazlar, gurnama keşi, köne ýerleşdirişler, loglar, ätiýaçlyk nusgalary) we diňe gaýtadan döredip bolýan zatlary pozýar, maglumatlara degmeýär."
 ---
 
 # Disk space recovery

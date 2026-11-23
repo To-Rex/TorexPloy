@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Konteynerlar qanday ishlayotganini tekshiradi: privileged, root, Docker socket, ochiq portlar, limitlar. Bitta konteyner buzilsa nimaga yetishini koʻrsatadi."
   summary.ru: "Проверяет, как запущены контейнеры: privileged, root, Docker socket, открытые порты, лимиты. Показывает, куда дотянется взломщик из одного контейнера."
   summary.en: "Checks how containers run: privileged, root, Docker socket, published ports, limits. Shows what a break-in to one container could reach."
+  title.kaa: "Docker qáwipsizligi analizi"
+  summary.kaa: "Konteynerlerdiń qalay islep turǵanın tekseredi: privileged, root, Docker socket, ashıq portlar, shekler. Bir konteyner buzılsa, neǵa jete alatuǵının kórsetedi."
+  title.ky: "Docker коопсуздугун талдоо"
+  summary.ky: "Контейнерлер кантип иштеп жатканын текшерет: privileged, root, Docker сокети, ачык порттор, чектөөлөр. Бир контейнер бузулса, эмнеге чейин жетүүгө болорун көрсөтөт."
+  title.tg: "Таҳлили амнияти Docker"
+  summary.tg: "Месанҷад, ки контейнерҳо чӣ тавр кор мекунанд: privileged, root, сокети Docker, портҳои кушода, маҳдудиятҳо. Нишон медиҳад, ки агар як контейнер рахна шавад, ба чӣ расидан мумкин аст."
+  title.kk: "Docker қауіпсіздігін талдау"
+  summary.kk: "Контейнерлердің қалай жұмыс істейтінін тексереді: privileged, root, Docker сокеті, ашық порттар, шектеулер. Бір контейнер бұзылса, неге қол жеткізуге болатынын көрсетеді."
+  title.tk: "Docker howpsuzlygynyň seljermesi"
+  summary.tk: "Konteýnerleriň nähili işleýändigini barlaýar: privileged, root, Docker soketi, açyk portlar, çäkler. Bir konteýner döwülse, onuň üsti bilen nämä ýetip boljakdygyny görkezýär."
 ---
 
 # Docker security review

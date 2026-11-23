@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Sekin soʻrovlar, toʻliq jadval skanlari, indekslar, InnoDB buffer pool va ulanishlarni tekshirib, MySQL/MariaDB’ni xavfsiz tezlashtiradi."
   summary.ru: "Медленные запросы, полные сканы, индексы, InnoDB buffer pool и соединения: безопасно ускоряет MySQL и MariaDB."
   summary.en: "Slow queries, full table scans, indexes, the InnoDB buffer pool and connections: speeds MySQL and MariaDB up safely."
+  title.kaa: "MySQL hám MariaDB tezligi"
+  summary.kaa: "Ásten isleytuǵın sorawlar, tolıq keste skanları, indeksler, InnoDB buffer pool hám jalǵanıwlardı tekserip, MySQL hám MariaDB jumısın qáwipsiz tezletedi."
+  title.ky: "MySQL жана MariaDB ылдамдыгы"
+  summary.ky: "Жай суроолорду, таблицаларды толук скандоону, индекстерди, InnoDB buffer pool жана туташууларды текшерип, MySQL/MariaDB’ни коопсуз ылдамдатат."
+  title.tg: "Суръати MySQL ва MariaDB"
+  summary.tg: "Дархостҳои суст, скани пурраи ҷадвалҳо, индексҳо, InnoDB buffer pool ва пайвастҳоро санҷида, MySQL/MariaDB-ро бехатар тезтар мекунад."
+  title.kk: "MySQL және MariaDB жылдамдығы"
+  summary.kk: "Баяу сұраныстарды, кестені толық сканерлеуді, индекстерді, InnoDB buffer pool және қосылымдарды тексеріп, MySQL/MariaDB жылдамдығын қауіпсіз арттырады."
+  title.tk: "MySQL we MariaDB tizligi"
+  summary.tk: "Haýal soraglary, doly tablisa skanirlemelerini, indeksleri, InnoDB buffer pool sazlamasyny we birikmeleri barlap, MySQL/MariaDB bazalaryny howpsuz çaltlandyrýar."
 ---
 
 # MySQL and MariaDB performance

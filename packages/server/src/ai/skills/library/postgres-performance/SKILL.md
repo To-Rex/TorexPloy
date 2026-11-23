@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Sekin va koʻp bajariladigan soʻrovlar, yetishmayotgan indekslar, vacuum, ulanishlar va xotira sozlamalarini tekshirib, PostgreSQL’ni xavfsiz tezlashtiradi."
   summary.ru: "Медленные и частые запросы, недостающие индексы, vacuum, соединения и настройки памяти: безопасно ускоряет PostgreSQL."
   summary.en: "Slow and frequent queries, missing indexes, vacuum, connections and memory settings: speeds PostgreSQL up safely."
+  title.kaa: "PostgreSQL tezligi"
+  summary.kaa: "Ásten hám jiyi orınlanatuǵın sorawlar, jetispeytuǵın indeksler, vacuum, jalǵanıwlar hám yad sazlawların tekserip, PostgreSQL jumısın qáwipsiz tezletedi."
+  title.ky: "PostgreSQL ылдамдыгы"
+  summary.ky: "Жай жана көп аткарылуучу суроолорду, жетишпеген индекстерди, vacuum, туташууларды жана эс тутум жөндөөлөрүн текшерип, PostgreSQL’ди коопсуз ылдамдатат."
+  title.tg: "Суръати PostgreSQL"
+  summary.tg: "Дархостҳои суст ва зуд-зуд иҷрошаванда, индексҳои норасо, vacuum, пайвастҳо ва танзимоти хотираро санҷида, PostgreSQL-ро бехатар тезтар мекунад."
+  title.kk: "PostgreSQL жылдамдығы"
+  summary.kk: "Баяу және жиі орындалатын сұраныстарды, жетіспейтін индекстерді, vacuum, қосылымдар мен жад баптауларын тексеріп, PostgreSQL жылдамдығын қауіпсіз арттырады."
+  title.tk: "PostgreSQL tizligi"
+  summary.tk: "Haýal we köp ýerine ýetirilýän soraglary, ýetmeýän indeksleri, vacuum işini, birikmeleri we ýat sazlamalaryny barlap, PostgreSQL bazasyny howpsuz çaltlandyrýar."
 ---
 
 # PostgreSQL performance

@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Hamma muhim maʼlumot server tashqarisiga zaxiralanganini tekshiradi, yetishmaganini sozlaydi va backup haqiqatan tiklanishini ishlab turgan tizimga tegmasdan sinab koʻradi."
   summary.ru: "Проверяет, что всё важное копируется за пределы сервера, настраивает недостающее и доказывает, что бэкап восстанавливается, не трогая рабочую систему."
   summary.en: "Checks everything important is copied off the server, sets up what is missing, and proves a backup restores without touching production."
+  title.kaa: "Rezerv nusqa hám tiklewdi sınaw"
+  summary.kaa: "Barlıq áhmiyetli maǵlıwmattıń rezerv nusqası server sırtında saqlanǵanın tekseredi, jetispeytuǵının sazlaydı hám rezerv nusqanıń haqıyqatında tiklenetuǵının islep turǵan sistemaǵa tiymey sınap kóredi."
+  title.ky: "Камдык көчүрмөнү жана калыбына келтирүүнү сыноо"
+  summary.ky: "Бардык маанилүү маалымат серверден тышкары камдалганын текшерет, жетишпегенин жөндөйт жана камдык көчүрмө чындап калыбына келерин иштеп жаткан системага тийбестен сынап көрөт."
+  title.tg: "Санҷиши нусхаи эҳтиётӣ ва барқарорсозӣ"
+  summary.tg: "Месанҷад, ки аз ҳамаи маълумоти муҳим берун аз сервер нусхаи эҳтиётӣ гирифта шудааст, он чиро, ки намерасад, танзим мекунад ва бе даст расонидан ба системаи корӣ месанҷад, ки нусхаи эҳтиётӣ воқеан барқарор мешавад."
+  title.kk: "Сақтық көшірме мен қалпына келтіруді сынау"
+  summary.kk: "Барлық маңызды деректің сервер сыртына сақтық көшірмесі жасалғанын тексереді, жетіспейтінін баптайды және сақтық көшірменің шынымен қалпына келетінін жұмыс істеп тұрған жүйеге тиіспей сынап көреді."
+  title.tk: "Ätiýaçlyk nusgasyny we dikeltmegi synamak"
+  summary.tk: "Ähli möhüm maglumatlaryň serwerden daşarda ätiýaçlandyrylandygyny barlaýar, ýetmeýänini sazlaýar we ätiýaçlyk nusgasynyň hakykatdan dikeldilýändigini işläp duran ulgama degmezden synap görýär."
 ---
 
 # Backup and restore drill

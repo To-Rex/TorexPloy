@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Loyihani toʻliq oʻrganadi: tuzilishi, xavfsizlik teshiklari, ishonchlilik va tezlik muammolari. Har bir topilma fayl va qatori bilan beriladi."
   summary.ru: "Изучает проект целиком: устройство, дыры в безопасности, проблемы надёжности и скорости. Каждая находка с файлом и строкой."
   summary.en: "Studies a project as a whole: structure, security holes, reliability and speed problems. Every finding comes with its file and line."
+  title.kaa: "Joybar kodın analiz qılıw"
+  summary.kaa: "Joybardı tolıq úyrenedi: dúzilisi, qáwipsizlik tesikleri, isenimlilik hám tezlik mashqalaları. Hár bir tabılǵan nárse fayl hám qatarı menen beriledi."
+  title.ky: "Долбоордун кодун талдоо"
+  summary.ky: "Долбоорду толук изилдейт: түзүлүшүн, коопсуздук тешиктерин, ишенимдүүлүк жана ылдамдык көйгөйлөрүн. Ар бир табылга файлы жана сабы менен берилет."
+  title.tg: "Таҳлили коди лоиҳа"
+  summary.tg: "Лоиҳаро пурра меомӯзад: сохтор, рахнаҳои амниятӣ, мушкилоти эътимоднокӣ ва суръат. Ҳар бозёфт бо файл ва сатри он пешниҳод мешавад."
+  title.kk: "Жоба кодын талдау"
+  summary.kk: "Жобаны толық зерттейді: құрылымы, қауіпсіздік олқылықтары, сенімділік пен жылдамдық мәселелері. Әр табылған мәселе файлы мен жолы көрсетіліп беріледі."
+  title.tk: "Taslamanyň koduny seljermek"
+  summary.tk: "Taslamany doly öwrenýär: gurluşyny, howpsuzlyk boşluklaryny, ygtybarlylyk we tizlik meselelerini. Her bir tapyndy faýly we setiri bilen berilýär."
 ---
 
 # Project code review

@@ -3,10 +3,11 @@
  * signature once: the deployment pipeline filling stage by stage.
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import { DEPLOY_STAGES, LOCALES, THEMES } from '@ploy/shared';
+import { DEPLOY_STAGES, THEMES } from '@ploy/shared';
+import { LanguageSelect } from '../../components/LanguagePicker.tsx';
 import { PipelineRail, type StageView } from '../../components/Pipeline.tsx';
 import { BrandMark, Segmented } from '../../components/ui.tsx';
-import { LOCALE_NAMES, useI18n } from '../../i18n/index.tsx';
+import { useI18n } from '../../i18n/index.tsx';
 import { useTheme } from '../../lib/theme.tsx';
 
 function DemoRail() {
@@ -84,7 +85,9 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         </div>
         {children}
         <div className="auth__prefs">
-          <Segmented label={m.nav.language} value={locale} onChange={(value) => void setLocale(value)} options={LOCALES.map((value) => ({ value, label: LOCALE_NAMES[value] }))} />
+          <div className="auth__language">
+            <LanguageSelect label={m.nav.language} value={locale} onChange={(value) => void setLocale(value)} />
+          </div>
           <Segmented label={m.nav.theme} value={theme} onChange={setTheme} options={THEMES.map((value) => ({ value, label: m.theme[value] }))} />
         </div>
       </main>

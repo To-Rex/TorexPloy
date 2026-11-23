@@ -2,7 +2,7 @@
  * Users, sessions, passkeys, API tokens and external identities.
  */
 import { TOKEN_ACCESS, TOKEN_KINDS, type TokenAccess, type TokenKind } from '@ploy/shared';
-import type { Locale, Theme } from '@ploy/shared';
+import { localeOr, type Locale, type Theme } from '@ploy/shared';
 import type { Database } from '../db/database.ts';
 import { generateToken, sha256 } from '../lib/crypto.ts';
 import type { PasskeyPublicKey } from '../lib/webauthn.ts';
@@ -35,7 +35,7 @@ function mapUser(row: Row): UserRecord {
     name: str(row.name),
     passwordHash: strOrNull(row.password_hash),
     avatarUrl: strOrNull(row.avatar_url),
-    locale: str(row.locale) as Locale,
+    locale: localeOr(row.locale),
     theme: str(row.theme) as Theme,
     isInstanceAdmin: bool(row.is_instance_admin),
     totpSecret: strOrNull(row.totp_secret),

@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Server yoki ilova nega sekinligini topadi: CPU, xotira, disk, tarmoq, ogʻir konteynerlar. Eng muhim toʻsiqni tuzatadi va oldin-keyin oʻlchaydi."
   summary.ru: "Находит, почему сервер или приложение тормозит: CPU, память, диск, сеть, тяжёлые контейнеры. Устраняет главное узкое место с замерами до и после."
   summary.en: "Finds why a server or app is slow: CPU, memory, disk, network, heavy containers. Fixes the bottleneck that matters, measured before and after."
+  title.kaa: "Server tezligin arttırıw"
+  summary.kaa: "Server yamasa qosımsha nege ásten isleytuǵının tabadı: CPU, yad, disk, tarmaq, awır konteynerler. Eń áhmiyetli tosqınlıqtı dúzetedi hám aldın-keyin ólsheydi."
+  title.ky: "Сервердин ылдамдыгын жогорулатуу"
+  summary.ky: "Сервер же колдонмо эмне үчүн жай иштеп жатканын табат: CPU, эс тутум, диск, тармак, оор контейнерлер. Эң маанилүү тоскоолду оңдойт жана мурун-кийин өлчөйт."
+  title.tg: "Баланд бардоштани суръати сервер"
+  summary.tg: "Меёбад, ки чаро сервер ё барнома суст аст: CPU, хотира, диск, шабака, контейнерҳои вазнин. Муҳимтарин монеаро ислоҳ мекунад ва натиҷаро пеш аз он ва пас аз он чен мекунад."
+  title.kk: "Сервер жылдамдығын арттыру"
+  summary.kk: "Сервердің немесе қолданбаның неге баяу екенін табады: CPU, жад, диск, желі, ауыр контейнерлер. Ең маңызды кедергіні түзетеді және нәтижені өзгеріске дейін де, кейін де өлшейді."
+  title.tk: "Serweriň tizligini ýokarlandyrmak"
+  summary.tk: "Serweriň ýa-da programmanyň näme üçin haýal işleýändigini tapýar: CPU, ýat, disk, tor, agyr konteýnerler. Iň möhüm päsgelçiligi düzedýär we öňünden hem soňundan ölçeýär."
 ---
 
 # Server performance tuning

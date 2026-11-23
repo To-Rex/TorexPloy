@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Domen ochilmasa yoki sertifikat chiqmasa: DNS, 80/443 portlar, Caddy proksi, Let’s Encrypt cheklovlari, CDN va redirect sikllarini tekshirib tuzatadi."
   summary.ru: "Домен не открывается или нет сертификата: проверяет DNS, порты 80/443, прокси Caddy, лимиты Let’s Encrypt, CDN и циклы редиректов."
   summary.en: "Domain not opening or no certificate: checks DNS, ports 80/443, the Caddy proxy, Let's Encrypt limits, CDNs and redirect loops."
+  title.kaa: "Domen hám SSL mashqalaları"
+  summary.kaa: "Domen ashılmasa yamasa sertifikat shıqpasa: DNS, 80/443 portlar, Caddy proksi, Let’s Encrypt sheklewleri, CDN hám redirect cikllerin tekserip dúzetedi."
+  title.ky: "Домен жана SSL көйгөйлөрү"
+  summary.ky: "Домен ачылбаса же сертификат берилбесе: DNS, 80/443 порттору, Caddy прокси, Let’s Encrypt чектөөлөрү, CDN жана кайра багыттоо циклдерин текшерип, оңдойт."
+  title.tg: "Мушкилоти домен ва SSL"
+  summary.tg: "Агар домен кушода нашавад ё сертификат дода нашавад: DNS, портҳои 80/443, проксии Caddy, маҳдудиятҳои Let’s Encrypt, CDN ва даврҳои redirect-ро санҷида, ислоҳ мекунад."
+  title.kk: "Домен және SSL мәселелері"
+  summary.kk: "Домен ашылмаса немесе сертификат шықпаса: DNS, 80/443 порттары, Caddy прокси, Let’s Encrypt шектеулері, CDN және қайта бағыттау циклдерін тексеріп, түзетеді."
+  title.tk: "Domen we SSL meseleleri"
+  summary.tk: "Domen açylmasa ýa-da sertifikat berilmese: DNS, 80/443 portlary, Caddy proksini, Let’s Encrypt çäklendirmelerini, CDN sazlamalaryny we gönükdirme aýlawlaryny barlap düzedýär."
 ---
 
 # Domain and SSL troubleshooting

@@ -5,6 +5,7 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
+import { LOCALES } from '@ploy/shared';
 import {
   Activity,
   Archive,
@@ -248,7 +249,7 @@ function useActiveSection(ready: boolean): string | null {
 }
 
 export function GuidePage() {
-  const { m, locale, plural } = useI18n();
+  const { m, locale, plural, t } = useI18n();
   const { section: wanted } = useParams();
   usePageMeta([{ label: m.guide.title }]);
   const [content, setContent] = useState<GuideContent | null>(null);
@@ -290,7 +291,7 @@ export function GuidePage() {
       <div className="guide__facts" aria-hidden="true">
         <span>{plural(m.guide.chapters, content.chapters.length)}</span>
         <span>{plural(m.guide.sections, total)}</span>
-        <span>{m.guide.languages}</span>
+        <span>{t(m.guide.languages, { count: LOCALES.length })}</span>
       </div>
     );
   }

@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Notanish kirishlar, foydalanuvchilar, SSH kalitlar, jarayonlar, maynerlar, cron va konteynerlarni qidiradi. Dalillarni oʻchirmasdan zararni toʻxtatadi."
   summary.ru: "Ищет чужие входы, пользователей, SSH-ключи, процессы, майнеры, cron и контейнеры. Останавливает ущерб, не уничтожая улики."
   summary.en: "Looks for unknown logins, users, SSH keys, processes, miners, cron jobs and containers. Stops the damage without destroying evidence."
+  title.kaa: "Buzıp kiriw izlerin tekseriw"
+  summary.kaa: "Tanıs emes kiriwler, paydalanıwshılar, SSH giltler, processler, maynerler, cron hám konteynerlerdi izleydi. Dálillerdi óshirmey, ziyandı toqtatadı."
+  title.ky: "Бузуп кирүүнүн изин текшерүү"
+  summary.ky: "Бейтааныш кирүүлөрдү, колдонуучуларды, SSH ачкычтарын, процесстерди, майнерлерди, cron жана контейнерлерди издейт. Далилдерди өчүрбөстөн зыянды токтотот."
+  title.tg: "Санҷиши изҳои рахна"
+  summary.tg: "Воридшавиҳо, корбарон, калидҳои SSH, равандҳо, майнерҳо, вазифаҳои нақшавӣ ва контейнерҳои ношиносро ҷустуҷӯ мекунад. Бе нест кардани далелҳо зарарро қатъ мекунад."
+  title.kk: "Бұзып кіру іздерін тексеру"
+  summary.kk: "Бейтаныс кірулерді, пайдаланушыларды, SSH кілттерін, процестерді, майнерлерді, жоспарлы тапсырмаларды және контейнерлерді іздейді. Дәлелдерді жоймай, зиянды тоқтатады."
+  title.tk: "Döwüp girmegiň yzlaryny barlamak"
+  summary.tk: "Nätanyş girişleri, ulanyjylary, SSH açarlaryny, prosesleri, maýnerleri, meýilleşdirilen işleri we konteýnerleri gözleýär. Subutnamalary pozmazdan zyýanyň öňüni alýar."
 ---
 
 # Intrusion check

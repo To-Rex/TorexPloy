@@ -11,7 +11,8 @@
 import { useDeferredValue, useMemo, useState, type ReactNode } from 'react';
 import { BookOpen, Download, ExternalLink, FilePlus2, GraduationCap, MoreHorizontal, PenLine, Plus, RefreshCw, Search, ShieldAlert, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AI_SKILL_LIMITS, AI_SKILL_SUGGESTED_SOURCES, SKILL_NAME_RE, skillRepo, SKILL_REPO_RE, type AiSkillDto, type AiSkillFlag, type AiSkillSourceDto } from '@ploy/shared';
+import { AI_SKILL_LIMITS, AI_SKILL_SUGGESTED_SOURCES, SKILL_NAME_RE, skillRepo, SKILL_REPO_RE, type AiSkillDto, type AiSkillFlag, type AiSkillSourceDto, type Locale } from '@ploy/shared';
+import { toUzbekCyrillic, toUzbekNewLatin } from '@ploy/shared/transliterate';
 import { useConfirm, Dialog } from '../../components/Dialog.tsx';
 import { Card } from '../../components/Frame.tsx';
 import { Menu, MenuItem, MenuSeparator } from '../../components/Menu.tsx';
@@ -30,11 +31,20 @@ function humanize(name: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/** A skill's own words in this language: written for it, or (Uzbek in another alphabet) the Uzbek converted, else English. */
+function localized(texts: Record<string, string>, locale: Locale): string | undefined {
+  const own = texts[locale];
+  if (own !== undefined) return own;
+  if (locale === 'uz-cyrl' && texts.uz !== undefined) return toUzbekCyrillic(texts.uz);
+  if (locale === 'uz-new' && texts.uz !== undefined) return toUzbekNewLatin(texts.uz);
+  return texts.en;
+}
+
 function useSkillText() {
   const { locale } = useI18n();
   return {
-    title: (skill: AiSkillDto): string => skill.titles[locale] ?? skill.titles.en ?? humanize(skill.name),
-    summary: (skill: AiSkillDto): string => skill.summaries[locale] ?? skill.summaries.en ?? skill.description,
+    title: (skill: AiSkillDto): string => localized(skill.titles, locale) ?? humanize(skill.name),
+    summary: (skill: AiSkillDto): string => localized(skill.summaries, locale) ?? skill.description,
   };
 }
 

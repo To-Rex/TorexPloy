@@ -218,6 +218,14 @@ Yon paneldagi **TorexAi** sahifasi: platforma va serverlarni oddiy tilda boshqar
 - **Terminal.** `torex export SHOP --link`, boshqa panelda `torex import <havola>` (yoki `torex import shop.torexploy`), `torex transfers`.
 - **Huquq.** Faqat jamoa administratorlari; token ishlatilsa toʻliq ruxsatli boʻlishi kerak. TorexAi va MCP agentlariga bu endpointlar yopiq. Eksport arxivlari 7 kun saqlanadi.
 
+## Tillar
+
+Interfeys 10 tilda: **Oʻzbekcha** (yangi lotin, lotin, kirill), **Qaraqalpaqsha**, **Русский**, **English**, **Кыргызча**, **Тоҷикӣ**, **Қазақша**, **Türkmençe**. Til foydalanuvchi menyusida (**Til**), profil sahifasida, kirish sahifasida va `Ctrl+K` buyruq oynasida (masalan “qazaq”, “Тоҷикӣ” deb yozib) tanlanadi va profilga saqlanadi; brauzer tili birinchi kirishda hisobga olinadi.
+
+- **Hammasi tarjima qilingan:** butun interfeys, qoʻllanma, Telegram/Slack/Discord bildirishnomalari (har kanal oʻz tilida) va TorexAi skillari nomlari. Sana, vaqt (“3 soat oldin”, “24 қараша”) va sonlar har tilning oʻz qoidasi bilan.
+- **Oʻzbek kirill va yangi lotin** (2021 alifbosi: ō, ḡ, ş, ç) lotin matndan avtomatik hosil qilinadi: brendlar, kod, havolalar va `{oʻrin}`lar oʻzgarmaydi, rus oʻzlashmalari toʻgʻri yoziladi (funksiya → функция, parol → пароль). Lotin matnga qoʻshilgan har yangi soʻz ikkala alifboda darhol paydo boʻladi.
+- **Yangi matn qoʻshganda** uni `packages/web/src/i18n/uz.ts`ga va qolgan tarjima fayllariga yozing; `catalogs.test.ts` har tilda kalit, `{oʻrin}` va belgilash bir xilligini tekshiradi, TypeScript esa yetishmagan kalitni koʻrsatadi.
+
 ## Xavfsizlik
 
 - Parollar scrypt bilan, sessiya tokenlari faqat SHA-256 koʻrinishida saqlanadi. Cookie’lar `httpOnly`, `SameSite=Lax`, HTTPS’da `Secure`.

@@ -9,6 +9,16 @@ metadata:
   summary.uz: "Ilovalar va bazalarni yangi serverga minimal uzilish bilan koʻchiradi: sozlamalar, oʻzgaruvchilar, maʼlumotlar, volume’lar, domenlar, tekshiruv va eski serverni oʻchirish."
   summary.ru: "Переносит приложения и базы на новый сервер с минимальным простоем: настройки, переменные, данные, тома, домены, проверка и вывод старого сервера."
   summary.en: "Moves apps and databases to a new server with minimal downtime: settings, variables, data, volumes, domains, checks, and retiring the old one."
+  title.kaa: "Basqa serverge kóshiriw"
+  summary.kaa: "Qosımshalar hám maǵlıwmatlar bazaların jańa serverge minimal úzilis menen kóshiredi: sazlawlar, ózgeriwshiler, maǵlıwmatlar, tomlar, domenler, tekseriw hám eski serverdi óshiriw."
+  title.ky: "Башка серверге көчүрүү"
+  summary.ky: "Колдонмолорду жана маалымат базаларын жаңы серверге минималдуу үзгүлтүк менен көчүрөт: жөндөөлөр, өзгөрмөлөр, маалыматтар, томдор, домендер, текшерүү жана эски серверди өчүрүү."
+  title.tg: "Интиқол ба сервери дигар"
+  summary.tg: "Барномаҳо ва пойгоҳҳои додаҳоро бо ҳадди ақали танаффус ба сервери нав интиқол медиҳад: танзимот, тағйирёбандаҳо, маълумот, томҳо, доменҳо, санҷиш ва аз кор баровардани сервери кӯҳна."
+  title.kk: "Басқа серверге тасымалдау"
+  summary.kk: "Қолданбалар мен дерекқорларды жаңа серверге ең аз үзіліспен тасымалдайды: баптаулар, айнымалылар, деректер, томдар, домендер, тексеру және ескі серверді өшіру."
+  title.tk: "Başga serwere göçürmek"
+  summary.tk: "Programmalary we maglumatlar bazalaryny täze serwere iň az kesilme bilen göçürýär: sazlamalar, üýtgeýänler, maglumatlar, tomlar, domenler, barlag we köne serweri öçürmek."
 ---
 
 # Server migration

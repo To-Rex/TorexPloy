@@ -690,7 +690,7 @@ export const en: Messages = {
     empty: 'Nothing found. Try another word.',
     sections: { one: '{count} section', other: '{count} sections' },
     chapters: { one: '{count} chapter', other: '{count} chapters' },
-    languages: 'in 3 languages',
+    languages: 'in {count} languages',
   },
 
   templates: {
@@ -3409,7 +3409,7 @@ export const en: Messages = {
       linkPassphraseHint: 'If the link has no passphrase, enter it here (or later).',
       fetch: 'Fetch',
       destination: 'S3 destination',
-      noDestinations: 'No S3 destination yet: add one in Settings → Storage.',
+      noDestinations: 'No S3 destination yet: add one in Settings → S3 destinations.',
       noArchives: 'No .torexploy archive in this destination.',
       s3PassphraseHint: 'Enter it now and the archive opens as soon as it arrives.',
     },
@@ -3628,7 +3628,7 @@ export const en: Messages = {
     duplicate: 'This key is repeated',
     invalid: 'Invalid value',
     integer: 'Enter a whole number',
-    domainRequired: 'This app needs to know its address. Enter a domain or set an apps domain under Settings → Platform.',
+    domainRequired: 'This app needs to know its address. Enter a domain or set an apps domain under Settings → Web server.',
     acmeEmailRequired: 'An sslip.io or nip.io address needs a certificate email.',
     sshPassword: 'The server rejected this password',
     sshPasswordDisabled: 'This server does not accept passwords over SSH (keys only). Paste a private key or add the key by hand.',

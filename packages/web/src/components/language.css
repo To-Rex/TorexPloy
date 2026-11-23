@@ -1,0 +1,48 @@
+/* The language choice: cards in two columns (one on a phone), the current one marked. */
+@layer components {
+  .language-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  @media (max-width: 520px) {
+    .language-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .language-grid__item {
+    position: relative;
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding: 10px 36px 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    color: var(--ink);
+    text-align: left;
+    transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  }
+  .language-grid__item:hover {
+    background: var(--surface-hover);
+  }
+  .language-grid__item[aria-checked='true'] {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 1px var(--ink);
+  }
+  .language-grid__name {
+    font-weight: 540;
+  }
+  .language-grid__variant {
+    font-size: var(--text-sm);
+    color: var(--ink-3);
+  }
+  .language-grid__check {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    width: 16px;
+    height: 16px;
+    transform: translateY(-50%);
+  }
+}

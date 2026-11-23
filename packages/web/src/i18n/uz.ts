@@ -701,7 +701,7 @@ export const uz = {
     empty: 'Hech narsa topilmadi. Boshqa soʻz bilan qidirib koʻring.',
     sections: { one: '{count} ta boʻlim', other: '{count} ta boʻlim' },
     chapters: { one: '{count} ta bob', other: '{count} ta bob' },
-    languages: '3 tilda',
+    languages: '{count} tilda',
   },
 
   templates: {
@@ -3424,7 +3424,7 @@ export const uz = {
       linkPassphraseHint: 'Havolada parol boʻlmasa, shu yerga kiriting (keyin ham kiritish mumkin).',
       fetch: 'Olish',
       destination: 'S3 manzili',
-      noDestinations: 'Hali S3 manzili yoʻq: uni Sozlamalar → Saqlash boʻlimida qoʻshing.',
+      noDestinations: 'Hali S3 manzili yoʻq: uni Sozlamalar → S3 manzillar boʻlimida qoʻshing.',
       noArchives: 'Bu manzilda .torexploy arxiv topilmadi.',
       s3PassphraseHint: 'Hozir kiritsangiz, arxiv kelishi bilan ochiladi.',
     },
@@ -3643,7 +3643,7 @@ export const uz = {
     duplicate: 'Bu kalit takrorlanmoqda',
     invalid: 'Qiymat notoʻgʻri',
     integer: 'Butun son kiriting',
-    domainRequired: 'Bu ilova oʻz manzilini bilishi kerak. Domen kiriting yoki Sozlamalar → Platforma boʻlimida ilovalar domenini sozlang.',
+    domainRequired: 'Bu ilova oʻz manzilini bilishi kerak. Domen kiriting yoki Sozlamalar → Veb-server boʻlimida ilovalar domenini sozlang.',
     acmeEmailRequired: 'sslip.io yoki nip.io manzili uchun sertifikat emaili kerak.',
     sshPassword: 'Server bu parolni qabul qilmadi',
     sshPasswordDisabled: 'Bu server SSH orqali parol qabul qilmaydi (faqat kalit). Shaxsiy kalit kiriting yoki kalitni qoʻlda qoʻshing.',
