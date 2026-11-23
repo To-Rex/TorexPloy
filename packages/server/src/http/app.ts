@@ -66,7 +66,8 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https://avatars.githubusercontent.com",
+  // `blob:` is a picture the page itself holds: the preview of a file about to be attached to a TorexAi message.
+  "img-src 'self' data: blob: https://avatars.githubusercontent.com",
   "font-src 'self'",
   "connect-src 'self'",
   "frame-ancestors 'none'",

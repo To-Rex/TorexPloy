@@ -40,6 +40,18 @@ const MIME: Record<string, string> = {
   gif: 'image/gif',
   webp: 'image/webp',
   pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  odt: 'application/vnd.oasis.opendocument.text',
+  ods: 'application/vnd.oasis.opendocument.spreadsheet',
+  odp: 'application/vnd.oasis.opendocument.presentation',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  avif: 'image/avif',
+  bmp: 'image/bmp',
+  mp4: 'video/mp4',
+  mp3: 'audio/mpeg',
   zip: 'application/zip',
   gz: 'application/gzip',
   tar: 'application/x-tar',
@@ -52,6 +64,30 @@ export function mimeFor(name: string): string {
   const lower = name.toLowerCase();
   const extension = lower.includes('.') ? lower.slice(lower.lastIndexOf('.') + 1) : lower;
   return MIME[extension] ?? 'application/octet-stream';
+}
+
+/** The format of a picture, by its first bytes. */
+export function sniffImage(data: Buffer): string {
+  if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg';
+  if (data.length >= 12 && data.subarray(0, 4).toString('latin1') === 'RIFF' && data.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  if (data.length >= 6 && /^GIF8[79]a$/.test(data.subarray(0, 6).toString('latin1'))) return 'image/gif';
+  return 'application/octet-stream';
+}
+
+/**
+ * The type of a file someone attached. A model is handed pictures and PDFs
+ * as what they are, so the name alone is not believed for those: a
+ * `photo.png` that is really a HEIC, or a `.pdf` that is not one, would make
+ * the provider refuse the whole message.
+ */
+export function uploadedMime(name: string, data: Buffer): string {
+  const sniffed = sniffImage(data);
+  if (sniffed !== 'application/octet-stream') return sniffed;
+  const named = mimeFor(name);
+  if (VISION_MIMES.has(named)) return 'application/octet-stream';
+  if (named === 'application/pdf' && data.subarray(0, 1024).indexOf('%PDF-') === -1) return 'application/octet-stream';
+  return named;
 }
 
 /** Pictures a model can look at. */

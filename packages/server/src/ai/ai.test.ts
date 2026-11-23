@@ -18,9 +18,11 @@ import { createHttpApp } from '../http/app.ts';
 import { generateToken } from '../lib/crypto.ts';
 import { createContext } from '../main.ts';
 import { API_CATALOG, describeSchema, EXCLUDED, matchApi, searchApi } from './catalog.ts';
+import { docxText, readableText, sheetText, sharedStrings } from './extract.ts';
 import type { HostShell } from './host.ts';
-import { AnthropicProvider } from './providers/anthropic.ts';
-import { OpenAiProvider } from './providers/openai.ts';
+import { AnthropicProvider, toAnthropicMessages } from './providers/anthropic.ts';
+import { OpenAiProvider, toWireMessages } from './providers/openai.ts';
+import { uploadedMime } from './storage.ts';
 import { classifyCommand, classifyHostWrite } from './risk.ts';
 import { compactJson, HIDDEN, maskSecrets } from './tools.ts';
 import type { ChatProvider, ChatRequest, ChatResult, PromptPart, ToolCall } from './types.ts';
@@ -723,6 +725,92 @@ test('files: what the person attaches is read by the model, what the model makes
   assert.equal((await h.http(h.users.admin.token, 'GET', `/api/ai/files/${report!.id}`)).status, 404);
   assert.equal((await h.http(h.users.admin.token, 'GET', `/api/ai/chats/${chat}`)).status, 404);
   assert.equal((await h.http(h.users.developer.token, 'POST', `/api/ai/chats/${chat}/messages`, { text: 'x', files: ['aif_nope'] })).status, 400);
+});
+
+test('attachments reach the model as what they are: pictures, PDFs, the text of office documents, a listing of an archive', async () => {
+  const h = await harness();
+  await h.configure();
+  const chat = (await h.http<AiChatDto>(h.users.developer.token, 'POST', '/api/ai/chats', {})).body.id;
+  const attach = async (name: string, data: Buffer) => (await h.http<{ id: string; mime: string; name: string }>(h.users.developer.token, 'POST', `/api/ai/chats/${chat}/files?name=${encodeURIComponent(name)}`, data)).body;
+  const zip = async (files: Record<string, string>) => Buffer.from(concatZip(await createZip(Object.entries(files).map(([path, text]) => ({ path, data: Buffer.from(text) })))));
+  const docx = await zip({
+    '[Content_Types].xml': '<Types/>',
+    'word/document.xml':
+      '<w:document><w:body><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Deploy plan</w:t></w:r></w:p><w:p><w:r><w:t xml:space="preserve">Move the API &amp; the database </w:t></w:r><w:r><w:t>on Friday.</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Step</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Owner</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>Backup</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Aziz</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>',
+  });
+  const xlsx = await zip({
+    'xl/workbook.xml': '<workbook><sheets><sheet name="Costs" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    'xl/sharedStrings.xml': '<sst><si><t>Server</t></si><si><t>Price</t></si><si><r><t>srv</t></r><r><t>-2</t></r></si></sst>',
+    'xl/worksheets/sheet1.xml': '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="C1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="C2"><v>49.5</v></c></row></sheetData></worksheet>',
+  });
+  const archive = await zip({ 'src/index.js': 'console.log(1)', 'README.md': '# hi' });
+  const pdf = Buffer.from('%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n');
+  const files = {
+    picture: await attach('shot.png', PNG),
+    // Named like a picture, but it is not one: handing it to a model as a picture would make the provider refuse the message.
+    fake: await attach('photo.png', Buffer.from('this is not a picture')),
+    pdf: await attach('invoice.pdf', pdf),
+    notPdf: await attach('broken.pdf', Buffer.from('plain words')),
+    docx: await attach('plan.docx', docx),
+    xlsx: await attach('costs.xlsx', xlsx),
+    archive: await attach('site.zip', archive),
+    utf16: await attach('windows.txt', Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('salom, dunyo', 'utf16le')])),
+    binary: await attach('tool.bin', Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0, 0, 0, 1])),
+  };
+  assert.deepEqual([files.picture.mime, files.fake.mime, files.pdf.mime, files.notPdf.mime], ['image/png', 'application/octet-stream', 'application/pdf', 'application/octet-stream']);
+  h.script.steps.push((request) => {
+    const parts = request.messages[0]!.parts;
+    const text = parts.map((part) => (part.type === 'text' ? part.text : '')).join('\n');
+    assert.deepEqual(parts.filter((part) => part.type === 'image').map((part) => part.type === 'image' && part.mime), ['image/png'], 'only the real picture is a picture');
+    const document = parts.find((part) => part.type === 'document');
+    assert.ok(document?.type === 'document' && document.name === 'invoice.pdf' && document.data === pdf.toString('base64'));
+    assert.match(text, /<file name="photo\.png">\nthis is not a picture\n<\/file>/);
+    assert.match(text, /<file name="plan\.docx">\n# Deploy plan\nMove the API & the database on Friday\.\n\nStep\tOwner\nBackup\tAziz\n<\/file>/);
+    assert.match(text, /<file name="costs\.xlsx">\n## Sheet: Costs\nServer\t\tPrice\nsrv-2\t\t49\.5\n<\/file>/);
+    assert.match(text, /A zip archive of 2 files[^]*src\/index\.js {2}\(14 bytes\)/);
+    assert.match(text, /<file name="windows\.txt">\nsalom, dunyo\n<\/file>/);
+    assert.match(text, /\[Attached file: tool\.bin \(application\/octet-stream, 8 bytes\)\. It is not text and cannot be read here\.\]/);
+    assert.ok(!parts.some((part) => part.type === 'text' && !part.text.startsWith('[') && !part.text.startsWith('<file')), 'a message of files alone has no text of its own');
+    return { text: 'I see them.' };
+  });
+  // No words at all: the files are the message.
+  const run = await h.converse(h.users.developer.token, '', chat, { files: Object.values(files).map((file) => file.id) });
+  assert.equal(run.sent.status, 202);
+  await run.done;
+  const detail = await run.detail();
+  assert.equal(detail.chat.title.startsWith('shot.png, photo.png'), true, 'a conversation that starts with files is named after them');
+  assert.equal(detail.messages[0]!.blocks.every((block) => block.type === 'file'), true);
+  assert.equal((await h.http(h.users.developer.token, 'POST', `/api/ai/chats/${chat}/messages`, { text: '   ' })).status, 422, 'neither words nor files is not a message');
+
+  // The pieces, on their own.
+  assert.equal(docxText('<w:p><w:pPr><w:numPr/></w:pPr><w:r><w:t>one</w:t><w:tab/><w:t>two</w:t></w:r></w:p><w:p><w:r><w:delText>gone</w:delText><w:t>kept</w:t><w:br/><w:t>next</w:t></w:r></w:p>'), '- one\ttwo\nkept\nnext');
+  assert.equal(sheetText('<row><c r="B1" t="b"><v>1</v></c><c r="D1" t="inlineStr"><is><t>a &lt; b</t></is></c></row>', sharedStrings('')), '\tTRUE\t\ta < b');
+  assert.equal(uploadedMime('a.jpg', Buffer.from([0xff, 0xd8, 0xff, 0xe0])), 'image/jpeg');
+  assert.equal(uploadedMime('a.png', Buffer.from([0xff, 0xd8, 0xff, 0xe0])), 'image/jpeg', 'the bytes decide, not the name');
+  assert.equal(uploadedMime('notes.md', Buffer.from('# hi')), 'text/markdown; charset=utf-8');
+  const big = join(h.dir, 'big.log');
+  writeFileSync(big, 'x'.repeat(600_000));
+  assert.match((await readableText(big))!, /^x{120000}\n… \(the rest, 360004 characters, is not shown\)$/);
+
+  // Each provider gets a PDF the way it takes one; one that takes none is told a PDF was there.
+  const message = [{ role: 'user' as const, parts: [{ type: 'text' as const, text: 'read it' }, { type: 'document' as const, name: 'invoice.pdf', data: 'JVBERi0=' }] }];
+  assert.deepEqual(toAnthropicMessages(message)[0]!.content, [
+    { type: 'text', text: 'read it' },
+    { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'JVBERi0=' }, title: 'invoice.pdf', cache_control: { type: 'ephemeral' } },
+  ]);
+  assert.deepEqual(toWireMessages('s', message, { pdf: true })[1]!.content, [{ type: 'text', text: 'read it' }, { type: 'file', file: { filename: 'invoice.pdf', file_data: 'data:application/pdf;base64,JVBERi0=' } }]);
+  assert.match(String(toWireMessages('s', message)[1]!.content), /^read it\n\n\[The PDF "invoice\.pdf" cannot be read with this model provider/);
+  // An endpoint that refuses the file part is asked again without it, and not offered one again.
+  const seen: unknown[] = [];
+  const picky = new OpenAiProvider({ kind: 'openai', baseUrl: 'https://api.example.com/v1', apiKey: 'k', fetch: (async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { messages: { content: unknown }[] };
+    seen.push(body.messages[1]!.content);
+    if (Array.isArray(body.messages[1]!.content)) return new Response(JSON.stringify({ error: { message: 'Invalid content part type: file' } }), { status: 400 });
+    return sse(['data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n', 'data: [DONE]\n\n']);
+  }) as typeof fetch });
+  assert.equal((await picky.chat(baseRequest({ messages: message }), () => undefined)).text, 'ok');
+  assert.equal(seen.length, 2);
+  assert.equal(typeof seen[1], 'string');
 });
 
 test('a long conversation is condensed into a summary, the daily allowance is kept, and usage is counted', async () => {

@@ -3,10 +3,10 @@
  * they were last touched, with a search that looks through titles and
  * everything that was said.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Ellipsis, Pencil, Pin, PinOff, Search, SquarePen, Trash2 } from 'lucide-react';
+import { Ellipsis, Pencil, Pin, PinOff, Search, SquarePen, Trash2, X } from 'lucide-react';
 import type { AiChatDto } from '@ploy/shared';
 import { Dialog, useConfirm } from '../../components/Dialog.tsx';
 import { Menu, MenuItem, MenuSeparator } from '../../components/Menu.tsx';
@@ -29,7 +29,7 @@ function groupOf(chat: AiChatDto, now: number): Group {
   return 'older';
 }
 
-export function ChatList({ activeId, onPick }: { activeId: string | null; onPick: () => void }) {
+export function ChatList({ activeId, open, onClose }: { activeId: string | null; /** The panel is slid into view. */ open: boolean; onClose: () => void }) {
   const { m } = useI18n();
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -40,6 +40,13 @@ export function ChatList({ activeId, onPick }: { activeId: string | null; onPick
   const [renaming, setRenaming] = useState<AiChatDto | null>(null);
   const [name, setName] = useState('');
   const chats = useAiChats(query, true);
+  const search = useRef<HTMLInputElement>(null);
+  const onPick = onClose;
+
+  // Opened to find something: the search is ready to be typed into.
+  useEffect(() => {
+    if (open) search.current?.focus();
+  }, [open]);
 
   useEffect(() => {
     const timer = setTimeout(() => setQuery(typed.trim()), 250);
@@ -80,8 +87,14 @@ export function ChatList({ activeId, onPick }: { activeId: string | null; onPick
   };
 
   return (
-    <aside className="tai-list" aria-label={m.ai.chats}>
+    <aside className="tai-list" aria-label={m.ai.chats} aria-hidden={!open} inert={!open}>
       <div className="tai-list__top">
+        <div className="tai-list__title">
+          <strong>{m.ai.chats}</strong>
+          <button type="button" onClick={onClose} aria-label={m.common.close} title={m.common.close}>
+            <X aria-hidden="true" />
+          </button>
+        </div>
         <Button
           block
           icon={<SquarePen />}
@@ -94,7 +107,7 @@ export function ChatList({ activeId, onPick }: { activeId: string | null; onPick
         </Button>
         <label className="tai-list__search">
           <Search aria-hidden="true" />
-          <input type="search" value={typed} onChange={(event) => setTyped(event.target.value)} placeholder={m.ai.searchChats} aria-label={m.ai.searchChats} />
+          <input ref={search} type="search" value={typed} onChange={(event) => setTyped(event.target.value)} placeholder={m.ai.searchChats} aria-label={m.ai.searchChats} />
         </label>
       </div>
       <nav className="tai-list__scroll">

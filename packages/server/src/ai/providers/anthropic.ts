@@ -85,6 +85,9 @@ export function toAnthropicMessages(messages: PromptMessage[]): MessageParam[] {
         content.push({ type: 'tool_result', tool_use_id: safeId(part.id), content: part.output.length > 0 ? part.output : '(no output)', ...(part.error ? { is_error: true } : {}) });
       } else if (part.type === 'image') {
         content.push({ type: 'image', source: { type: 'base64', media_type: part.mime as 'image/png', data: part.data } });
+      } else if (part.type === 'document') {
+        // Claude reads a PDF as it is: the text of every page, and the pages as pictures.
+        content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: part.data }, title: part.name });
       } else if (part.type === 'text' && part.text.length > 0) {
         content.push({ type: 'text', text: part.text });
       }
@@ -95,7 +98,7 @@ export function toAnthropicMessages(messages: PromptMessage[]): MessageParam[] {
   const last = out[out.length - 1];
   if (last !== undefined && Array.isArray(last.content)) {
     const block = last.content[last.content.length - 1] as { type: string; cache_control?: unknown } | undefined;
-    if (block !== undefined && (block.type === 'text' || block.type === 'tool_result' || block.type === 'image')) {
+    if (block !== undefined && (block.type === 'text' || block.type === 'tool_result' || block.type === 'image' || block.type === 'document')) {
       last.content = [...last.content.slice(0, -1), { ...block, cache_control: { type: 'ephemeral' } } as BlockParam];
     }
   }

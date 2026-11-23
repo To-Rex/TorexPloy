@@ -339,6 +339,34 @@ async function extractStreamed(path: string, entry: ZipEntry, start: number, des
 }
 
 /**
+ * One entry of an archive, in memory: for reading a document that is a zip
+ * inside (a .docx, an .xlsx) without unpacking it to disk. The declared size
+ * is checked against `maxBytes` first and enforced while inflating.
+ */
+export async function readZipEntry(path: string, entry: ZipEntry, maxBytes: number): Promise<Buffer> {
+  if (entry.isDirectory || entry.isSymlink) throw new ZipError('zip_invalid', `${entry.rawName} is not a file`);
+  if (entry.size > maxBytes || entry.compressedSize > maxBytes) throw new ZipError('zip_too_big', `${entry.rawName} is larger than ${maxBytes} bytes`);
+  const handle = await open(path, 'r');
+  try {
+    const start = await dataOffset(handle, entry);
+    const raw = await readAt(handle, start, entry.compressedSize);
+    let data: Buffer;
+    if (entry.method === 0) data = raw;
+    else {
+      try {
+        data = inflateRawSync(raw, { maxOutputLength: Math.max(1, entry.size) });
+      } catch (error) {
+        throw new ZipError('zip_invalid', `${entry.rawName}: could not inflate (${(error as Error).message})`);
+      }
+    }
+    verify(entry, data.length, crc32(data));
+    return data;
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
  * Extract an archive into `destination` (created if needed). Returns what
  * was written. Symlinks and system files are skipped, never created; the
  * bounds are checked against the directory before a byte is written.

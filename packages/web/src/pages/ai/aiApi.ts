@@ -57,15 +57,40 @@ export async function fetchAiOutput(actionId: string): Promise<string> {
   return response.text();
 }
 
-/** Attach a file to a conversation: the bytes as the body, the name in the address. */
-export async function uploadAiFile(chatId: string, file: File): Promise<AiFileDto> {
-  const response = await fetch(`/api/ai/chats/${chatId}/files${qs({ name: file.name })}`, { method: 'POST', credentials: 'same-origin', headers: { 'X-Ploy-Request': '1', 'Content-Type': 'application/octet-stream' }, body: file });
-  const data: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = (data as { error?: { code?: string; message?: string; params?: Record<string, string | number> } } | null)?.error;
-    throw new ApiError((error?.code ?? 'internal_error') as 'internal_error', error?.message ?? `HTTP ${response.status}`, response.status, error?.params === undefined ? {} : { params: error.params });
-  }
-  return data as AiFileDto;
+/**
+ * Attach a file to a conversation: the bytes as the body, the name in the
+ * address. `onProgress` is told how much has gone up (0 to 1), which `fetch`
+ * cannot say.
+ */
+export function uploadAiFile(chatId: string, file: File, onProgress?: (fraction: number) => void): Promise<AiFileDto> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', `/api/ai/chats/${chatId}/files${qs({ name: file.name })}`);
+    request.withCredentials = true;
+    request.setRequestHeader('X-Ploy-Request', '1');
+    request.setRequestHeader('Content-Type', 'application/octet-stream');
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+    };
+    request.onerror = () => reject(new ApiError('network', 'Network error', 0));
+    request.onabort = () => reject(new ApiError('network', 'Upload cancelled', 0));
+    request.onload = () => {
+      let data: unknown = null;
+      try {
+        data = JSON.parse(request.responseText);
+      } catch {
+        // Not JSON: an error page from something in between.
+      }
+      if (request.status >= 200 && request.status < 300 && data !== null) {
+        onProgress?.(1);
+        resolve(data as AiFileDto);
+        return;
+      }
+      const error = (data as { error?: { code?: string; message?: string; params?: Record<string, string | number> } } | null)?.error;
+      reject(new ApiError((error?.code ?? 'internal_error') as 'internal_error', error?.message ?? `HTTP ${request.status}`, request.status, error?.params === undefined ? {} : { params: error.params }));
+    };
+    request.send(file);
+  });
 }
 
 // ---------------------------------------------------------------------------

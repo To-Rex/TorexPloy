@@ -25,7 +25,7 @@ import {
   type AiEvent,
 } from '@ploy/shared';
 import type { Actor } from '../../ai/internal.ts';
-import { mimeFor, safeFileName, VISION_MIMES } from '../../ai/storage.ts';
+import { safeFileName, uploadedMime, VISION_MIMES } from '../../ai/storage.ts';
 import type { Context } from '../../context.ts';
 import { AppError, notFound } from '../../lib/errors.ts';
 import type { AiChatRecord } from '../../store/index.ts';
@@ -217,7 +217,8 @@ export function registerAiRoutes(app: Hono<Env>, ctx: Context): void {
       chunks.push(chunk as Buffer);
     }
     const name = safeFileName(c.req.query('name'), 'file');
-    const saved = await ai.storage.save({ chatId: chat.id, kind: 'upload', name, mime: mimeFor(name), data: Buffer.concat(chunks) });
+    const data = Buffer.concat(chunks);
+    const saved = await ai.storage.save({ chatId: chat.id, kind: 'upload', name, mime: uploadedMime(name, data), data });
     return c.json(ai.fileDto(saved), 201);
   });
 

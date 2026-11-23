@@ -150,11 +150,17 @@ export const AI_LIMITS = {
   /** A message as typed. */
   messageMax: 32_000,
   /** Files attached to one message. */
-  attachmentsMax: 8,
+  attachmentsMax: 10,
   /** One attached or generated file. */
   fileMax: 20 * 1024 * 1024,
   /** How much of an attached text file the model is shown. */
   attachmentTextMax: 120_000,
+  /** A picture larger than this is not shown to a model (providers refuse it); the dashboard scales pictures down before sending. */
+  imageMax: 4_500_000,
+  /** The longest side, in pixels, a picture is scaled down to before it is sent. */
+  imageSide: 2_000,
+  /** A PDF larger than this is not handed to a model. */
+  pdfMax: 18 * 1024 * 1024,
   titleMax: 120,
   instructionsMax: 4_000,
   providersMax: 12,
@@ -440,12 +446,15 @@ export const aiUpdateChatSchema = z.object({
   model: modelRef.optional(),
 });
 
-export const aiSendMessageSchema = z.object({
-  text: z.string().trim().min(1).max(AI_LIMITS.messageMax),
-  files: z.array(z.string().max(64)).max(AI_LIMITS.attachmentsMax).default([]),
-  context: aiContextSchema.optional(),
-  model: modelRef.optional(),
-});
+export const aiSendMessageSchema = z
+  .object({
+    /** May be empty when files are attached: a screenshot can be the whole message. */
+    text: z.string().trim().max(AI_LIMITS.messageMax).default(''),
+    files: z.array(z.string().max(64)).max(AI_LIMITS.attachmentsMax).default([]),
+    context: aiContextSchema.optional(),
+    model: modelRef.optional(),
+  })
+  .refine((input) => input.text.length > 0 || input.files.length > 0, { path: ['text'], message: 'Write a message or attach a file' });
 
 export const aiDecisionSchema = z.object({
   approve: z.boolean(),

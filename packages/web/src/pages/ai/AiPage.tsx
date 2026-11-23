@@ -6,9 +6,9 @@
  * folds into a line, what it changed is a card that asks first, and the rest
  * is prose, charts and files.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { ArrowDown, Check, Copy, PanelLeft, Settings, ShieldCheck, Sparkles, SquarePen } from 'lucide-react';
+import { ArrowDown, Check, Copy, History, Settings, ShieldCheck, Sparkles, SquarePen, Upload } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AiActionDto, AiContextInput, AiMessageDto, AiStatusDto } from '@ploy/shared';
 import { writeClipboard } from '../../components/Copy.tsx';
@@ -17,10 +17,11 @@ import { useToast } from '../../components/Toast.tsx';
 import { Button, EmptyState, Skeleton, Switch } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
 import { useBootstrap } from '../../lib/queries.ts';
-import { ActionRun, FileChips } from './Actions.tsx';
-import { aiKeys, createAiChat, sendAiMessage, stopAiChat, updateAiChat, uploadAiFile, useAiStatus, useConversation, type Conversation } from './aiApi.ts';
+import { ActionRun } from './Actions.tsx';
+import { aiKeys, createAiChat, sendAiMessage, stopAiChat, updateAiChat, uploadAiFile, useAiChats, useAiStatus, useConversation, type Conversation } from './aiApi.ts';
+import { Attachments } from './Attachments.tsx';
 import { ChatList } from './ChatList.tsx';
-import { Composer } from './Composer.tsx';
+import { Composer, type ComposerHandle } from './Composer.tsx';
 import { Markdown } from './Markdown.tsx';
 import './ai.css';
 
@@ -155,8 +156,8 @@ function Transcript({ conversation, onContinue }: { conversation: Conversation; 
           const text = turn.message.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('');
           return (
             <div key={turn.message.id} className="tai-user">
-              <FileChips files={files} />
-              <div className="tai-user__bubble">{text}</div>
+              <Attachments files={files} compact />
+              {text.length > 0 && <div className="tai-user__bubble">{text}</div>}
             </div>
           );
         }
@@ -229,7 +230,7 @@ function Transcript({ conversation, onContinue }: { conversation: Conversation; 
   );
 }
 
-function ConversationView({ chatId, status, onOpenList }: { chatId: string | null; status: AiStatusDto; onOpenList: () => void }) {
+function ConversationView({ chatId, status, onOpenList, attention }: { chatId: string | null; status: AiStatusDto; onOpenList: () => void; /** Another conversation waits for an answer. */ attention: boolean }) {
   const { m, t, formatNumber } = useI18n();
   const navigate = useNavigate();
   const toast = useToast();
@@ -242,6 +243,30 @@ function ConversationView({ chatId, status, onOpenList }: { chatId: string | nul
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const [away, setAway] = useState(false);
+  const composer = useRef<ComposerHandle>(null);
+  const [dropping, setDropping] = useState(false);
+  const dragDepth = useRef(0);
+
+  // Files can be dropped anywhere on the conversation, not only on the text box.
+  const hasFiles = (event: DragEvent): boolean => event.dataTransfer.types.includes('Files');
+  const onDragEnter = (event: DragEvent): void => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    dragDepth.current += 1;
+    setDropping(true);
+  };
+  const onDragLeave = (event: DragEvent): void => {
+    if (!hasFiles(event)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDropping(false);
+  };
+  const onDrop = (event: DragEvent): void => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDropping(false);
+    composer.current?.addFiles([...event.dataTransfer.files]);
+  };
 
   const chat = conversation.chat;
   const model = chat?.model ?? draftModel ?? status.defaultModel;
@@ -262,12 +287,20 @@ function ConversationView({ chatId, status, onOpenList }: { chatId: string | nul
   };
 
   const send = useCallback(
-    async (text: string, files: File[]): Promise<boolean> => {
+    async (text: string, files: File[], progress?: (index: number, fraction: number) => void): Promise<boolean> => {
       setSending(true);
       try {
         const id = chatId ?? (await createAiChat(model ?? undefined)).id;
-        const uploaded: string[] = [];
-        for (const file of files) uploaded.push((await uploadAiFile(id, file)).id);
+        // A few at a time, each reporting how far it has got; the order of the message is the order they were attached in.
+        const uploaded = new Array<string>(files.length);
+        let next = 0;
+        const worker = async (): Promise<void> => {
+          for (let index = next; index < files.length; index = next) {
+            next += 1;
+            uploaded[index] = (await uploadAiFile(id, files[index]!, (fraction) => progress?.(index, fraction))).id;
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
         const first = chatId === null;
         const message = await sendAiMessage(id, { text, files: uploaded, ...(first && carried.context !== undefined ? { context: carried.context } : {}) });
         pinned.current = true;
@@ -303,10 +336,21 @@ function ConversationView({ chatId, status, onOpenList }: { chatId: string | nul
   const empty = chatId === null || (conversation.loaded && conversation.messages.length === 0 && !running);
 
   return (
-    <section className="tai-main">
+    <section className="tai-main" onDragEnter={onDragEnter} onDragOver={(event) => hasFiles(event) && event.preventDefault()} onDragLeave={onDragLeave} onDrop={onDrop}>
+      {dropping && !conversation.missing && (
+        <div className="tai-drop" aria-hidden="true">
+          <div>
+            <Upload />
+            <strong>{m.ai.dropHere}</strong>
+            <span>{m.ai.dropHint}</span>
+          </div>
+        </div>
+      )}
       <header className="tai-head">
-        <button type="button" className="tai-head__list" onClick={onOpenList} aria-label={m.ai.chats}>
-          <PanelLeft aria-hidden="true" />
+        <button type="button" className="tai-head__list" onClick={onOpenList} aria-label={m.ai.chats} title={m.ai.chats}>
+          <History aria-hidden="true" />
+          <span>{m.ai.chats}</span>
+          {attention && <i className="tai-head__dot" aria-label={m.ai.state.waiting} />}
         </button>
         <h1 className="truncate">{chat !== null && chat.title.length > 0 ? chat.title : m.ai.newChat}</h1>
         <span className="grow" />
@@ -338,6 +382,7 @@ function ConversationView({ chatId, status, onOpenList }: { chatId: string | nul
             <AiMark size={52} />
             <h2>{firstName.length > 0 ? t(m.ai.greeting, { name: firstName }) : m.ai.name}</h2>
             <p>{m.ai.greetingText}</p>
+            <p className="tai-welcome__hint">{m.ai.attachHint}</p>
             <div className="tai-welcome__grid">
               {SUGGESTIONS.map((key) => (
                 <button key={key} type="button" disabled={sending} onClick={() => void send(m.ai.suggestions[key].prompt, [])}>
@@ -369,6 +414,7 @@ function ConversationView({ chatId, status, onOpenList }: { chatId: string | nul
       {!conversation.missing && (
         <div className="tai-foot">
           <Composer
+            ref={composer}
             running={running}
             sending={sending}
             models={status.models}
@@ -394,8 +440,20 @@ export function AiPage() {
   const { chatId } = useParams();
   const { m } = useI18n();
   const status = useAiStatus();
+  const ready = status.data?.ready === true;
+  // The conversations stay out of sight until asked for; they are still read, to know when one of them waits for an answer.
+  const chats = useAiChats('', ready);
   const [list, setList] = useState(false);
   usePageMeta([{ label: m.ai.name }]);
+
+  useEffect(() => {
+    if (!list) return;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setList(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [list]);
 
   if (status.data === undefined) {
     return (
@@ -405,11 +463,12 @@ export function AiPage() {
     );
   }
   if (!status.data.ready) return <Unavailable status={status.data} />;
+  const attention = (chats.data ?? []).some((chat) => chat.waiting && chat.id !== chatId);
   return (
     <div className="tai" data-list={list ? 'open' : undefined}>
-      <ChatList activeId={chatId ?? null} onPick={() => setList(false)} />
+      <ChatList activeId={chatId ?? null} open={list} onClose={() => setList(false)} />
       <div className="tai-backdrop" onClick={() => setList(false)} aria-hidden="true" />
-      <ConversationView key={chatId ?? 'new'} chatId={chatId ?? null} status={status.data} onOpenList={() => setList(true)} />
+      <ConversationView key={chatId ?? 'new'} chatId={chatId ?? null} status={status.data} onOpenList={() => setList(true)} attention={attention} />
     </div>
   );
 }

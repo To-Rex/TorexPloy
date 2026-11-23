@@ -40,6 +40,8 @@ export type ProviderFamily = 'anthropic' | 'openai';
 export type PromptPart =
   | { type: 'text'; text: string }
   | { type: 'image'; mime: string; data: string }
+  /** A PDF, for providers that read them as they are (pages as text and pictures). */
+  | { type: 'document'; name: string; data: string }
   | { type: 'tool_call'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'tool_result'; id: string; output: string; error: boolean };
 

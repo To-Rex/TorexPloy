@@ -9,6 +9,7 @@
  * out on the retry, not guessed at up front.
  */
 import type { AiProviderKind } from '@ploy/shared';
+import { sniffImage } from '../storage.ts';
 import { ProviderError, type ChatProvider, type ChatRequest, type ChatResult, type GeneratedImage, type ImageSize, type ModelList, type PromptMessage, type StopReason, type StreamEvent, type ToolCall } from '../types.ts';
 
 export interface OpenAiOptions {
@@ -31,7 +32,7 @@ interface WireToolCall {
 
 interface WireMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content?: string | null | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } })[];
+  content?: string | null | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } } | { type: 'file'; file: { filename: string; file_data: string } })[];
   tool_calls?: WireToolCall[];
   tool_call_id?: string;
 }
@@ -40,7 +41,11 @@ interface WireMessage {
 const NOT_CHAT = /embed|whisper|tts|audio|speech|moderation|realtime|transcri|rerank|similarity|video|guard|ocr/i;
 const IMAGE_MODEL = /image|dall-e|imagine|flux|stable-diffusion|sdxl/i;
 
-export function toWireMessages(system: string, messages: PromptMessage[]): WireMessage[] {
+/**
+ * `pdf`: the endpoint takes a PDF as a `file` part (OpenAI's own API does). Where it does not, the model is told a
+ * PDF was attached that it cannot read, so it can say so instead of answering as if nothing had been sent.
+ */
+export function toWireMessages(system: string, messages: PromptMessage[], options: { pdf?: boolean } = {}): WireMessage[] {
   const wire: WireMessage[] = [{ role: 'system', content: system }];
   for (const message of messages) {
     if (message.role === 'tool') {
@@ -60,19 +65,22 @@ export function toWireMessages(system: string, messages: PromptMessage[]): WireM
       wire.push({ role: 'assistant', content: text.length > 0 ? text : null, ...(calls.length > 0 ? { tool_calls: calls } : {}) });
       continue;
     }
-    const images = message.parts.filter((part) => part.type === 'image');
-    const text = message.parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n\n');
-    if (images.length === 0) {
+    const texts: string[] = [];
+    const media: Exclude<WireMessage['content'], string | null | undefined> = [];
+    for (const part of message.parts) {
+      if (part.type === 'text') texts.push(part.text);
+      else if (part.type === 'image') media.push({ type: 'image_url', image_url: { url: `data:${part.mime};base64,${part.data}` } });
+      else if (part.type === 'document') {
+        if (options.pdf === true) media.push({ type: 'file', file: { filename: part.name, file_data: `data:application/pdf;base64,${part.data}` } });
+        else texts.push(`[The PDF "${part.name}" cannot be read with this model provider. Say so, and ask for the relevant text to be pasted, or for a model that reads PDFs.]`);
+      }
+    }
+    const text = texts.join('\n\n');
+    if (media.length === 0) {
       wire.push({ role: 'user', content: text });
       continue;
     }
-    wire.push({
-      role: 'user',
-      content: [
-        ...(text.length > 0 ? [{ type: 'text' as const, text }] : []),
-        ...images.map((part) => ({ type: 'image_url' as const, image_url: { url: `data:${part.type === 'image' ? part.mime : ''};base64,${part.type === 'image' ? part.data : ''}` } })),
-      ],
-    });
+    wire.push({ role: 'user', content: [...(text.length > 0 ? [{ type: 'text' as const, text }] : []), ...media] });
   }
   return wire;
 }
@@ -165,7 +173,7 @@ export class OpenAiProvider implements ChatProvider {
   private readonly apiKey: string;
   private readonly fetcher: typeof fetch;
   /** Options this endpoint refused once; they are not sent again for the life of the process. */
-  private readonly refused = new Set<'stream_options' | 'reasoning_effort'>();
+  private readonly refused = new Set<'stream_options' | 'reasoning_effort' | 'file'>();
 
   constructor(options: OpenAiOptions) {
     this.kind = options.kind;
@@ -192,12 +200,14 @@ export class OpenAiProvider implements ChatProvider {
   }
 
   async chat(request: ChatRequest, onEvent: (event: StreamEvent) => void): Promise<ChatResult> {
-    const messages = toWireMessages(request.system, request.messages);
     const tools = request.tools.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.schema } }));
+    const hasPdf = request.messages.some((message) => message.parts.some((part) => part.type === 'document'));
     for (let attempt = 1; ; attempt += 1) {
+      // Only OpenAI's own API documents PDF input for this format.
+      const pdf = this.kind === 'openai' && !this.refused.has('file');
       const body: Record<string, unknown> = {
         model: request.model,
-        messages,
+        messages: toWireMessages(request.system, request.messages, { pdf }),
         stream: true,
         ...(tools.length > 0 ? { tools } : {}),
         ...(this.refused.has('stream_options') ? {} : { stream_options: { include_usage: true } }),
@@ -211,6 +221,11 @@ export class OpenAiProvider implements ChatProvider {
           const option = (['stream_options', 'reasoning_effort'] as const).find((name) => name in body && text.includes(name));
           if (option !== undefined) {
             this.refused.add(option);
+            continue;
+          }
+          // A model that takes no files: the conversation is sent again with the PDF named but not attached.
+          if (hasPdf && pdf && /\bfile|pdf|content part|unsupported/i.test(text)) {
+            this.refused.add('file');
             continue;
           }
         }
@@ -369,13 +384,4 @@ export class OpenAiProvider implements ChatProvider {
     }
     throw new ProviderError('The provider returned no picture', 502);
   }
-}
-
-/** The format of a picture, by its first bytes. */
-export function sniffImage(data: Buffer): string {
-  if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
-  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg';
-  if (data.length >= 12 && data.subarray(0, 4).toString('latin1') === 'RIFF' && data.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
-  if (data.length >= 6 && /^GIF8[79]a$/.test(data.subarray(0, 6).toString('latin1'))) return 'image/gif';
-  return 'application/octet-stream';
 }

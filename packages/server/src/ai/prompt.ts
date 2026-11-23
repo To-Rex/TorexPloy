@@ -9,7 +9,7 @@
  * it). Whatever varies from one message to the next (where the person is in
  * the dashboard, the time, their role) therefore travels inside that message.
  */
-import type { TeamRole } from '@ploy/shared';
+import { AI_LIMITS, type TeamRole } from '@ploy/shared';
 import type { AiFileRecord, AiMessageRecord } from '../store/index.ts';
 import { VISION_MIMES } from './storage.ts';
 import type { PromptMessage, PromptPart, ProviderFamily } from './types.ts';
@@ -121,12 +121,27 @@ export async function buildPrompt(history: AiMessageRecord[], target: PromptTarg
           continue;
         }
         if (VISION_MIMES.has(file.mime)) {
+          if (file.size > AI_LIMITS.imageMax) {
+            parts.push({ type: 'text', text: `[Attached picture: ${file.name} (${file.size} bytes). It is too large to be shown to you; ask for a smaller one if what it shows matters.]` });
+            continue;
+          }
           parts.push({ type: 'text', text: `[Attached picture: ${file.name}]` });
           parts.push({ type: 'image', mime: file.mime, data: await attachments.base64(file) });
           continue;
         }
+        if (file.mime === 'application/pdf') {
+          if (file.size > AI_LIMITS.pdfMax) parts.push({ type: 'text', text: `[Attached PDF: ${file.name} (${file.size} bytes). It is too large to be read here.]` });
+          else {
+            parts.push({ type: 'text', text: `[Attached PDF: ${file.name}]` });
+            parts.push({ type: 'document', name: file.name, data: await attachments.base64(file) });
+          }
+          continue;
+        }
         const content = await attachments.text(file);
-        parts.push({ type: 'text', text: content === null ? `[Attached file: ${file.name} (${file.mime}, ${file.size} bytes). It is binary and cannot be read here.]` : `[Attached file: ${file.name}]\n\`\`\`\n${content}\n\`\`\`` });
+        parts.push({
+          type: 'text',
+          text: content === null ? `[Attached file: ${file.name} (${file.mime}, ${file.size} bytes). It is not text and cannot be read here.]` : `<file name=${JSON.stringify(file.name)}>\n${content}\n</file>`,
+        });
       }
       for (const block of record.blocks) if (block.type === 'text') parts.push({ type: 'text', text: block.text });
       if (parts.length > 0) out.push({ role: 'user', parts });

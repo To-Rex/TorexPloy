@@ -586,6 +586,12 @@ Panelga oʻrnatilgan agent: model bilan suhbat, asboblar chaqiruvi, tasdiqlash v
 - **Maxfiy qiymatlar.** API javobidagi parol, token va kalitlar modelga boradigan nusxada `[hidden]` bilan
   almashtiriladi (`maskSecrets`), foydalanuvchiga esa toʻliq koʻrsatiladi (`ai_actions.display`). `reveal: true` har doim
   tasdiq soʻraydi; `[hidden]`ni qiymat sifatida qaytarib yozish rad etiladi.
+- **Biriktirmalar.** Fayl turi nomga emas, baytlarga qarab aniqlanadi (`uploadedMime`): surat boʻlmagan `.png` yoki PDF
+  boʻlmagan `.pdf` modelga surat yoki hujjat sifatida berilmaydi. Suratlar (PNG, JPEG, GIF, WebP; 4,5 MB gacha) surat
+  boʻlagi, PDF `document` boʻlagi sifatida ketadi (Claude: `document`, OpenAI: `file`; boshqa endpointlarga “PDF bor, lekin
+  oʻqib boʻlmaydi” degan matn). Qolganlari `extract.ts` orqali matnga aylanadi: UTF-8/UTF-16 matn, DOCX/XLSX/PPTX/ODF
+  (zip ichidagi XML’dan, diskka ochmasdan), boshqa zip uchun fayllar roʻyxati; oʻqib boʻlmaydigani shunday deb aytiladi.
+  Brauzer suratni yuborishdan oldin 2000 pikselgacha kichraytiradi (`prepareImage`).
 - **Sozlamalar.** `settings` jadvalidagi `ai` yozuvi; kalitlar `ai` maqsadi bilan muhrlangan. Faqat instansiya
   administratori oʻzgartiradi; `minRole` kim yozisha olishini, `dailyTokenLimit` kunlik sarfni cheklaydi (`ai_usage`).
 - **Test.** `ai/ai.test.ts`: skriptlangan model bilan toʻliq yoʻl (tasdiq, rad etish, toʻxtatish, rol chegarasi,

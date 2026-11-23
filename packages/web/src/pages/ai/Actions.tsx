@@ -15,7 +15,6 @@ import {
   ChevronRight,
   CircleAlert,
   Code2,
-  Download,
   FileDown,
   FilePen,
   FileSearch,
@@ -32,12 +31,13 @@ import {
   Undo2,
   X,
 } from 'lucide-react';
-import type { AiActionDto, AiFileDto, AiToolName } from '@ploy/shared';
+import type { AiActionDto, AiToolName } from '@ploy/shared';
 import { useConfirm } from '../../components/Dialog.tsx';
 import { useToast } from '../../components/Toast.tsx';
 import { Button } from '../../components/ui.tsx';
 import { useI18n } from '../../i18n/index.tsx';
-import { aiFileUrl, decideAiAction, fetchAiOutput, undoAiAction } from './aiApi.ts';
+import { decideAiAction, fetchAiOutput, undoAiAction } from './aiApi.ts';
+import { Attachments } from './Attachments.tsx';
 
 const TOOL_ICON: Record<AiToolName, ReactNode> = {
   platform_map: <MapIcon />,
@@ -64,37 +64,6 @@ function StatusDot({ action }: { action: AiActionDto }) {
   if (action.status === 'done') return <Check className="tai-ok" aria-hidden="true" />;
   if (action.status === 'failed') return <CircleAlert className="tai-bad" aria-hidden="true" />;
   return <X className="tai-idle" aria-hidden="true" />;
-}
-
-export function FileChips({ files }: { files: AiFileDto[] }) {
-  const { m, formatBytes } = useI18n();
-  if (files.length === 0) return null;
-  const pictures = files.filter((file) => file.kind === 'image' || (file.kind === 'upload' && file.mime.startsWith('image/')));
-  const others = files.filter((file) => !pictures.includes(file));
-  return (
-    <div className="tai-files">
-      {pictures.map((file) => (
-        <figure key={file.id} className="tai-picture">
-          <a href={aiFileUrl(file, true)} target="_blank" rel="noreferrer">
-            <img src={aiFileUrl(file, true)} alt={file.name} loading="lazy" />
-          </a>
-          <figcaption>
-            <span className="truncate">{file.name}</span>
-            <a href={aiFileUrl(file)} download={file.name} aria-label={m.ai.download} title={m.ai.download}>
-              <Download aria-hidden="true" />
-            </a>
-          </figcaption>
-        </figure>
-      ))}
-      {others.map((file) => (
-        <a key={file.id} className="tai-file" href={aiFileUrl(file)} download={file.name} title={m.ai.download}>
-          <FileDown aria-hidden="true" />
-          <span className="tai-file__name truncate">{file.name}</span>
-          <span className="tai-file__size">{formatBytes(file.size)}</span>
-        </a>
-      ))}
-    </div>
-  );
 }
 
 /** The output of a step, the beginning at first and all of it on request. */
@@ -142,7 +111,7 @@ function StepRow({ action }: { action: AiActionDto }) {
       </button>
       {action.status === 'failed' && action.summary !== null && !open && <p className="tai-step__error">{action.summary}</p>}
       {open && <Output action={action} />}
-      <FileChips files={action.files} />
+      <Attachments files={action.files} />
     </div>
   );
 }
@@ -220,7 +189,7 @@ function ChangeCard({ action }: { action: AiActionDto }) {
           {!pending && <Output action={action} />}
         </div>
       )}
-      <FileChips files={action.files} />
+      <Attachments files={action.files} />
 
       {pending && (
         <div className="tai-card__actions">
@@ -287,7 +256,7 @@ export function ActionRun({ actions, live }: { actions: AiActionDto[]; live: boo
               {failed > 0 && !working && <span className="tai-steps__failed">{plural(m.ai.stepsFailed, failed)}</span>}
             </button>
             {open && <div className="tai-steps__list">{items.map((item) => <StepRow key={item.id} action={item} />)}</div>}
-            {!open && withFiles.map((item) => <FileChips key={item.id} files={item.files} />)}
+            {!open && withFiles.map((item) => <Attachments key={item.id} files={item.files} />)}
           </div>
         );
       })}

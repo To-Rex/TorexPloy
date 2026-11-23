@@ -14,7 +14,6 @@
 import { readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  AI_LIMITS,
   AI_PROVIDER_PRESETS,
   roleAtLeast,
   type AiActionDto,
@@ -38,6 +37,7 @@ import { AppError, errorMessage } from '../lib/errors.ts';
 import { nowIso } from '../lib/ids.ts';
 import type { AiActionRecord, AiChatRecord, AiFileRecord, AiMessageRecord } from '../store/index.ts';
 import { CodeWorkspaces } from './code.ts';
+import { readableText } from './extract.ts';
 import { ToolError } from './files.ts';
 import { dockerHostShell, sweepShells, type HostShell } from './host.ts';
 import { InternalApi, type Actor } from './internal.ts';
@@ -352,11 +352,12 @@ export class AiManager {
     const blocks: AiBlock[] = [
       { type: 'context', text: contextBlock({ role: auth.role, instanceAdmin: auth.user.isInstanceAdmin, now, place: this.place(actor, input.context), notes: ai.takeNotes(chat.id) }) },
       ...attached.map((file): AiBlock => ({ type: 'file', fileId: file.id })),
-      { type: 'text', text: input.text },
+      // A message may be files alone: a screenshot that needs no words.
+      ...(input.text.length > 0 ? [{ type: 'text', text: input.text } satisfies AiBlock] : []),
     ];
     const first = ai.listMessages(chat.id).length === 0;
     const message = ai.appendMessage(chat.id, { role: 'user', blocks });
-    ai.updateChat(chat.id, first && chat.title.length === 0 ? { title: titleFrom(input.text) } : {}, true);
+    ai.updateChat(chat.id, first && chat.title.length === 0 ? { title: titleFrom(input.text.length > 0 ? input.text : attached.map((file) => file.name).join(', ')) } : {}, true);
 
     const run: Run = { chatId: chat.id, userId: actor.userId, controller: new AbortController(), state: 'thinking', tool: undefined, draft: '', waiters: new Map() };
     this.runs.set(chat.id, run);
@@ -473,12 +474,7 @@ export class AiManager {
     const { ai } = this.ctx.stores;
     return {
       record: (fileId) => ai.getFile(fileId),
-      text: async (file) => {
-        const data = await this.storage.read(file).catch(() => null);
-        if (data === null || data.subarray(0, 8_000).includes(0)) return null;
-        const text = data.toString('utf8');
-        return text.length > AI_LIMITS.attachmentTextMax ? `${text.slice(0, AI_LIMITS.attachmentTextMax)}\n… (the rest of the file, ${text.length - AI_LIMITS.attachmentTextMax} characters, is not shown)` : text;
-      },
+      text: (file) => readableText(this.storage.path(file)).catch(() => null),
       base64: async (file) => (await this.storage.read(file)).toString('base64'),
     };
   }
